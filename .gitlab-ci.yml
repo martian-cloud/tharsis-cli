@@ -1,0 +1,267 @@
+include:
+  - template: Code-Quality.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+
+stages:
+  - test
+  - build
+  - upload
+  - release
+
+# Only start pipelines on Merge Requests, the default branch, and tags
+workflow:
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+      when: always
+    - if: $CI_MERGE_REQUEST_IID
+      when: always
+    - if: $CI_COMMIT_TAG
+      when: always
+    - when: never
+
+.if-not-tharsis-namespace: &if-not-tharsis-namespace
+  if: '$CI_PROJECT_NAMESPACE !~ /^infor-cloud\/martian-cloud\/tharsis($|\/)/'
+
+variables:
+  # Secret Detection settings
+  SECRET_DETECTION_EXCLUDED_PATHS: vendor
+  # Go project settings
+  GO111MODULE: "on"
+  GOPRIVATE: gitlab.com/infor-cloud/martian-cloud/tharsis/*
+  GO_VERSION: "1.18.2"
+  CGO_ENABLED: "0"
+  PROJECT_NAME: "tharsis-cli"
+  UNVERSIONED_PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PROJECT_NAME}"
+
+default:
+  image: public.ecr.aws/amazonlinux/amazonlinux:latest
+  tags:
+    - oss
+  retry:
+    max: 2
+    when:
+      - unknown_failure
+      - api_failure
+      - stuck_or_timeout_failure
+      - runner_system_failure
+
+secret_detection:
+  interruptible: true
+  rules:
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+
+gemnasium-dependency_scanning:
+  script:
+    - /analyzer run
+    - cat gl-dependency-scanning-report.json
+  artifacts:
+    reports:
+      dependency_scanning: gl-dependency-scanning-report.json
+    paths: [gl-dependency-scanning-report.json]
+  rules:
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+      exists:
+        - "{Gemfile.lock,*/Gemfile.lock,*/*/Gemfile.lock}"
+        - "{composer.lock,*/composer.lock,*/*/composer.lock}"
+        - "{gems.locked,*/gems.locked,*/*/gems.locked}"
+        - "{go.sum,*/go.sum,*/*/go.sum}"
+        - "{npm-shrinkwrap.json,*/npm-shrinkwrap.json,*/*/npm-shrinkwrap.json}"
+        - "{package-lock.json,*/package-lock.json,*/*/package-lock.json}"
+        - "{yarn.lock,*/yarn.lock,*/*/yarn.lock}"
+        - "{packages.lock.json,*/packages.lock.json,*/*/packages.lock.json}"
+        - "{conan.lock,*/conan.lock,*/*/conan.lock}"
+  interruptible: true
+
+gosec-sast:
+  artifacts:
+    paths:
+      - gl-sast-report.json
+  rules:
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+      changes:
+        - "**/*.go"
+        - "*.go"
+  interruptible: true
+
+semgrep-sast:
+  artifacts:
+    paths:
+      - gl-sast-report.json
+  interruptible: true
+
+code_quality:
+  artifacts:
+    paths:
+      - gl-code-quality-report.json
+  tags:
+    - oss
+    - docker
+  rules:
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+      changes:
+        - "**/*.go"
+        - "*.go"
+  interruptible: true
+
+Testing and Linting:
+  image: golang:${GO_VERSION}-alpine
+  stage: test
+  before_script:
+    - go install github.com/jstemmer/go-junit-report@latest
+    - go install github.com/mgechev/revive@latest
+    - go install github.com/boumenot/gocover-cobertura@latest
+    - apk add git openssh
+  script:
+    - |
+      go mod download
+      revive -set_exit_status $(go list ./... | grep -v /vendor/)
+      go vet $(go list ./... | grep -v /vendor/)
+      go test -covermode=atomic -coverpkg  ./... -v -coverprofile .coverage ./... 2>&1 | tee .test-results
+      go tool cover -func .coverage
+      go-junit-report -set-exit-code < .test-results > .xunit-results.xml
+      gocover-cobertura < .coverage > coverage.xml
+  artifacts:
+    when: always
+    reports:
+      junit: .xunit-results.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+  coverage: '/\(statements\)\s*(\d+(?:\.\d+)?%)/'
+  interruptible: true
+
+License Scanning:
+  image: golang:${GO_VERSION}-alpine
+  stage: test
+  variables:
+    BUILD_SUBPACKAGE: "cmd/tharsis"
+  before_script:
+    - go install github.com/uw-labs/lichen@latest
+    - apk add git openssh
+  script:
+    - |
+      export PACKAGE=$(go list -m)
+      export BINARY=$(echo $PACKAGE | rev | cut -d'/' -f1 | rev)
+
+      if [ ${#BUILD_SUBPACKAGE} -gt 0 ]; then
+        PACKAGE=$PACKAGE/${BUILD_SUBPACKAGE##/}
+      fi
+      go build -a -o $BINARY $PACKAGE
+
+      cat <<EOF > lichen.yaml
+      # minimum confidence percentage used during license classification
+      threshold: .80
+
+      # all permitted licenses - if no list is specified, all licenses are assumed to be allowed
+      allow:
+        - "MIT"
+        - "Apache-2.0"
+        - "0BSD"
+        - "BSD-3-Clause"
+        - "BSD-2-Clause"
+        - "BSD-2-Clause-FreeBSD"
+        - "MPL-2.0"
+        - "ISC"
+        - "PostgreSQL"
+        - "Unicode-DFS-2016"
+      exceptions:
+        unresolvableLicense:
+          - path: gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go.git
+      EOF
+
+    - lichen --config lichen.yaml $BINARY
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+      changes:
+        - "**/go.mod"
+        - "**/go.sum"
+        - go.mod
+        - go.sum
+  interruptible: true
+
+Software Composition Analysis:
+  image: golang:${GO_VERSION}-alpine
+  stage: test
+  before_script:
+    - apk add tar gzip curl git openssh
+  script:
+    - curl -sSL https://download.sourceclear.com/ci.sh | sh
+  rules:
+    - <<: *if-not-tharsis-namespace
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+      changes:
+        - "**/go.mod"
+        - "**/go.sum"
+        - go.mod
+        - go.sum
+
+Build:
+  image: golang:${GO_VERSION}-alpine
+  stage: build
+  before_script:
+    - apk add git openssh make
+  script:
+    - |
+      make build
+  artifacts:
+    when: always
+  interruptible: true
+
+Build Tharsis CLI Release:
+  image: golang:${GO_VERSION}-alpine
+  stage: build
+  before_script:
+    - apk add tar gzip curl git openssh make
+  script:
+    - VERSION=$CI_COMMIT_TAG make release
+  artifacts:
+    paths:
+      - bin/
+  rules:
+    - if: $CI_COMMIT_TAG
+
+Upload Tharsis CLI:
+  stage: upload
+  image: curlimages/curl:latest
+  script:
+    - |
+      set -x
+      BINARIES="./bin/*"
+      for BINARY in $BINARIES
+      do
+        BINARY_NAME=$(basename $BINARY)
+        curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file $BINARY "${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${BINARY_NAME}"
+      done
+  rules:
+    - if: $CI_COMMIT_TAG
+
+Release Tharsis CLI:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - |
+      set -x
+      echo "Tharsis CLI Release"
+
+      ASSETS=""
+      BINARIES="./bin/*"
+      for BINARY in $BINARIES
+      do
+        BINARY_NAME=$(basename $BINARY)
+        ASSETS="$ASSETS --assets-link {\"name\":\"${BINARY_NAME}\",\"url\":\"${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${BINARY_NAME}\"}"
+      done
+
+      release-cli create \
+        --name "Release $CI_COMMIT_TAG" \
+        --description "Tharsis CLI Release $CI_COMMIT_TAG" \
+        --tag-name $CI_COMMIT_TAG \
+        --ref $CI_COMMIT_TAG $ASSETS
