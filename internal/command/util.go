@@ -15,7 +15,7 @@ const (
 	sep = "/"
 
 	// Add any opt names here when an empty slice needs to be returned.
-	emptySlice = "tf-var env-var managed-identity"
+	emptySlice = "tf-var env-var managed-identity prevent-destroy-plan"
 
 	// For clearly marking required option in help text.
 	red   = "\033[31m"
