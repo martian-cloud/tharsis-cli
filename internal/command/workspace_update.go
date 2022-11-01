@@ -73,6 +73,16 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 	description := getOption("description", "", cmdOpts)[0]
 	maxJobDuration := getOption("max-job-duration", "", cmdOpts)[0]
 	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
+	// If the --prevent-destroy-plan option is absent, don't change the value.
+	var preventDestroyPlan *bool
+	if len(getOption("prevent-destroy-plan", "", cmdOpts)) != 0 {
+		pdp, pErr := getBoolOptionValue("prevent-destroy-plan", "false", cmdOpts)
+		if pErr != nil {
+			wuc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+			return 1
+		}
+		preventDestroyPlan = &pdp
+	}
 	toJSON := getOption("json", "", cmdOpts)[0] == "1"
 
 	// Error is already logged.
@@ -93,9 +103,10 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 
 	// Prepare the inputs.
 	input := &sdktypes.UpdateWorkspaceInput{
-		WorkspacePath:  path,
-		Description:    description,
-		MaxJobDuration: jobDuration,
+		WorkspacePath:      path,
+		Description:        description,
+		MaxJobDuration:     jobDuration,
+		PreventDestroyPlan: preventDestroyPlan,
 	}
 
 	if terraformVersion != "" {
@@ -143,6 +154,13 @@ func buildCommonWorkspaceDefs(defs optparser.OptionDefinitions) {
 	}
 
 	defs["max-job-duration"] = &maxJobDef
+
+	// The --prevent-destroy-plan option should be available only for workspace create and update.
+	preventDestroyPlanDef := optparser.OptionDefinition{
+		Arguments: []string{"Prevent_Destroy_Plan"},
+		Synopsis:  "boolean value--whether a run/plan will be prevented from destroying deployed resources.",
+	}
+	defs["prevent-destroy-plan"] = &preventDestroyPlanDef
 }
 
 func (wuc workspaceUpdateCommand) Synopsis() string {

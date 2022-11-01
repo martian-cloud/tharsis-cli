@@ -76,6 +76,11 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
 	identityPaths := getOption("managed-identity", "", cmdOpts)
 	maxJobDuration := getOption("max-job-duration", "", cmdOpts)[0]
+	preventDestroyPlan, err := getBoolOptionValue("prevent-destroy-plan", "false", cmdOpts)
+	if err != nil {
+		wcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	toJSON := getOption("json", "", cmdOpts)[0] == "1"
 
 	// Error is already logged.
@@ -122,10 +127,11 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 	}
 
 	input := &sdktypes.CreateWorkspaceInput{
-		Name:           workspacePath[index+1:],
-		GroupPath:      workspacePath[:index],
-		Description:    description,
-		MaxJobDuration: jobDuration,
+		Name:               workspacePath[index+1:],
+		GroupPath:          workspacePath[:index],
+		Description:        description,
+		MaxJobDuration:     jobDuration,
+		PreventDestroyPlan: &preventDestroyPlan,
 	}
 
 	if terraformVersion != "" {
@@ -173,12 +179,13 @@ func outputWorkspace(meta *Metadata, toJSON bool, workspace *sdktypes.Workspace,
 	} else {
 		// Format the output.
 		meta.UI.Output(fmt.Sprintf("workspace %s output:", action))
-		meta.UI.Output(fmt.Sprintf("\n             name: %s", workspace.Name))
-		meta.UI.Output(fmt.Sprintf("         fullpath: %s", workspace.FullPath))
-		meta.UI.Output(fmt.Sprintf("      description: %s", workspace.Description))
-		meta.UI.Output(fmt.Sprintf(" max job duration: %dm", workspace.MaxJobDuration))
-		meta.UI.Output(fmt.Sprintf("terraform version: %s", workspace.TerraformVersion))
-		meta.UI.Output(fmt.Sprintf("               ID: %s", workspace.Metadata.ID))
+		meta.UI.Output(fmt.Sprintf("\n                name: %s", workspace.Name))
+		meta.UI.Output(fmt.Sprintf("            fullpath: %s", workspace.FullPath))
+		meta.UI.Output(fmt.Sprintf("         description: %s", workspace.Description))
+		meta.UI.Output(fmt.Sprintf("    max job duration: %dm", workspace.MaxJobDuration))
+		meta.UI.Output(fmt.Sprintf("   terraform version: %s", workspace.TerraformVersion))
+		meta.UI.Output(fmt.Sprintf("prevent destroy plan: %v", workspace.PreventDestroyPlan))
+		meta.UI.Output(fmt.Sprintf("                  ID: %s", workspace.Metadata.ID))
 	}
 
 	return 0
