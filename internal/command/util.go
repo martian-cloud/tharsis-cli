@@ -15,7 +15,7 @@ const (
 	sep = "/"
 
 	// Add any opt names here when an empty slice needs to be returned.
-	emptySlice = "tf-var env-var managed-identity prevent-destroy-plan"
+	emptySlice = "tf-var env-var managed-identity"
 
 	// For clearly marking required option in help text.
 	red   = "\033[31m"
@@ -45,9 +45,9 @@ func getOption(optName string, defaultValue string, options map[string][]string)
 func getBoolOptionValue(optName string, defaultValue string, options map[string][]string) (bool, error) {
 	s := getOption(optName, defaultValue, options)
 	switch strings.ToLower(s[0]) {
-	case "true":
+	case "true", "1":
 		return true, nil
-	case "false":
+	case "false", "0":
 		return false, nil
 	//
 	// If other values should be allowed, they can be put here.
