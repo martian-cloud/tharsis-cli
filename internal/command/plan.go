@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/job"
@@ -362,6 +363,7 @@ func createUploadConfigVersion(ctx context.Context, client *tharsis.Client, meta
 		if updatedConfigurationVersion.Status != "pending" {
 			break
 		}
+		time.Sleep(time.Second)
 	}
 	if updatedConfigurationVersion.Status != "uploaded" {
 		return "", fmt.Errorf("upload failed; status is %s", updatedConfigurationVersion.Status)

@@ -10,6 +10,7 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/command"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/logger"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 )
 
@@ -98,10 +99,12 @@ func realMain() int {
 		DisplayTitle: displayTitle,
 		Version:      Version,
 		Logger:       log,
-		UI: &cli.BasicUi{ // text UI for the CLI platform
-			Reader:      os.Stdin,
-			Writer:      os.Stdout,
-			ErrorWriter: os.Stderr,
+		UI: &output.UI{
+			BasicUI: &cli.BasicUi{
+				Reader:      os.Stdin,
+				Writer:      os.Stdout,
+				ErrorWriter: os.Stderr,
+			},
 		},
 		// CurrentProfileName will be set later in this module.
 		// Settings will be set in individual command modules.
@@ -127,6 +130,9 @@ func realMain() int {
 		"provider":                            command.NewProviderCommandFactory(meta),
 		"provider create":                     command.NewProviderCreateCommandFactory(meta),
 		"provider upload-version":             command.NewProviderUploadVersionCommandFactory(meta),
+		"module":                              command.NewModuleCommandFactory(meta),
+		"module create":                       command.NewModuleCreateCommandFactory(meta),
+		"module upload-version":               command.NewModuleUploadVersionCommandFactory(meta),
 		"run":                                 command.NewRunCommandFactory(meta),
 		"run cancel":                          command.NewRunCancelCommandFactory(meta),
 		"sso":                                 command.NewSSOCommandFactory(meta),
