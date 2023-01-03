@@ -89,7 +89,7 @@ func (gcc groupCreateCommand) doGroupCreate(ctx context.Context, client *tharsis
 
 	// Check if group already exists.
 	if ifNotExists {
-		group, gErr := client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{Path: groupPath})
+		group, gErr := client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{Path: &groupPath})
 		if gErr != nil {
 			gcc.meta.Logger.Error(output.FormatError("failed to get group", gErr))
 			return 1
@@ -121,10 +121,6 @@ func (gcc groupCreateCommand) doGroupCreate(ctx context.Context, client *tharsis
 	createdGroup, err := client.Group.CreateGroup(ctx, input)
 	if err != nil {
 		gcc.meta.Logger.Error(output.FormatError("failed to create a group", err))
-		return 1
-	}
-	if createdGroup == nil {
-		gcc.meta.Logger.Error(output.FormatError("failed to create a group", nil))
 		return 1
 	}
 

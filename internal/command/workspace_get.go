@@ -78,17 +78,13 @@ func (wgc workspaceGetCommand) doWorkspaceGet(ctx context.Context, client *thars
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.GetWorkspaceInput{Path: workspacePath}
+	input := &sdktypes.GetWorkspaceInput{Path: &workspacePath}
 	wgc.meta.Logger.Debugf("workspace get input: %#v", input)
 
 	// Get the workspace.
 	foundWorkspace, err := client.Workspaces.GetWorkspace(ctx, input)
 	if err != nil {
 		wgc.meta.Logger.Error(output.FormatError("failed to get a workspace", err))
-		return 1
-	}
-	if foundWorkspace == nil {
-		wgc.meta.Logger.Error(output.FormatError("failed to get a workspace", nil))
 		return 1
 	}
 

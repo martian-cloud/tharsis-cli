@@ -29,10 +29,18 @@ type ProcessVariablesInput struct {
 	EnvVariables   []string
 }
 
+// Variable represents a parsed terraform or environment variable
+type Variable struct {
+	Value    string
+	Key      string
+	Category sdktypes.VariableCategory
+	HCL      bool
+}
+
 // ProcessVariables dispatches the functions to process variables files or variable string and returns the result.
-func ProcessVariables(input ProcessVariablesInput) ([]sdktypes.RunVariable, error) {
+func ProcessVariables(input ProcessVariablesInput) ([]Variable, error) {
 	var (
-		variables []sdktypes.RunVariable
+		variables []Variable
 		err       error
 	)
 
@@ -76,9 +84,9 @@ func ProcessVariables(input ProcessVariablesInput) ([]sdktypes.RunVariable, erro
 // processVariables iterates through the variables slice and splits
 // variables using an equalsDelimiter.
 // Populates a slice of RunVariable and returns the result.
-func processVariables(variables []string, category sdktypes.VariableCategory) ([]sdktypes.RunVariable, error) {
+func processVariables(variables []string, category sdktypes.VariableCategory) ([]Variable, error) {
 	// Split key-value pairs and populate RunVariable slice.
-	var runVariables []sdktypes.RunVariable
+	var runVariables []Variable
 	for i, pair := range variables {
 
 		// Helpful message incase a variable was accidentally empty.
@@ -102,10 +110,10 @@ func processVariables(variables []string, category sdktypes.VariableCategory) ([
 		}
 
 		// Populate a run variable.
-		var runVariable sdktypes.RunVariable
+		var runVariable Variable
 		runVariable.Key = key
-		runVariable.Value = &val
-		runVariable.Hcl = false // Set HCL to false for variable passed in via an argument.
+		runVariable.Value = val
+		runVariable.HCL = false // Set HCL to false for variable passed in via an argument.
 		runVariable.Category = category
 
 		// Append variable to slice.
@@ -116,7 +124,7 @@ func processVariables(variables []string, category sdktypes.VariableCategory) ([
 }
 
 // processTfVarsFile parses a .tfvars file and returns a slice of type RunVariable.
-func processTfVarsFile(filePath string) ([]sdktypes.RunVariable, error) {
+func processTfVarsFile(filePath string) ([]Variable, error) {
 	if !strings.HasSuffix(filePath, ".tfvars") {
 		return nil, errors.New("filename must end in .tfvars")
 	}
@@ -136,7 +144,7 @@ func processTfVarsFile(filePath string) ([]sdktypes.RunVariable, error) {
 	}
 
 	// Get the values for each attribute and create run variables.
-	var runVariables []sdktypes.RunVariable
+	var runVariables []Variable
 	for key, attr := range attributes {
 		value, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
@@ -152,18 +160,18 @@ func processTfVarsFile(filePath string) ([]sdktypes.RunVariable, error) {
 		rawToString := string(raw) // Value must be a pointer.
 
 		// Create run variable.
-		var runVariable sdktypes.RunVariable
+		var runVariable Variable
 		runVariable.Key = key
 		runVariable.Category = sdktypes.TerraformVariableCategory
 
 		// Set HCL if value is not a string type (complex variable)
 		if !value.Type().Equals(cty.String) {
-			runVariable.Hcl = true
+			runVariable.HCL = true
 		} else {
-			runVariable.Hcl = false
+			runVariable.HCL = false
 			rawToString = value.AsString() // No quotes around string
 		}
-		runVariable.Value = &rawToString
+		runVariable.Value = rawToString
 
 		// Append variable to slice.
 		runVariables = append(runVariables, runVariable)
@@ -174,7 +182,7 @@ func processTfVarsFile(filePath string) ([]sdktypes.RunVariable, error) {
 
 // processEnvVarsFile reads a environment variables file
 // and calls processVariables to return a slice of type RunVariable.
-func processEnvVarsFile(filePath string) ([]sdktypes.RunVariable, error) {
+func processEnvVarsFile(filePath string) ([]Variable, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err

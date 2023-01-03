@@ -96,7 +96,7 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 
 	// Prepare the inputs.
 	input := &sdktypes.UpdateWorkspaceInput{
-		WorkspacePath:      path,
+		WorkspacePath:      &path,
 		Description:        description,
 		MaxJobDuration:     jobDuration,
 		PreventDestroyPlan: &preventDestroyPlan,
@@ -111,11 +111,6 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 	updatedWorkspace, err := client.Workspaces.UpdateWorkspace(ctx, input)
 	if err != nil {
 		wuc.meta.Logger.Error(output.FormatError("failed to update a workspace", err))
-		return 1
-	}
-
-	if updatedWorkspace == nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to update a workspace", nil))
 		return 1
 	}
 

@@ -95,11 +95,6 @@ func (wam workspaceUnassignManagedIdentityCommand) doWorkspaceUnassignManagedIde
 		return 1
 	}
 
-	if workspace == nil {
-		wam.meta.Logger.Error("failed to unassign managed identity from workspace")
-		return 1
-	}
-
 	return outputWorkspace(wam.meta, toJSON, workspace, "unassign-managed-identity")
 }
 

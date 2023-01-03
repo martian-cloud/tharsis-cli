@@ -171,17 +171,25 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 		return nil, 1
 	}
 
+	runVariables := []sdktypes.RunVariable{}
+	for _, v := range variables {
+		vCopy := v
+		runVariables = append(runVariables, sdktypes.RunVariable{
+			Key:      vCopy.Key,
+			Value:    &vCopy.Value,
+			Category: vCopy.Category,
+			HCL:      vCopy.HCL,
+		})
+	}
+
 	// Verify the workspace path exists.
 	foundWorkspace, err := client.Workspaces.GetWorkspace(ctx,
-		&sdktypes.GetWorkspaceInput{Path: input.workspacePath})
+		&sdktypes.GetWorkspaceInput{Path: &input.workspacePath})
 	if err != nil {
 		meta.Logger.Error(output.FormatError("failed to get a workspace", err))
 		return nil, 1
 	}
-	if foundWorkspace == nil {
-		meta.Logger.Error(output.FormatError("failed to get a workspace", nil))
-		return nil, 1
-	}
+
 	meta.Logger.Debugf("plan: found workspace: %#v", foundWorkspace)
 
 	// If module source was not specified, check and maybe default the directory path.
@@ -235,7 +243,7 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 		IsDestroy:              input.isDestroy,
 		ModuleSource:           moduleSourceP,
 		ModuleVersion:          moduleVersionP,
-		Variables:              variables,
+		Variables:              runVariables,
 	}
 
 	if input.terraformVersion != "" {
