@@ -7,12 +7,12 @@ require (
 	github.com/hashicorp/go-slug v0.10.0
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/hashicorp/hcl/v2 v2.13.0
-	github.com/hasura/go-graphql-client v0.7.2
+	github.com/hasura/go-graphql-client v0.8.1
 	github.com/mitchellh/cli v1.1.4
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/zclconf/go-cty v1.10.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.5.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.9.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/oauth2 v0.0.0-20220628200809-02e64fa58f26
 )
@@ -40,7 +40,6 @@ require (
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/klauspost/compress v1.15.7 // indirect
-	github.com/likexian/gokit v0.25.8 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect

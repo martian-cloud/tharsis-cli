@@ -77,17 +77,13 @@ func (ggc groupGetCommand) doGroupGet(ctx context.Context, client *tharsis.Clien
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.GetGroupInput{Path: path}
+	input := &sdktypes.GetGroupInput{Path: &path}
 	ggc.meta.Logger.Debugf("group get input: %#v", input)
 
 	// Get the group.
 	foundGroup, err := client.Group.GetGroup(ctx, input)
 	if err != nil {
 		ggc.meta.Logger.Error(output.FormatError("failed to get a group", err))
-		return 1
-	}
-	if foundGroup == nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to get a group.", nil))
 		return 1
 	}
 

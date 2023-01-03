@@ -77,11 +77,6 @@ func (wuc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Cli
 		return 1
 	}
 
-	if run == nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to get run", nil))
-		return 1
-	}
-
 	// Subscribe to run events and wait for event to be canceled.
 	done := make(chan bool)
 	go func() {

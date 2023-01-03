@@ -87,13 +87,13 @@ func (gsv groupSetEnvironmentVarsCommand) doGroupSetEnvironmentVars(ctx context.
 	input := &sdktypes.SetNamespaceVariablesInput{
 		NamespacePath: namespacePath,
 		Category:      sdktypes.EnvironmentVariableCategory,
-		Variables:     variables,
+		Variables:     convertToSetNamespaceVariablesInput(variables),
 	}
 
 	gsv.meta.Logger.Debugf("group set-environment-vars input: %#v", input)
 
 	// Set the group variables.
-	err = client.Group.SetGroupVariables(ctx, input)
+	err = client.Variable.SetVariables(ctx, input)
 	if err != nil {
 		gsv.meta.Logger.Error(output.FormatError("failed to set group variables", err))
 		return 1

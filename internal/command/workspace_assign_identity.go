@@ -90,11 +90,6 @@ func (wam workspaceAssignManagedIdentityCommand) doWorkspaceAssignManagedIdentit
 		return 1
 	}
 
-	if workspace == nil {
-		wam.meta.Logger.Error(output.FormatError("failed to assign managed identity to workspace", nil))
-		return 1
-	}
-
 	return outputWorkspace(wam.meta, toJSON, workspace, "assign-managed-identity")
 }
 
@@ -115,10 +110,6 @@ func assignManagedIdentities(ctx context.Context, workspacePath string, identity
 			})
 		if err != nil {
 			return nil, err
-		}
-
-		if createdWorkspace == nil {
-			return nil, nil
 		}
 	}
 

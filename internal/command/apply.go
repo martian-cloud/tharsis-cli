@@ -176,10 +176,6 @@ func startApplyStage(ctx context.Context, comment string, autoApprove, inputRequ
 		meta.Logger.Error(output.FormatError("failed to apply a run", err))
 		return 1
 	}
-	if appliedRun == nil {
-		meta.Logger.Error(output.FormatError("failed to apply a run.", nil))
-		return 1
-	}
 
 	// Make sure the run has an apply.
 	if appliedRun.Apply == nil {

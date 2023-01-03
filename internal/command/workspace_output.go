@@ -106,7 +106,7 @@ func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client
 		return 1
 	}
 
-	input := &sdktypes.GetWorkspaceInput{Path: workspacePath}
+	input := &sdktypes.GetWorkspaceInput{Path: &workspacePath}
 	wo.meta.Logger.Debugf("workspace outputs input: %#v", input)
 
 	workspace, err := client.Workspaces.GetWorkspace(ctx, input)
@@ -114,10 +114,7 @@ func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client
 		wo.meta.Logger.Error(output.FormatError("failed to get a workspace", err))
 		return 1
 	}
-	if workspace == nil {
-		wo.meta.Logger.Error(output.FormatError("failed to get a workspace", nil))
-		return 1
-	}
+
 	wo.meta.Logger.Debugf("workspace outputs found workspace: %s", workspace.FullPath)
 
 	// Check if the workspace has a current state version.

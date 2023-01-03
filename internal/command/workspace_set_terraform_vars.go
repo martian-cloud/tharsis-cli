@@ -87,13 +87,13 @@ func (wsv workspaceSetTerraformVarsCommand) doWorkspaceSetTerraformVars(ctx cont
 	input := &sdktypes.SetNamespaceVariablesInput{
 		NamespacePath: namespacePath,
 		Category:      sdktypes.TerraformVariableCategory,
-		Variables:     variables,
+		Variables:     convertToSetNamespaceVariablesInput(variables),
 	}
 
 	wsv.meta.Logger.Debugf("workspace set-terraform-vars input: %#v", input)
 
 	// Set the workspace variables.
-	err = client.Workspaces.SetWorkspaceVariables(ctx, input)
+	err = client.Variable.SetVariables(ctx, input)
 	if err != nil {
 		wsv.meta.Logger.Error(output.FormatError("failed to set workspace variables", err))
 		return 1

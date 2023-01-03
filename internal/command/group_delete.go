@@ -76,7 +76,7 @@ func (gdc groupDeleteCommand) doGroupDelete(ctx context.Context, client *tharsis
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.DeleteGroupInput{GroupPath: groupPath}
+	input := &sdktypes.DeleteGroupInput{GroupPath: &groupPath}
 	gdc.meta.Logger.Debugf("group delete input: %#v", input)
 
 	// Delete the group.

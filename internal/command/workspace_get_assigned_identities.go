@@ -90,10 +90,6 @@ func (wam workspaceGetAssignedManagedIdentitiesCommand) doWorkspaceGetAssignedMa
 		wam.meta.Logger.Error(output.FormatError("failed to get assigned managed identities", err))
 		return 1
 	}
-	if identities == nil {
-		wam.meta.Logger.Error(output.FormatError("failed to get assigned managed identities", nil))
-		return 1
-	}
 
 	if toJSON {
 		buf, err := objectToJSON(identities)

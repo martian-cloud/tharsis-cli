@@ -8,6 +8,8 @@ import (
 
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 const (
@@ -145,6 +147,18 @@ func objectToJSON(object interface{}) (string, error) {
 	}
 
 	return string(buf), nil
+}
+
+func convertToSetNamespaceVariablesInput(vars []varparser.Variable) []types.SetNamespaceVariablesVariable {
+	response := []types.SetNamespaceVariablesVariable{}
+	for _, v := range vars {
+		response = append(response, types.SetNamespaceVariablesVariable{
+			Key:   v.Key,
+			Value: v.Value,
+			HCL:   v.HCL,
+		})
+	}
+	return response
 }
 
 // The End.

@@ -108,7 +108,7 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 
 	// Check if workspace already exists.
 	if ifNotExists {
-		ws, gErr := client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{Path: workspacePath})
+		ws, gErr := client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{Path: &workspacePath})
 		if gErr != nil {
 			wcc.meta.Logger.Error(output.FormatError("failed to get workspace", gErr))
 			return 1
@@ -146,20 +146,11 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 		wcc.meta.Logger.Error(output.FormatError("failed to create a workspace", err))
 		return 1
 	}
-	if createdWorkspace == nil {
-		wcc.meta.Logger.Error(output.FormatError("failed to create a workspace", nil))
-		return 1
-	}
 
 	if len(identityPaths) > 0 {
 		createdWorkspace, err = assignManagedIdentities(ctx, workspacePath, identityPaths, client)
 		if err != nil {
 			wcc.meta.Logger.Error(output.FormatError("failed to assign managed identity to workspace", err))
-			return 1
-		}
-
-		if createdWorkspace == nil {
-			wcc.meta.Logger.Error(output.FormatError("failed to assign managed identity to workspace", nil))
 			return 1
 		}
 	}

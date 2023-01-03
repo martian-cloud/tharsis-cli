@@ -88,13 +88,13 @@ func (gsv groupSetTerraformVarsCommand) doGroupSetTerraformVars(ctx context.Cont
 	input := &sdktypes.SetNamespaceVariablesInput{
 		NamespacePath: namespacePath,
 		Category:      sdktypes.TerraformVariableCategory,
-		Variables:     variables,
+		Variables:     convertToSetNamespaceVariablesInput(variables),
 	}
 
 	gsv.meta.Logger.Debugf("group set-terraform-vars input: %#v", input)
 
 	// Set the group variables.
-	err = client.Group.SetGroupVariables(ctx, input)
+	err = client.Variable.SetVariables(ctx, input)
 	if err != nil {
 		gsv.meta.Logger.Error(output.FormatError("failed to set group variables", err))
 		return 1

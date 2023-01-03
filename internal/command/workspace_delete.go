@@ -77,7 +77,7 @@ func (wdc workspaceDeleteCommand) doWorkspaceDelete(ctx context.Context, client 
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.DeleteWorkspaceInput{WorkspacePath: workspacePath, Force: &force}
+	input := &sdktypes.DeleteWorkspaceInput{WorkspacePath: &workspacePath, Force: &force}
 	wdc.meta.Logger.Debugf("workspace delete input: %#v", input)
 
 	// Delete the workspace.

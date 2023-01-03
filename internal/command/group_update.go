@@ -79,7 +79,7 @@ func (guc groupUpdateCommand) doGroupUpdate(ctx context.Context, client *tharsis
 
 	// Prepare the inputs.
 	input := &sdktypes.UpdateGroupInput{
-		GroupPath:   path,
+		GroupPath:   &path,
 		Description: description,
 	}
 	guc.meta.Logger.Debugf("group update input: %#v", input)
@@ -88,10 +88,6 @@ func (guc groupUpdateCommand) doGroupUpdate(ctx context.Context, client *tharsis
 	updatedGroup, err := client.Group.UpdateGroup(ctx, input)
 	if err != nil {
 		guc.meta.Logger.Error(output.FormatError("failed to update a group", err))
-		return 1
-	}
-	if updatedGroup == nil {
-		guc.meta.Logger.Error(output.FormatError("failed to update a group", nil))
 		return 1
 	}
 
