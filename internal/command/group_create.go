@@ -64,7 +64,7 @@ func (gcc groupCreateCommand) doGroupCreate(ctx context.Context, client *tharsis
 		return 1
 	}
 	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace get arguments: %s", cmdArgs)
+		msg := fmt.Sprintf("excessive group create arguments: %s", cmdArgs)
 		gcc.meta.Logger.Error(output.FormatError(msg, nil), gcc.HelpGroupCreate())
 		return 1
 	}
