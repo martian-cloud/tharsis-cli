@@ -135,6 +135,8 @@ func realMain() int {
 		"module upload-version":               command.NewModuleUploadVersionCommandFactory(meta),
 		"run":                                 command.NewRunCommandFactory(meta),
 		"run cancel":                          command.NewRunCancelCommandFactory(meta),
+		"service-account":                     command.NewServiceAccountCommandFactory(meta),
+		"service-account login":               command.NewServiceAccountLoginCommandFactory(meta),
 		"sso":                                 command.NewSSOCommandFactory(meta),
 		"sso login":                           command.NewLoginCommandFactory(meta),
 		"workspace":                           command.NewWorkspaceCommandFactory(meta),

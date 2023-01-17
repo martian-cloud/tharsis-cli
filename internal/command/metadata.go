@@ -19,7 +19,6 @@ import (
 // The name of the current profile (set by the global option) must be stored
 // here in order to communicate it from the top-level module down to to the
 // individual command modules prior to reading the settings file.
-//
 type Metadata struct {
 	BinaryName         string
 	DisplayTitle       string
