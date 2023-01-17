@@ -1,7 +1,7 @@
 package command
 
 import (
-	"strings"
+	"fmt"
 
 	"github.com/mitchellh/cli"
 )
@@ -41,9 +41,9 @@ func (sc ssoCommand) Help() string {
 
 // HelpSSO produces the help string for the 'sso' command.
 func (sc ssoCommand) HelpSSO(subCommands bool) string {
-	usage := strings.ReplaceAll(`
-Usage: //BINARY_NAME// [global options] sso login
-`, "//BINARY_NAME//", sc.meta.BinaryName)
+	usage := fmt.Sprintf(`
+Usage: %s [global options] sso login
+`, sc.meta.BinaryName)
 
 	subs := `
 

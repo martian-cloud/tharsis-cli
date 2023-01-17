@@ -365,6 +365,8 @@ Tharsis modifications:
 // nolint
 // revive:disable Forked code
 /* cSpell:disable */
+
+// Package external ...
 package external
 
 import (
@@ -420,9 +422,8 @@ func FormatValue(v cty.Value, indent int) string {
 		case cty.Bool:
 			if v.True() {
 				return "true"
-			} else {
-				return "false"
 			}
+			return "false"
 		}
 	case ty.IsObjectType():
 		return formatMappingValue(v, indent)

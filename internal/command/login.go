@@ -382,7 +382,6 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
-	"strings"
 	"time"
 
 	uuid "github.com/hashicorp/go-uuid"
@@ -542,8 +541,8 @@ func (lc loginCommand) Help() string {
 
 // HelpLogin produces the long (many lines) help string for the 'login' command.
 func (lc loginCommand) HelpLogin() string {
-	return strings.ReplaceAll(`
-Usage: //BINARY_NAME// [global options] sso login [options]
+	return fmt.Sprintf(`
+Usage: %s [global options] sso login [options]
 
    The login command starts an embedded web server and opens
    a web browser page or tab pointed at said web server.
@@ -552,7 +551,7 @@ Usage: //BINARY_NAME// [global options] sso login [options]
    that will sign in the user. The login command captures
    the authentication token for use in subsequent commands.
 
-`, "//BINARY_NAME//", lc.meta.BinaryName)
+`, lc.meta.BinaryName)
 }
 
 // Fetch the 'well-known' URL from the settings.profile.TharsisURL to get the auth URL.
