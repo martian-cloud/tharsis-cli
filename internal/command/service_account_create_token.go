@@ -11,22 +11,22 @@ import (
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// serviceAccountLoginCommand is the top-level structure for the service-account login command.
-type serviceAccountLoginCommand struct {
+// serviceAccountCreateTokenCommand is the top-level structure for the service-account create-token command.
+type serviceAccountCreateTokenCommand struct {
 	meta *Metadata
 }
 
-// NewServiceAccountLoginCommandFactory returns a serviceAccountLoginCommand struct.
-func NewServiceAccountLoginCommandFactory(meta *Metadata) func() (cli.Command, error) {
+// NewServiceAccountCreateTokenCommandFactory returns a serviceAccountCreateTokenCommand struct.
+func NewServiceAccountCreateTokenCommandFactory(meta *Metadata) func() (cli.Command, error) {
 	return func() (cli.Command, error) {
-		return serviceAccountLoginCommand{
+		return serviceAccountCreateTokenCommand{
 			meta: meta,
 		}, nil
 	}
 }
 
-func (sal serviceAccountLoginCommand) Run(args []string) int {
-	sal.meta.Logger.Debugf("Starting the 'service-account login' command with %d arguments:", len(args))
+func (sal serviceAccountCreateTokenCommand) Run(args []string) int {
+	sal.meta.Logger.Debugf("Starting the 'service-account create-token' command with %d arguments:", len(args))
 	for ix, arg := range args {
 		sal.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
@@ -46,29 +46,29 @@ func (sal serviceAccountLoginCommand) Run(args []string) int {
 
 	ctx := context.Background()
 
-	return sal.doServiceAccountLogin(ctx, client, args)
+	return sal.doServiceAccountCreateToken(ctx, client, args)
 }
 
-func (sal serviceAccountLoginCommand) doServiceAccountLogin(ctx context.Context,
+func (sal serviceAccountCreateTokenCommand) doServiceAccountCreateToken(ctx context.Context,
 	client *tharsis.Client, opts []string) int {
-	sal.meta.Logger.Debugf("will do service-account login, %d opts", len(opts))
+	sal.meta.Logger.Debugf("will do service-account create-token, %d opts", len(opts))
 
 	defs := sal.buildOptions()
 
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(sal.meta.BinaryName+" service-account login",
+	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(sal.meta.BinaryName+" service-account create-token",
 		defs, opts)
 	if err != nil {
-		sal.meta.Logger.Error(output.FormatError("failed to parse service-account login options", err))
+		sal.meta.Logger.Error(output.FormatError("failed to parse service-account create-token options", err))
 		return 1
 	}
 	if len(cmdArgs) < 1 {
 		sal.meta.Logger.Error(output.FormatError("missing service account path", nil),
-			sal.HelpServiceAccountLogin())
+			sal.HelpServiceAccountCreateToken())
 		return 1
 	}
 	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive service-account login arguments: %s", cmdArgs)
-		sal.meta.Logger.Error(output.FormatError(msg, nil), sal.HelpServiceAccountLogin())
+		msg := fmt.Sprintf("excessive service-account create-token arguments: %s", cmdArgs)
+		sal.meta.Logger.Error(output.FormatError(msg, nil), sal.HelpServiceAccountCreateToken())
 		return 1
 	}
 
@@ -81,14 +81,14 @@ func (sal serviceAccountLoginCommand) doServiceAccountLogin(ctx context.Context,
 		return 1
 	}
 
-	input := &sdktypes.ServiceAccountLoginInput{
+	input := &sdktypes.ServiceAccountCreateTokenInput{
 		ServiceAccountPath: serviceAccountPath,
 		Token:              token,
 	}
 
-	resp, err := client.ServiceAccount.Login(ctx, input)
+	resp, err := client.ServiceAccount.CreateToken(ctx, input)
 	if err != nil {
-		sal.meta.Logger.Error(output.FormatError("failed to log in to service account", err))
+		sal.meta.Logger.Error(output.FormatError("failed to create token for service account", err))
 		return 1
 	}
 
@@ -97,7 +97,7 @@ func (sal serviceAccountLoginCommand) doServiceAccountLogin(ctx context.Context,
 		// Marshal and indent the JSON output.
 		marshalled, err := objectToJSON(resp)
 		if err != nil {
-			sal.meta.Logger.Error(output.FormatError("failed to marshal login response", err))
+			sal.meta.Logger.Error(output.FormatError("failed to marshal create-token response", err))
 			return 1
 		}
 
@@ -111,16 +111,16 @@ func (sal serviceAccountLoginCommand) doServiceAccountLogin(ctx context.Context,
 	return 0
 }
 
-func (sal serviceAccountLoginCommand) Synopsis() string {
-	return "Log in as a service account."
+func (sal serviceAccountCreateTokenCommand) Synopsis() string {
+	return "Create a token for a service account."
 }
 
-func (sal serviceAccountLoginCommand) Help() string {
-	return sal.HelpServiceAccountLogin()
+func (sal serviceAccountCreateTokenCommand) Help() string {
+	return sal.HelpServiceAccountCreateToken()
 }
 
-// buildOptions builds the option definitions for the service account login command.
-func (sal serviceAccountLoginCommand) buildOptions() optparser.OptionDefinitions {
+// buildOptions builds the option definitions for the service account create-token command.
+func (sal serviceAccountCreateTokenCommand) buildOptions() optparser.OptionDefinitions {
 	defs := optparser.OptionDefinitions{
 		"token": {
 			Arguments: []string{"Token"},
@@ -135,19 +135,19 @@ func (sal serviceAccountLoginCommand) buildOptions() optparser.OptionDefinitions
 	return buildJSONOptionDefs(defs)
 }
 
-// HelpServiceAccountLogin produces the help string for the 'service-account login' command.
-func (sal serviceAccountLoginCommand) HelpServiceAccountLogin() string {
+// HelpServiceAccountCreateToken produces the help string for the 'service-account create-token' command.
+func (sal serviceAccountCreateTokenCommand) HelpServiceAccountCreateToken() string {
 	return fmt.Sprintf(`
-Usage: %s [global options] service-account login [options] <service_account_path>
+Usage: %s [global options] service-account create-token [options] <service_account_path>
 
-   The service-account login command logs in as a service account.
+   The service-account create-token command creates a token for a service account.
 	 It uses the supplied token to authenticate.
-	 It prints a post-login token.
+	 It prints an output token.
 
 	 The input token is used for the OIDC federated login that is issued by an
 	 identity provider specified in the service account's trust policy.
 
-	 The returned token is the service account token that can be used to
+	 The output token is the service account token that can be used to
 	 authenticate with the API.
 
 %s

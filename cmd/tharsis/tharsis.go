@@ -136,7 +136,7 @@ func realMain() int {
 		"run":                                 command.NewRunCommandFactory(meta),
 		"run cancel":                          command.NewRunCancelCommandFactory(meta),
 		"service-account":                     command.NewServiceAccountCommandFactory(meta),
-		"service-account login":               command.NewServiceAccountLoginCommandFactory(meta),
+		"service-account create-token":        command.NewServiceAccountCreateTokenCommandFactory(meta),
 		"sso":                                 command.NewSSOCommandFactory(meta),
 		"sso login":                           command.NewLoginCommandFactory(meta),
 		"workspace":                           command.NewWorkspaceCommandFactory(meta),
