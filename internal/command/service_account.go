@@ -32,7 +32,7 @@ func (sc serviceAccountCommand) Run(args []string) int {
 }
 
 func (sc serviceAccountCommand) Synopsis() string {
-	return "Log in to the OAuth2 provider and return an authentication token"
+	return "Create an authentication token for a service account."
 }
 
 func (sc serviceAccountCommand) Help() string {
@@ -42,13 +42,13 @@ func (sc serviceAccountCommand) Help() string {
 // HelpServiceAccount produces the help string for the 'service-account' command.
 func (sc serviceAccountCommand) HelpServiceAccount(subCommands bool) string {
 	usage := fmt.Sprintf(`
-Usage: %s [global options] service-account login
+Usage: %s [global options] service-account create-token
 `, sc.meta.BinaryName)
 
 	subs := `
 
 Subcommands:
-    login    Log in as a service account.`
+    create-token    Create a token for a service account.`
 
 	// Avoid duplicate subcommands when -h is used.
 	if subCommands {
