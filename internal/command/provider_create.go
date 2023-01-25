@@ -8,6 +8,7 @@ import (
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -26,56 +27,60 @@ func NewProviderCreateCommandFactory(meta *Metadata) func() (cli.Command, error)
 	}
 }
 
-func (p providerCreateCommand) Run(args []string) int {
-	p.meta.Logger.Debugf("Starting the 'provider create' command with %d arguments:", len(args))
+func (pcc providerCreateCommand) Run(args []string) int {
+	pcc.meta.Logger.Debugf("Starting the 'provider create' command with %d arguments:", len(args))
 	for ix, arg := range args {
-		p.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+		pcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
 	// Cannot delay reading settings past this point.
-	settings, err := p.meta.ReadSettings()
+	settings, err := pcc.meta.ReadSettings()
 	if err != nil {
-		p.meta.Logger.Error(output.FormatError("failed to read settings file", err))
+		pcc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
 		return 1
 	}
 
 	client, err := settings.CurrentProfile.GetSDKClient()
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		pcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1
 	}
 
 	ctx := context.Background()
 
-	return p.doProviderCreate(ctx, client, args)
+	return pcc.doProviderCreate(ctx, client, args)
 }
 
-func (p providerCreateCommand) doProviderCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	p.meta.Logger.Debugf("will do provider create, %d opts", len(opts))
+func (pcc providerCreateCommand) doProviderCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
+	pcc.meta.Logger.Debugf("will do provider create, %d opts", len(opts))
 
-	defs := buildProviderCreateDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(p.meta.BinaryName+" provider create", defs, opts)
+	defs := pcc.buildProviderCreateDefs()
+	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(pcc.meta.BinaryName+" provider create", defs, opts)
 	if err != nil {
-		p.meta.Logger.Error(output.FormatError("failed to parse provider create options", err))
+		pcc.meta.Logger.Error(output.FormatError("failed to parse provider create options", err))
 		return 1
 	}
 	if len(cmdArgs) < 1 {
-		p.meta.Logger.Error(output.FormatError("missing provider create path", nil), p.HelpProviderCreate())
+		pcc.meta.Logger.Error(output.FormatError("missing provider create path", nil), pcc.HelpProviderCreate())
 		return 1
 	}
 	if len(cmdArgs) > 1 {
 		msg := fmt.Sprintf("excessive provider create arguments: %s", cmdArgs)
-		p.meta.Logger.Error(output.FormatError(msg, nil), p.HelpProviderCreate())
+		pcc.meta.Logger.Error(output.FormatError(msg, nil), pcc.HelpProviderCreate())
 		return 1
 	}
 
 	providerPath := cmdArgs[0]
 	toJSON := getOption("json", "", cmdOpts)[0] == "1"
-	private := getOption("private", "1", cmdOpts)[0] == "1"
 	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
+	private, err := getBoolOptionValue("private", "true", cmdOpts)
+	if err != nil {
+		pcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
-	if !isResourcePathValid(p.meta, providerPath) {
+	if !isResourcePathValid(pcc.meta, providerPath) {
 		return 1
 	}
 
@@ -88,36 +93,48 @@ func (p providerCreateCommand) doProviderCreate(ctx context.Context, client *tha
 		RepositoryURL: repositoryURL,
 	})
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to create provider", err))
+		pcc.meta.UI.Error(output.FormatError("failed to create provider", err))
 		return 1
 	}
 
-	return p.outputProvider(toJSON, provider)
+	return pcc.outputProvider(toJSON, provider)
 }
 
-func (p providerCreateCommand) outputProvider(toJSON bool, provider *types.TerraformProvider) int {
+func (pcc providerCreateCommand) outputProvider(toJSON bool, provider *types.TerraformProvider) int {
 	if toJSON {
 		buf, err := objectToJSON(provider)
 		if err != nil {
-			p.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+			pcc.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
 			return 1
 		}
-		p.meta.UI.Output(string(buf))
+		pcc.meta.UI.Output(string(buf))
 	} else {
-		// Format the output.
-		p.meta.UI.Output("provider %s output:")
-		p.meta.UI.Output(fmt.Sprintf("\n              name: %s", provider.Name))
-		p.meta.UI.Output(fmt.Sprintf("     resource path: %s", provider.ResourcePath))
-		p.meta.UI.Output(fmt.Sprintf("           private: %t", provider.Private))
-		p.meta.UI.Output(fmt.Sprintf("    Repository URL: %s", provider.RepositoryURL))
-		p.meta.UI.Output(fmt.Sprintf("                ID: %s", provider.Metadata.ID))
+		tableInput := [][]string{
+			{
+				"id",
+				"name",
+				"resource path",
+				"registry namespace",
+				"private",
+				"repository url",
+			},
+			{
+				provider.Metadata.ID,
+				provider.Name,
+				provider.ResourcePath,
+				provider.RegistryNamespace,
+				fmt.Sprintf("%t", provider.Private),
+				provider.RepositoryURL,
+			},
+		}
+		pcc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}
 
 	return 0
 }
 
 // buildProviderCreateDefs returns defs used by provider create command.
-func buildProviderCreateDefs() optparser.OptionDefinitions {
+func (pcc providerCreateCommand) buildProviderCreateDefs() optparser.OptionDefinitions {
 	defs := optparser.OptionDefinitions{
 		"private": {
 			Arguments: []string{"Private"},
@@ -132,16 +149,16 @@ func buildProviderCreateDefs() optparser.OptionDefinitions {
 	return buildJSONOptionDefs(defs)
 }
 
-func (p providerCreateCommand) Synopsis() string {
+func (pcc providerCreateCommand) Synopsis() string {
 	return "Create a new provider."
 }
 
-func (p providerCreateCommand) Help() string {
-	return p.HelpProviderCreate()
+func (pcc providerCreateCommand) Help() string {
+	return pcc.HelpProviderCreate()
 }
 
 // HelpProviderCreate produces the help string for the 'provider create' command.
-func (p providerCreateCommand) HelpProviderCreate() string {
+func (pcc providerCreateCommand) HelpProviderCreate() string {
 	return fmt.Sprintf(`
 Usage: %s [global options] provider create [options] <full_path>
 
@@ -149,7 +166,7 @@ Usage: %s [global options] provider create [options] <full_path>
 
 %s
 
-`, p.meta.BinaryName, buildHelpText(buildProviderCreateDefs()))
+`, pcc.meta.BinaryName, buildHelpText(pcc.buildProviderCreateDefs()))
 }
 
 // The End.

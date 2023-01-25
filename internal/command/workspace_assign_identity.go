@@ -90,7 +90,7 @@ func (wam workspaceAssignManagedIdentityCommand) doWorkspaceAssignManagedIdentit
 		return 1
 	}
 
-	return outputWorkspace(wam.meta, toJSON, workspace, "assign-managed-identity")
+	return outputWorkspace(wam.meta, toJSON, workspace)
 }
 
 // assignManagedIdentities assigns the managed identities and returns the updated workspace.

@@ -68,7 +68,7 @@ func (wo workspaceOutputsCommand) Run(args []string) int {
 func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client *tharsis.Client, opts []string) int {
 	wo.meta.Logger.Debugf("will do workspace outputs, %d opts", len(opts))
 
-	defs := buildWorkspaceOutputsDefs()
+	defs := wo.buildWorkspaceOutputsDefs()
 	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wo.meta.BinaryName+" workspace outputs", defs, opts)
 	if err != nil {
 		wo.meta.Logger.Error(output.FormatError("failed to parse workspace outputs options", err))
@@ -250,7 +250,7 @@ func buildStateOutputValueMap(outputs []sdktypes.StateVersionOutput) (map[string
 }
 
 // buildWorkspaceOutputsDefs returns defs used by workspace outputs command.
-func buildWorkspaceOutputsDefs() optparser.OptionDefinitions {
+func (wo workspaceOutputsCommand) buildWorkspaceOutputsDefs() optparser.OptionDefinitions {
 	rawDefs := optparser.OptionDefinitions{
 		"output-name": {
 			Arguments: []string{"Output_Name"},
@@ -293,7 +293,7 @@ Usage: %s [global options] workspace outputs [options] <full_path>
 
 
 Combining --raw and --json is not allowed.
-`, wo.meta.BinaryName, buildHelpText(buildWorkspaceOutputsDefs()))
+`, wo.meta.BinaryName, buildHelpText(wo.buildWorkspaceOutputsDefs()))
 }
 
 // The End.

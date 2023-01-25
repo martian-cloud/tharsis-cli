@@ -47,46 +47,46 @@ func NewProviderUploadVersionCommandFactory(meta *Metadata) func() (cli.Command,
 	}
 }
 
-func (p providerUploadVersionCommand) Run(args []string) int {
-	p.meta.Logger.Debugf("Starting the 'provider upload-version' command with %d arguments:", len(args))
+func (puc providerUploadVersionCommand) Run(args []string) int {
+	puc.meta.Logger.Debugf("Starting the 'provider upload-version' command with %d arguments:", len(args))
 	for ix, arg := range args {
-		p.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+		puc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
 	// Cannot delay reading settings past this point.
-	settings, err := p.meta.ReadSettings()
+	settings, err := puc.meta.ReadSettings()
 	if err != nil {
-		p.meta.Logger.Error(output.FormatError("failed to read settings file", err))
+		puc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
 		return 1
 	}
 
 	client, err := settings.CurrentProfile.GetSDKClient()
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		puc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1
 	}
 
 	ctx := context.Background()
 
-	return p.doProviderUploadVersion(ctx, client, args)
+	return puc.doProviderUploadVersion(ctx, client, args)
 }
 
-func (p providerUploadVersionCommand) doProviderUploadVersion(ctx context.Context, client *tharsis.Client, opts []string) int {
-	p.meta.Logger.Debugf("will do provider upload-version, %d opts", len(opts))
+func (puc providerUploadVersionCommand) doProviderUploadVersion(ctx context.Context, client *tharsis.Client, opts []string) int {
+	puc.meta.Logger.Debugf("will do provider upload-version, %d opts", len(opts))
 
-	defs := buildProviderUploadVersionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(p.meta.BinaryName+" provider upload-version", defs, opts)
+	defs := puc.buildProviderUploadVersionDefs()
+	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(puc.meta.BinaryName+" provider upload-version", defs, opts)
 	if err != nil {
-		p.meta.Logger.Error(output.FormatError("failed to parse provider upload-version options", err))
+		puc.meta.Logger.Error(output.FormatError("failed to parse provider upload-version options", err))
 		return 1
 	}
 	if len(cmdArgs) < 1 {
-		p.meta.Logger.Error(output.FormatError("missing provider upload-version <provider-path>", nil), p.HelpProviderUploadVersion())
+		puc.meta.Logger.Error(output.FormatError("missing provider upload-version <provider-path>", nil), puc.HelpProviderUploadVersion())
 		return 1
 	}
 	if len(cmdArgs) > 1 {
 		msg := fmt.Sprintf("excessive provider upload-version arguments: %s", cmdArgs)
-		p.meta.Logger.Error(output.FormatError(msg, nil), p.HelpProviderUploadVersion())
+		puc.meta.Logger.Error(output.FormatError(msg, nil), puc.HelpProviderUploadVersion())
 		return 1
 	}
 
@@ -94,37 +94,37 @@ func (p providerUploadVersionCommand) doProviderUploadVersion(ctx context.Contex
 	directoryPath := getOption("directory-path", "", cmdOpts)[0]
 
 	// Error is already logged.
-	if !isResourcePathValid(p.meta, providerPath) {
+	if !isResourcePathValid(puc.meta, providerPath) {
 		return 1
 	}
 
 	// Make sure the directory path exists and is a directory--to give more precise messages.
-	if err = p.checkDirPath(directoryPath); err != nil {
-		p.meta.Logger.Error(output.FormatError("invalid directory path", err))
+	if err = puc.checkDirPath(directoryPath); err != nil {
+		puc.meta.Logger.Error(output.FormatError("invalid directory path", err))
 		return 1
 	}
 
-	p.meta.UI.Output(fmt.Sprintf("• starting provider version upload: provider=%s directory=%s", providerPath, directoryPath))
+	puc.meta.UI.Output(fmt.Sprintf("• starting provider version upload: provider=%s directory=%s", providerPath, directoryPath))
 
-	providerManifest, err := p.readProviderManifest(ctx, directoryPath)
+	providerManifest, err := puc.readProviderManifest(ctx, directoryPath)
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to read provider manifest", err))
+		puc.meta.UI.Error(output.FormatError("failed to read provider manifest", err))
 		return 1
 	}
 
-	providerVersionMetadata, err := p.readProviderVersionMetdata(ctx, directoryPath)
+	providerVersionMetadata, err := puc.readProviderVersionMetdata(ctx, directoryPath)
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to read provider version metadata", err))
+		puc.meta.UI.Error(output.FormatError("failed to read provider version metadata", err))
 		return 1
 	}
 
-	artifacts, err := p.readProviderVersionArtifacts(ctx, directoryPath)
+	artifacts, err := puc.readProviderVersionArtifacts(ctx, directoryPath)
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to read provider version artifacts", err))
+		puc.meta.UI.Error(output.FormatError("failed to read provider version artifacts", err))
 		return 1
 	}
 
-	p.meta.UI.Output(fmt.Sprintf("• creating provider version %s", providerVersionMetadata.Version))
+	puc.meta.UI.Output(fmt.Sprintf("• creating provider version %s", providerVersionMetadata.Version))
 
 	// Create provider version
 	providerVersion, err := client.TerraformProviderVersion.CreateProviderVersion(ctx, &types.CreateTerraformProviderVersionInput{
@@ -133,12 +133,12 @@ func (p providerUploadVersionCommand) doProviderUploadVersion(ctx context.Contex
 		Protocols:    providerManifest.Metadata.ProtocolVersions,
 	})
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to create provider version", err))
+		puc.meta.UI.Error(output.FormatError("failed to create provider version", err))
 		return 1
 	}
 
-	if err = p.uploadReadme(ctx, client, directoryPath, providerVersion); err != nil {
-		p.meta.UI.Error(output.FormatError("failed to upload readme file", err))
+	if err = puc.uploadReadme(ctx, client, directoryPath, providerVersion); err != nil {
+		puc.meta.UI.Error(output.FormatError("failed to upload readme file", err))
 		return 1
 	}
 
@@ -148,15 +148,15 @@ func (p providerUploadVersionCommand) doProviderUploadVersion(ctx context.Contex
 	for _, artifact := range artifacts {
 		artifactCopy := artifact
 		if artifact.Type == "Checksum" {
-			checksumMap, err = p.uploadChecksums(ctx, client, directoryPath, providerVersion, &artifactCopy)
+			checksumMap, err = puc.uploadChecksums(ctx, client, directoryPath, providerVersion, &artifactCopy)
 			if err != nil {
-				p.meta.UI.Error(output.FormatError("failed to upload provider checksums", err))
+				puc.meta.UI.Error(output.FormatError("failed to upload provider checksums", err))
 				return 1
 			}
 		}
 		if artifact.Type == "Signature" {
-			if err := p.uploadSignature(ctx, client, directoryPath, providerVersion, &artifactCopy); err != nil {
-				p.meta.UI.Error(output.FormatError("failed to upload provider checksums signature", err))
+			if err := puc.uploadSignature(ctx, client, directoryPath, providerVersion, &artifactCopy); err != nil {
+				puc.meta.UI.Error(output.FormatError("failed to upload provider checksums signature", err))
 				return 1
 			}
 		}
@@ -166,25 +166,25 @@ func (p providerUploadVersionCommand) doProviderUploadVersion(ctx context.Contex
 	for _, artifact := range artifacts {
 		if artifact.Type == "Archive" {
 			artifactCopy := artifact
-			if err := p.uploadPlatformArchive(ctx, client, directoryPath, providerVersion, &artifactCopy, checksumMap); err != nil {
-				p.meta.UI.Error(output.FormatError("failed to upload archive", err))
+			if err := puc.uploadPlatformArchive(ctx, client, directoryPath, providerVersion, &artifactCopy, checksumMap); err != nil {
+				puc.meta.UI.Error(output.FormatError("failed to upload archive", err))
 				return 1
 			}
 		}
 	}
 
-	p.meta.UI.Output("• provider version upload succeeded")
+	puc.meta.UI.Output("• provider version upload succeeded")
 
 	return 0
 }
 
-func (p providerUploadVersionCommand) uploadReadme(
+func (puc providerUploadVersionCommand) uploadReadme(
 	ctx context.Context,
 	client *tharsis.Client,
 	dir string,
 	providerVersion *types.TerraformProviderVersion,
 ) error {
-	p.meta.UI.Output("• checking for README file")
+	puc.meta.UI.Output("• checking for README file")
 
 	matches, err := filepath.Glob(filepath.Join(dir, "README*"))
 	if err != nil {
@@ -192,11 +192,11 @@ func (p providerUploadVersionCommand) uploadReadme(
 	}
 
 	if len(matches) == 0 {
-		p.meta.UI.Output("• skipping readme upload")
+		puc.meta.UI.Output("• skipping readme upload")
 		return nil
 	}
 
-	p.meta.UI.Output(fmt.Sprintf("• uploading README file %s", matches[0]))
+	puc.meta.UI.Output(fmt.Sprintf("• uploading README file %s", matches[0]))
 
 	reader, err := os.Open(matches[0])
 	if err != nil {
@@ -209,12 +209,12 @@ func (p providerUploadVersionCommand) uploadReadme(
 		return fmt.Errorf("failed to upload readme file: %v", err)
 	}
 
-	p.meta.UI.Output("• completed readme upload")
+	puc.meta.UI.Output("• completed readme upload")
 
 	return nil
 }
 
-func (p providerUploadVersionCommand) uploadChecksums(
+func (puc providerUploadVersionCommand) uploadChecksums(
 	ctx context.Context,
 	client *tharsis.Client,
 	dir string,
@@ -223,7 +223,7 @@ func (p providerUploadVersionCommand) uploadChecksums(
 ) (map[string]string, error) {
 	checksumMap := map[string]string{}
 
-	p.meta.UI.Output(fmt.Sprintf("• uploading checksums: file=%s", artifact.Path))
+	puc.meta.UI.Output(fmt.Sprintf("• uploading checksums: file=%s", artifact.Path))
 
 	data, err := os.ReadFile(filepath.Join(dir, artifact.Path))
 	if err != nil {
@@ -249,19 +249,19 @@ func (p providerUploadVersionCommand) uploadChecksums(
 		return nil, fmt.Errorf("failed to upload checksum file: %v", err)
 	}
 
-	p.meta.UI.Output("• completed checksums upload")
+	puc.meta.UI.Output("• completed checksums upload")
 
 	return checksumMap, nil
 }
 
-func (p providerUploadVersionCommand) uploadSignature(
+func (puc providerUploadVersionCommand) uploadSignature(
 	ctx context.Context,
 	client *tharsis.Client,
 	dir string,
 	providerVersion *types.TerraformProviderVersion,
 	artifact *artifactType,
 ) error {
-	p.meta.UI.Output(fmt.Sprintf("• uploading checksums signature: file=%s", artifact.Path))
+	puc.meta.UI.Output(fmt.Sprintf("• uploading checksums signature: file=%s", artifact.Path))
 
 	// upload signature
 	reader, err := os.Open(filepath.Join(dir, artifact.Path))
@@ -275,12 +275,12 @@ func (p providerUploadVersionCommand) uploadSignature(
 		return fmt.Errorf("failed to upload checksum signature file: %v", err)
 	}
 
-	p.meta.UI.Output("• completed checksums signature upload")
+	puc.meta.UI.Output("• completed checksums signature upload")
 
 	return nil
 }
 
-func (p providerUploadVersionCommand) uploadPlatformArchive(
+func (puc providerUploadVersionCommand) uploadPlatformArchive(
 	ctx context.Context,
 	client *tharsis.Client,
 	dir string,
@@ -293,7 +293,7 @@ func (p providerUploadVersionCommand) uploadPlatformArchive(
 		return fmt.Errorf("failed to find checksum for file %s", artifact.Path)
 	}
 
-	p.meta.UI.Output(fmt.Sprintf("• uploading platform %s_%s", artifact.OperatingSystem, artifact.Architecture))
+	puc.meta.UI.Output(fmt.Sprintf("• uploading platform %s_%s", artifact.OperatingSystem, artifact.Architecture))
 
 	platform, err := client.TerraformProviderPlatform.CreateProviderPlatform(ctx, &types.CreateTerraformProviderPlatformInput{
 		ProviderVersionID: providerVersion.Metadata.ID,
@@ -318,13 +318,13 @@ func (p providerUploadVersionCommand) uploadPlatformArchive(
 		return fmt.Errorf("failed to upload platform binary file: %v", err)
 	}
 
-	p.meta.UI.Output(fmt.Sprintf("• completed upload for platform %s_%s", artifact.OperatingSystem, artifact.Architecture))
+	puc.meta.UI.Output(fmt.Sprintf("• completed upload for platform %s_%s", artifact.OperatingSystem, artifact.Architecture))
 
 	return nil
 }
 
-func (p providerUploadVersionCommand) readProviderManifest(ctx context.Context, dir string) (*providerManifestType, error) {
-	p.meta.UI.Output("• reading terraform-registry-manifest.json")
+func (puc providerUploadVersionCommand) readProviderManifest(ctx context.Context, dir string) (*providerManifestType, error) {
+	puc.meta.UI.Output("• reading terraform-registry-manifest.json")
 
 	// Locate `terraform-registry-manifest.json` file which includes the protocol versions
 	data, err := os.ReadFile(filepath.Join(dir, "terraform-registry-manifest.json"))
@@ -341,8 +341,8 @@ func (p providerUploadVersionCommand) readProviderManifest(ctx context.Context, 
 	return &providerManifest, nil
 }
 
-func (p providerUploadVersionCommand) readProviderVersionMetdata(ctx context.Context, dir string) (*providerVersionMetadataType, error) {
-	p.meta.UI.Output("• reading metadata.json")
+func (puc providerUploadVersionCommand) readProviderVersionMetdata(ctx context.Context, dir string) (*providerVersionMetadataType, error) {
+	puc.meta.UI.Output("• reading metadata.json")
 
 	// Load version string from the metadata.json file in the dist directory
 	data, err := os.ReadFile(filepath.Join(dir, "dist", "metadata.json"))
@@ -358,8 +358,8 @@ func (p providerUploadVersionCommand) readProviderVersionMetdata(ctx context.Con
 	return &providerVersionMetadata, nil
 }
 
-func (p providerUploadVersionCommand) readProviderVersionArtifacts(ctx context.Context, dir string) ([]artifactType, error) {
-	p.meta.UI.Output("• reading artifacts.json")
+func (puc providerUploadVersionCommand) readProviderVersionArtifacts(ctx context.Context, dir string) ([]artifactType, error) {
+	puc.meta.UI.Output("• reading artifacts.json")
 
 	// Load the artifacts.json file to get the list of files/platforms that will be uploaded
 	data, err := os.ReadFile(filepath.Join(dir, "dist", "artifacts.json"))
@@ -375,7 +375,7 @@ func (p providerUploadVersionCommand) readProviderVersionArtifacts(ctx context.C
 	return artifacts, nil
 }
 
-func (p providerUploadVersionCommand) checkDirPath(directoryPath string) error {
+func (puc providerUploadVersionCommand) checkDirPath(directoryPath string) error {
 	dirStat, err := os.Stat(directoryPath)
 	if os.IsNotExist(err) {
 		return fmt.Errorf("directory path does not exist: %s", directoryPath)
@@ -390,7 +390,7 @@ func (p providerUploadVersionCommand) checkDirPath(directoryPath string) error {
 }
 
 // buildProviderUploadVersionDefs returns defs used by provider upload-version command.
-func buildProviderUploadVersionDefs() optparser.OptionDefinitions {
+func (puc providerUploadVersionCommand) buildProviderUploadVersionDefs() optparser.OptionDefinitions {
 	return optparser.OptionDefinitions{
 		"directory-path": {
 			Arguments: []string{"Directory_Path"},
@@ -399,16 +399,16 @@ func buildProviderUploadVersionDefs() optparser.OptionDefinitions {
 	}
 }
 
-func (p providerUploadVersionCommand) Synopsis() string {
+func (puc providerUploadVersionCommand) Synopsis() string {
 	return "Upload a new provider version to the provider registry."
 }
 
-func (p providerUploadVersionCommand) Help() string {
-	return p.HelpProviderUploadVersion()
+func (puc providerUploadVersionCommand) Help() string {
+	return puc.HelpProviderUploadVersion()
 }
 
 // HelpProviderUploadVersion produces the help string for the 'provider upload-version' command.
-func (p providerUploadVersionCommand) HelpProviderUploadVersion() string {
+func (puc providerUploadVersionCommand) HelpProviderUploadVersion() string {
 	return fmt.Sprintf(`
 Usage: %s [global options] provider upload-version [options] <full_path>
 
@@ -417,7 +417,7 @@ Usage: %s [global options] provider upload-version [options] <full_path>
 
 %s
 
-`, p.meta.BinaryName, buildHelpText(buildProviderUploadVersionDefs()))
+`, puc.meta.BinaryName, buildHelpText(puc.buildProviderUploadVersionDefs()))
 }
 
 // The End.
