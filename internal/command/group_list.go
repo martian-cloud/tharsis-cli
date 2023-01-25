@@ -55,7 +55,7 @@ func (glc groupListCommand) Run(args []string) int {
 func (glc groupListCommand) doGroupList(ctx context.Context, client *tharsis.Client, opts []string) int {
 	glc.meta.Logger.Debugf("will do group list, %d opts: %#v", len(opts), opts)
 
-	defs := buildGroupListDefs()
+	defs := glc.buildGroupListDefs()
 	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(glc.meta.BinaryName+" group list", defs, opts)
 	if err != nil {
 		glc.meta.Logger.Error(output.FormatError("failed to parse group list options", err))
@@ -143,7 +143,7 @@ func (glc groupListCommand) doGroupList(ctx context.Context, client *tharsis.Cli
 	return 0
 }
 
-func buildGroupListDefs() optparser.OptionDefinitions {
+func (glc groupListCommand) buildGroupListDefs() optparser.OptionDefinitions {
 	defs := optparser.OptionDefinitions{
 		"cursor": {
 			Arguments: []string{"Cursor_String"},
@@ -198,7 +198,7 @@ Usage: %s [global options] group list [options]
 `,
 		glc.meta.BinaryName,
 		glc.meta.BinaryName,
-		buildHelpText(buildGroupListDefs()),
+		buildHelpText(glc.buildGroupListDefs()),
 	)
 }
 

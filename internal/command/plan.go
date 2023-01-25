@@ -86,7 +86,7 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 	pc.meta.Logger.Debugf("will do plan, %d opts", len(opts))
 
 	// Build option definitions for this command.
-	defs := buildPlanDefs()
+	defs := pc.buildPlanDefs()
 
 	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(pc.meta.BinaryName+" plan", defs, opts)
 	if err != nil {
@@ -489,7 +489,7 @@ func buildCommonRunOptionDefs() optparser.OptionDefinitions {
 	}
 }
 
-func buildPlanDefs() optparser.OptionDefinitions {
+func (pc planCommand) buildPlanDefs() optparser.OptionDefinitions {
 	defs := buildCommonRunOptionDefs()
 	destroyDef := optparser.OptionDefinition{
 		Arguments: []string{}, // zero arguments means it's a bool with no argument
@@ -524,7 +524,7 @@ Usage: %s [global options] plan [options] <workspace>
 
 Combining --tf-var or --env-var and --tf-var-file or --env-var-file is not allowed.
 
-`, pc.meta.BinaryName, buildHelpText(buildPlanDefs()))
+`, pc.meta.BinaryName, buildHelpText(pc.buildPlanDefs()))
 }
 
 // The End.

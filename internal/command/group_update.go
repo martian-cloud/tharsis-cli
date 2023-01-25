@@ -91,7 +91,7 @@ func (guc groupUpdateCommand) doGroupUpdate(ctx context.Context, client *tharsis
 		return 1
 	}
 
-	return outputGroup(guc.meta, toJSON, updatedGroup, "update")
+	return outputGroup(guc.meta, toJSON, updatedGroup)
 }
 
 func (guc groupUpdateCommand) Synopsis() string {

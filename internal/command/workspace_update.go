@@ -114,7 +114,7 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 		return 1
 	}
 
-	return outputWorkspace(wuc.meta, toJSON, updatedWorkspace, "update")
+	return outputWorkspace(wuc.meta, toJSON, updatedWorkspace)
 }
 
 // buildCommonUpdateOptionDefs returns the common defs used by

@@ -9,6 +9,7 @@ import (
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -54,7 +55,7 @@ func (wcc workspaceCreateCommand) Run(args []string) int {
 func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
 	wcc.meta.Logger.Debugf("will do workspace create, %d opts", len(opts))
 
-	defs := buildWorkspaceCreateDefs()
+	defs := wcc.buildWorkspaceCreateDefs()
 	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wcc.meta.BinaryName+" workspace create", defs, opts)
 	if err != nil {
 		wcc.meta.Logger.Error(output.FormatError("failed to parse workspace create options", err))
@@ -115,7 +116,7 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 		}
 
 		if ws != nil {
-			return outputWorkspace(wcc.meta, toJSON, ws, "create")
+			return outputWorkspace(wcc.meta, toJSON, ws)
 		}
 	}
 
@@ -155,11 +156,11 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 		}
 	}
 
-	return outputWorkspace(wcc.meta, toJSON, createdWorkspace, "create")
+	return outputWorkspace(wcc.meta, toJSON, createdWorkspace)
 }
 
 // outputWorkspace is the final output for most workspace operations.
-func outputWorkspace(meta *Metadata, toJSON bool, workspace *sdktypes.Workspace, action string) int {
+func outputWorkspace(meta *Metadata, toJSON bool, workspace *sdktypes.Workspace) int {
 	if toJSON {
 		buf, err := objectToJSON(workspace)
 		if err != nil {
@@ -168,15 +169,27 @@ func outputWorkspace(meta *Metadata, toJSON bool, workspace *sdktypes.Workspace,
 		}
 		meta.UI.Output(string(buf))
 	} else {
-		// Format the output.
-		meta.UI.Output(fmt.Sprintf("workspace %s output:", action))
-		meta.UI.Output(fmt.Sprintf("\n                name: %s", workspace.Name))
-		meta.UI.Output(fmt.Sprintf("            fullpath: %s", workspace.FullPath))
-		meta.UI.Output(fmt.Sprintf("         description: %s", workspace.Description))
-		meta.UI.Output(fmt.Sprintf("    max job duration: %dm", workspace.MaxJobDuration))
-		meta.UI.Output(fmt.Sprintf("   terraform version: %s", workspace.TerraformVersion))
-		meta.UI.Output(fmt.Sprintf("prevent destroy plan: %v", workspace.PreventDestroyPlan))
-		meta.UI.Output(fmt.Sprintf("                  ID: %s", workspace.Metadata.ID))
+		tableInput := [][]string{
+			{
+				"id",
+				"name",
+				"description",
+				"full path",
+				"max job duration (minutes)",
+				"terraform version",
+				"prevent destroy plan",
+			},
+			{
+				workspace.Metadata.ID,
+				workspace.Name,
+				workspace.Description,
+				workspace.FullPath,
+				fmt.Sprintf("%d", workspace.MaxJobDuration),
+				workspace.TerraformVersion,
+				fmt.Sprintf("%t", workspace.PreventDestroyPlan),
+			},
+		}
+		meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}
 
 	return 0
@@ -214,7 +227,7 @@ func buildCommonCreateOptionDefs(synopsis string) optparser.OptionDefinitions {
 }
 
 // buildWorkspaceCreateDefs returns defs used by workspace create command.
-func buildWorkspaceCreateDefs() optparser.OptionDefinitions {
+func (wcc workspaceCreateCommand) buildWorkspaceCreateDefs() optparser.OptionDefinitions {
 	defs := buildCommonCreateOptionDefs("workspace")
 	identityDef := optparser.OptionDefinition{
 		Arguments: []string{"Managed_Identity"},
@@ -249,7 +262,7 @@ Usage: %s [global options] workspace create [options] <full_path>
 
 %s
 
-`, wcc.meta.BinaryName, buildHelpText(buildWorkspaceCreateDefs()))
+`, wcc.meta.BinaryName, buildHelpText(wcc.buildWorkspaceCreateDefs()))
 }
 
 // The End.

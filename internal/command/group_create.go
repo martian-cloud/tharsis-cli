@@ -8,6 +8,7 @@ import (
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -96,7 +97,7 @@ func (gcc groupCreateCommand) doGroupCreate(ctx context.Context, client *tharsis
 		}
 
 		if group != nil {
-			return outputGroup(gcc.meta, toJSON, group, "create")
+			return outputGroup(gcc.meta, toJSON, group)
 		}
 	}
 
@@ -124,11 +125,11 @@ func (gcc groupCreateCommand) doGroupCreate(ctx context.Context, client *tharsis
 		return 1
 	}
 
-	return outputGroup(gcc.meta, toJSON, createdGroup, "create")
+	return outputGroup(gcc.meta, toJSON, createdGroup)
 }
 
 // outputGroup is the final output for most group operations.
-func outputGroup(meta *Metadata, toJSON bool, group *sdktypes.Group, action string) int {
+func outputGroup(meta *Metadata, toJSON bool, group *sdktypes.Group) int {
 	if toJSON {
 		buf, err := objectToJSON(group)
 		if err != nil {
@@ -137,12 +138,11 @@ func outputGroup(meta *Metadata, toJSON bool, group *sdktypes.Group, action stri
 		}
 		meta.UI.Output(string(buf))
 	} else {
-		// Format the output.
-		meta.UI.Output(fmt.Sprintf("group %s output:", action))
-		meta.UI.Output(fmt.Sprintf("\n           name: %s", group.Name))
-		meta.UI.Output(fmt.Sprintf("       fullPath: %s", group.FullPath))
-		meta.UI.Output(fmt.Sprintf("    description: %s", group.Description))
-		meta.UI.Output(fmt.Sprintf("             ID: %s", group.Metadata.ID))
+		tableInput := [][]string{
+			{"id", "name", "description", "full path"},
+			{group.Metadata.ID, group.Name, group.Description, group.FullPath},
+		}
+		meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}
 
 	return 0

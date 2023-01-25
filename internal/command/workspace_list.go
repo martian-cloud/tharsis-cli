@@ -55,7 +55,7 @@ func (wlc workspaceListCommand) Run(args []string) int {
 func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tharsis.Client, opts []string) int {
 	wlc.meta.Logger.Debugf("will do workspace list, %d opts: %#v", len(opts), opts)
 
-	defs := buildWorkspaceListDefs()
+	defs := wlc.buildWorkspaceListDefs()
 
 	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wlc.meta.BinaryName+" workspace list", defs, opts)
 	if err != nil {
@@ -166,7 +166,7 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 	return 0
 }
 
-func buildWorkspaceListDefs() optparser.OptionDefinitions {
+func (wlc workspaceListCommand) buildWorkspaceListDefs() optparser.OptionDefinitions {
 	defs := optparser.OptionDefinitions{
 		"cursor": {
 			Arguments: []string{"Cursor_String"},
@@ -225,7 +225,7 @@ Usage: %s [global options] workspace list [options]
 `,
 		wlc.meta.BinaryName,
 		wlc.meta.BinaryName,
-		buildHelpText(buildWorkspaceListDefs()),
+		buildHelpText(wlc.buildWorkspaceListDefs()),
 	)
 }
 

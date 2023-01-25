@@ -87,7 +87,7 @@ func (ggc groupGetCommand) doGroupGet(ctx context.Context, client *tharsis.Clien
 		return 1
 	}
 
-	return outputGroup(ggc.meta, toJSON, foundGroup, "get")
+	return outputGroup(ggc.meta, toJSON, foundGroup)
 }
 
 func (ggc groupGetCommand) Synopsis() string {

@@ -95,7 +95,7 @@ func (wam workspaceUnassignManagedIdentityCommand) doWorkspaceUnassignManagedIde
 		return 1
 	}
 
-	return outputWorkspace(wam.meta, toJSON, workspace, "unassign-managed-identity")
+	return outputWorkspace(wam.meta, toJSON, workspace)
 }
 
 func (wam workspaceUnassignManagedIdentityCommand) Synopsis() string {

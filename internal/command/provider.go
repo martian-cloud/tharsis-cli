@@ -20,32 +20,32 @@ func NewProviderCommandFactory(meta *Metadata) func() (cli.Command, error) {
 	}
 }
 
-func (gc providerCommand) Run(args []string) int {
-	gc.meta.Logger.Debugf("Starting the 'provider' command with %d arguments:", len(args))
+func (pc providerCommand) Run(args []string) int {
+	pc.meta.Logger.Debugf("Starting the 'provider' command with %d arguments:", len(args))
 	for ix, arg := range args {
-		gc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+		pc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
 	// Show the help text.
-	gc.meta.UI.Output(gc.HelpProvider(true))
+	pc.meta.UI.Output(pc.HelpProvider(true))
 	return 1
 }
 
-func (gc providerCommand) Synopsis() string {
+func (pc providerCommand) Synopsis() string {
 	return "Do operations on a terraform provider."
 }
 
-func (gc providerCommand) Help() string {
-	return gc.HelpProvider(false)
+func (pc providerCommand) Help() string {
+	return pc.HelpProvider(false)
 }
 
 // HelpProvider produces the help string for the 'provider' command.
-func (gc providerCommand) HelpProvider(subCommands bool) string {
+func (pc providerCommand) HelpProvider(subCommands bool) string {
 	usage := fmt.Sprintf(`
 Usage: %s [global options] provider ...
 
    The provider commands do operations on a provider.
-`, gc.meta.BinaryName)
+`, pc.meta.BinaryName)
 	sc := `
 
 Subcommands:
