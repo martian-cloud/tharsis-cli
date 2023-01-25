@@ -52,7 +52,7 @@ func (wdc workspaceDeleteCommand) Run(args []string) int {
 func (wdc workspaceDeleteCommand) doWorkspaceDelete(ctx context.Context, client *tharsis.Client, opts []string) int {
 	wdc.meta.Logger.Debugf("will do workspace delete, %d opts", len(opts))
 
-	defs := buildWorkspaceDeleteDefs()
+	defs := wdc.buildWorkspaceDeleteDefs()
 	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wdc.meta.BinaryName+" workspace delete", defs, opts)
 	if err != nil {
 		wdc.meta.Logger.Error(output.FormatError("failed to parse workspace delete options", err))
@@ -93,7 +93,7 @@ func (wdc workspaceDeleteCommand) doWorkspaceDelete(ctx context.Context, client 
 	return 0
 }
 
-func buildWorkspaceDeleteDefs() optparser.OptionDefinitions {
+func (wdc workspaceDeleteCommand) buildWorkspaceDeleteDefs() optparser.OptionDefinitions {
 	return optparser.OptionDefinitions{
 		"force": {
 			Arguments: []string{},
@@ -123,7 +123,7 @@ Usage: %s [global options] workspace delete <full_path>
 
 %s
 
-`, wdc.meta.BinaryName, buildHelpText(buildWorkspaceDeleteDefs()))
+`, wdc.meta.BinaryName, buildHelpText(wdc.buildWorkspaceDeleteDefs()))
 }
 
 // The End.

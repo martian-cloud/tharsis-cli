@@ -30,44 +30,46 @@ func NewModuleUploadVersionCommandFactory(meta *Metadata) func() (cli.Command, e
 	}
 }
 
-func (p moduleUploadVersionCommand) Run(args []string) int {
-	p.meta.Logger.Debugf("Starting the 'module upload-version' command with %d arguments:", len(args))
+func (muc moduleUploadVersionCommand) Run(args []string) int {
+	muc.meta.Logger.Debugf("Starting the 'module upload-version' command with %d arguments:", len(args))
 	for ix, arg := range args {
-		p.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+		muc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
 	// Cannot delay reading settings past this point.
-	settings, err := p.meta.ReadSettings()
+	settings, err := muc.meta.ReadSettings()
 	if err != nil {
-		p.meta.Logger.Error(output.FormatError("failed to read settings file", err))
+		muc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
 		return 1
 	}
 
 	client, err := settings.CurrentProfile.GetSDKClient()
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		muc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1
 	}
 
 	ctx := context.Background()
 
-	return p.doModuleUploadVersion(ctx, client, args)
+	return muc.doModuleUploadVersion(ctx, client, args)
 }
 
-func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, client *tharsis.Client, opts []string) int {
-	defs := buildModuleUploadVersionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(p.meta.BinaryName+" module upload-version", defs, opts)
+func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, client *tharsis.Client, opts []string) int {
+	muc.meta.Logger.Debugf("will do module upload-version, %d opts", len(opts))
+
+	defs := muc.buildModuleUploadVersionDefs()
+	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(muc.meta.BinaryName+" module upload-version", defs, opts)
 	if err != nil {
-		p.meta.Logger.Error(output.FormatError("failed to parse module upload-version options", err))
+		muc.meta.Logger.Error(output.FormatError("failed to parse module upload-version options", err))
 		return 1
 	}
 	if len(cmdArgs) < 1 {
-		p.meta.Logger.Error(output.FormatError("missing module upload-version <module-path>", nil), p.HelpModuleUploadVersion())
+		muc.meta.Logger.Error(output.FormatError("missing module upload-version <module-path>", nil), muc.HelpModuleUploadVersion())
 		return 1
 	}
 	if len(cmdArgs) > 1 {
 		msg := fmt.Sprintf("excessive module upload-version arguments: %s", cmdArgs)
-		p.meta.Logger.Error(output.FormatError(msg, nil), p.HelpModuleUploadVersion())
+		muc.meta.Logger.Error(output.FormatError(msg, nil), muc.HelpModuleUploadVersion())
 		return 1
 	}
 
@@ -76,13 +78,13 @@ func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, c
 	version := getOption("version", "", cmdOpts)[0]
 
 	// Error is already logged.
-	if !isResourcePathValid(p.meta, modulePath) {
+	if !isResourcePathValid(muc.meta, modulePath) {
 		return 1
 	}
 
 	// Make sure the directory path exists and is a directory--to give more precise messages.
-	if err = p.checkDirPath(directoryPath); err != nil {
-		p.meta.Logger.Error(output.FormatError("invalid directory path", err))
+	if err = muc.checkDirPath(directoryPath); err != nil {
+		muc.meta.Logger.Error(output.FormatError("invalid directory path", err))
 		return 1
 	}
 
@@ -92,14 +94,14 @@ func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, c
 
 	slugFile, err := os.CreateTemp("", "terraform-slug.tgz")
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to create module version", err))
+		muc.meta.UI.Error(output.FormatError("failed to create module version", err))
 		return 1
 	}
 	defer os.Remove(slugFile.Name())
 
 	slug, err := slug.NewSlug(directoryPath, slugFile.Name())
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to create module package", err))
+		muc.meta.UI.Error(output.FormatError("failed to create module package", err))
 		return 1
 	}
 
@@ -107,7 +109,7 @@ func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, c
 
 	reader, err := slug.Open()
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to create module version", err))
+		muc.meta.UI.Error(output.FormatError("failed to create module version", err))
 		return 1
 	}
 	defer reader.Close()
@@ -121,7 +123,7 @@ func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, c
 		SHASum:     hex.EncodeToString(slug.SHASum),
 	})
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to create module version", err))
+		muc.meta.UI.Error(output.FormatError("failed to create module version", err))
 		return 1
 	}
 
@@ -131,13 +133,13 @@ func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, c
 	uploadStartTime := time.Now()
 
 	if err = client.TerraformModuleVersion.UploadModuleVersion(ctx, moduleVersion.Metadata.ID, reader); err != nil {
-		p.meta.UI.Error(output.FormatError("failed to upload module version", err))
+		muc.meta.UI.Error(output.FormatError("failed to upload module version", err))
 
 		// Delete module version
 		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &types.DeleteTerraformModuleVersionInput{
 			ID: moduleVersion.Metadata.ID,
 		}); err != nil {
-			p.meta.UI.Error(fmt.Sprintf("failed to delete module version: %v", err))
+			muc.meta.UI.Error(fmt.Sprintf("failed to delete module version: %v", err))
 		}
 		return 1
 	}
@@ -155,7 +157,7 @@ func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, c
 			ID: moduleVersion.Metadata.ID,
 		})
 		if err != nil {
-			p.meta.UI.Error(output.FormatError("failed to check module version upload status", err))
+			muc.meta.UI.Error(output.FormatError("failed to check module version upload status", err))
 			return 1
 		}
 		if updatedModuleVersion.Status == "uploaded" || updatedModuleVersion.Status == "errored" {
@@ -168,12 +170,12 @@ func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, c
 
 	if updatedModuleVersion.Status == "errored" {
 		log.WithField("error", updatedModuleVersion.Error).Error("module version upload failed")
-		p.meta.UI.Output(updatedModuleVersion.Diagnostics)
+		muc.meta.UI.Output(updatedModuleVersion.Diagnostics)
 		// Delete module version
 		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &types.DeleteTerraformModuleVersionInput{
 			ID: moduleVersion.Metadata.ID,
 		}); err != nil {
-			p.meta.UI.Error(fmt.Sprintf("failed to delete module version: %v", err))
+			muc.meta.UI.Error(fmt.Sprintf("failed to delete module version: %v", err))
 		}
 		return 1
 	}
@@ -183,7 +185,7 @@ func (p moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, c
 	return 0
 }
 
-func (p moduleUploadVersionCommand) checkDirPath(directoryPath string) error {
+func (muc moduleUploadVersionCommand) checkDirPath(directoryPath string) error {
 	dirStat, err := os.Stat(directoryPath)
 	if os.IsNotExist(err) {
 		return fmt.Errorf("directory path does not exist: %s", directoryPath)
@@ -198,7 +200,7 @@ func (p moduleUploadVersionCommand) checkDirPath(directoryPath string) error {
 }
 
 // buildModuleUploadVersionDefs returns defs used by module upload-version command.
-func buildModuleUploadVersionDefs() optparser.OptionDefinitions {
+func (muc moduleUploadVersionCommand) buildModuleUploadVersionDefs() optparser.OptionDefinitions {
 	return optparser.OptionDefinitions{
 		"directory-path": {
 			Arguments: []string{"Directory_Path"},
@@ -211,16 +213,16 @@ func buildModuleUploadVersionDefs() optparser.OptionDefinitions {
 	}
 }
 
-func (p moduleUploadVersionCommand) Synopsis() string {
+func (muc moduleUploadVersionCommand) Synopsis() string {
 	return "Upload a new module version to the module registry."
 }
 
-func (p moduleUploadVersionCommand) Help() string {
-	return p.HelpModuleUploadVersion()
+func (muc moduleUploadVersionCommand) Help() string {
+	return muc.HelpModuleUploadVersion()
 }
 
 // HelpModuleUploadVersion produces the help string for the 'module upload-version' command.
-func (p moduleUploadVersionCommand) HelpModuleUploadVersion() string {
+func (muc moduleUploadVersionCommand) HelpModuleUploadVersion() string {
 	return fmt.Sprintf(`
 Usage: %s [global options] module upload-version [options] <module_resource_path>
 
@@ -229,7 +231,7 @@ Usage: %s [global options] module upload-version [options] <module_resource_path
 
 %s
 
-`, p.meta.BinaryName, buildHelpText(buildModuleUploadVersionDefs()))
+`, muc.meta.BinaryName, buildHelpText(muc.buildModuleUploadVersionDefs()))
 }
 
 // The End.

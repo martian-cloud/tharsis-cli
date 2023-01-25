@@ -91,7 +91,7 @@ func formatError(summary, err string) string {
 
 	return redBar +
 		reset +
-		err +
+		strings.ReplaceAll(err, newline, newline+redBar+reset) +
 		newline +
 		redBarNewline +
 		reset

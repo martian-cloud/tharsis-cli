@@ -88,7 +88,7 @@ func (wgc workspaceGetCommand) doWorkspaceGet(ctx context.Context, client *thars
 		return 1
 	}
 
-	return outputWorkspace(wgc.meta, toJSON, foundWorkspace, "get")
+	return outputWorkspace(wgc.meta, toJSON, foundWorkspace)
 }
 
 func (wgc workspaceGetCommand) Synopsis() string {

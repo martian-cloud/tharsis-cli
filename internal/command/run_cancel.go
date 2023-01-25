@@ -25,46 +25,46 @@ func NewRunCancelCommandFactory(meta *Metadata) func() (cli.Command, error) {
 	}
 }
 
-func (wuc runCancelCommand) Run(args []string) int {
-	wuc.meta.Logger.Debugf("Starting the 'run cancel' command with %d arguments:", len(args))
+func (rc runCancelCommand) Run(args []string) int {
+	rc.meta.Logger.Debugf("Starting the 'run cancel' command with %d arguments:", len(args))
 	for ix, arg := range args {
-		wuc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+		rc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
 	// Cannot delay reading settings past this point.
-	settings, err := wuc.meta.ReadSettings()
+	settings, err := rc.meta.ReadSettings()
 	if err != nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
+		rc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
 		return 1
 	}
 
 	client, err := settings.CurrentProfile.GetSDKClient()
 	if err != nil {
-		wuc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		rc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1
 	}
 
 	ctx := context.Background()
 
-	return wuc.doRunCancel(ctx, client, args)
+	return rc.doRunCancel(ctx, client, args)
 }
 
-func (wuc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wuc.meta.Logger.Debugf("will do run cancel, %d opts", len(opts))
+func (rc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Client, opts []string) int {
+	rc.meta.Logger.Debugf("will do run cancel, %d opts", len(opts))
 
-	defs := buildRunCancelDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wuc.meta.BinaryName+" run cancel", defs, opts)
+	defs := rc.buildRunCancelDefs()
+	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(rc.meta.BinaryName+" run cancel", defs, opts)
 	if err != nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to parse run cancel options", err))
+		rc.meta.Logger.Error(output.FormatError("failed to parse run cancel options", err))
 		return 1
 	}
 	if len(cmdArgs) < 1 || cmdArgs[0] == "" {
-		wuc.meta.Logger.Error(output.FormatError("missing run cancel id", nil), wuc.HelpRunCancel())
+		rc.meta.Logger.Error(output.FormatError("missing run cancel id", nil), rc.HelpRunCancel())
 		return 1
 	}
 	if len(cmdArgs) > 1 {
 		msg := fmt.Sprintf("excessive run cancel arguments: %s", cmdArgs)
-		wuc.meta.Logger.Error(output.FormatError(msg, nil), wuc.HelpRunCancel())
+		rc.meta.Logger.Error(output.FormatError(msg, nil), rc.HelpRunCancel())
 		return 1
 	}
 
@@ -73,7 +73,7 @@ func (wuc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Cli
 
 	run, err := client.Run.GetRun(ctx, &sdktypes.GetRunInput{ID: id})
 	if err != nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to get run", err))
+		rc.meta.Logger.Error(output.FormatError("failed to get run", err))
 		return 1
 	}
 
@@ -88,16 +88,16 @@ func (wuc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Cli
 				RunID:         &id,
 			})
 		if err != nil {
-			wuc.meta.Logger.Error(output.FormatError("failed subscribe to workspace run events", err))
+			rc.meta.Logger.Error(output.FormatError("failed subscribe to workspace run events", err))
 			return
 		}
 
 		input := &sdktypes.CancelRunInput{RunID: id, Force: &force}
-		wuc.meta.Logger.Debugf("run cancel input: %#v", input)
+		rc.meta.Logger.Debugf("run cancel input: %#v", input)
 
 		_, err = client.Run.CancelRun(ctx, input)
 		if err != nil {
-			wuc.meta.Logger.Error(output.FormatError("failed to cancel a run", err))
+			rc.meta.Logger.Error(output.FormatError("failed to cancel a run", err))
 			return
 		}
 
@@ -114,18 +114,18 @@ func (wuc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Cli
 	// Wait for a event on channel done.
 	select {
 	case <-ctx.Done():
-		wuc.meta.Logger.Error(output.FormatError("failed to cancel a run", ctx.Err()))
+		rc.meta.Logger.Error(output.FormatError("failed to cancel a run", ctx.Err()))
 		return 1
 	case completed := <-done:
 		if completed {
-			wuc.meta.UI.Output("run cancel succeeded.")
+			rc.meta.UI.Output("run cancel succeeded.")
 		}
 	}
 
 	return 0
 }
 
-func buildRunCancelDefs() optparser.OptionDefinitions {
+func (rc runCancelCommand) buildRunCancelDefs() optparser.OptionDefinitions {
 	return optparser.OptionDefinitions{
 		"force": {
 			Arguments: []string{},
@@ -134,16 +134,16 @@ func buildRunCancelDefs() optparser.OptionDefinitions {
 	}
 }
 
-func (wuc runCancelCommand) Synopsis() string {
+func (rc runCancelCommand) Synopsis() string {
 	return "Cancel a run."
 }
 
-func (wuc runCancelCommand) Help() string {
-	return wuc.HelpRunCancel()
+func (rc runCancelCommand) Help() string {
+	return rc.HelpRunCancel()
 }
 
 // HelpRunCancel produces the help string for the 'run cancel' command.
-func (wuc runCancelCommand) HelpRunCancel() string {
+func (rc runCancelCommand) HelpRunCancel() string {
 	return fmt.Sprintf(`
 Usage: %s [global options] run cancel [options] <id>
 
@@ -153,7 +153,7 @@ Usage: %s [global options] run cancel [options] <id>
 
 %s
 
-`, wuc.meta.BinaryName, buildHelpText(buildRunCancelDefs()))
+`, rc.meta.BinaryName, buildHelpText(rc.buildRunCancelDefs()))
 }
 
 // The End.

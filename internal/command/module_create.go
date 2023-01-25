@@ -27,56 +27,62 @@ func NewModuleCreateCommandFactory(meta *Metadata) func() (cli.Command, error) {
 	}
 }
 
-func (p moduleCreateCommand) Run(args []string) int {
+func (mcc moduleCreateCommand) Run(args []string) int {
 	// Cannot delay reading settings past this point.
-	settings, err := p.meta.ReadSettings()
+	settings, err := mcc.meta.ReadSettings()
 	if err != nil {
-		p.meta.Logger.Error(output.FormatError("failed to read settings file", err))
+		mcc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
 		return 1
 	}
 
 	client, err := settings.CurrentProfile.GetSDKClient()
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		mcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1
 	}
 
 	ctx := context.Background()
 
-	return p.doModuleCreate(ctx, client, args)
+	return mcc.doModuleCreate(ctx, client, args)
 }
 
-func (p moduleCreateCommand) doModuleCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	defs := buildModuleCreateDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(p.meta.BinaryName+" module create", defs, opts)
+func (mcc moduleCreateCommand) doModuleCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
+	mcc.meta.Logger.Debugf("will do module create, %d opts", len(opts))
+
+	defs := mcc.buildModuleCreateDefs()
+	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(mcc.meta.BinaryName+" module create", defs, opts)
 	if err != nil {
-		p.meta.Logger.Error(output.FormatError("failed to parse module create options", err))
+		mcc.meta.Logger.Error(output.FormatError("failed to parse module create options", err))
 		return 1
 	}
 	if len(cmdArgs) < 1 {
-		p.meta.Logger.Error(output.FormatError("missing module create path", nil), p.HelpModuleCreate())
+		mcc.meta.Logger.Error(output.FormatError("missing module create path", nil), mcc.HelpModuleCreate())
 		return 1
 	}
 	if len(cmdArgs) > 1 {
 		msg := fmt.Sprintf("excessive module create arguments: %s", cmdArgs)
-		p.meta.Logger.Error(output.FormatError(msg, nil), p.HelpModuleCreate())
+		mcc.meta.Logger.Error(output.FormatError(msg, nil), mcc.HelpModuleCreate())
 		return 1
 	}
 
 	modulePath := cmdArgs[0]
 	toJSON := getOption("json", "", cmdOpts)[0] == "1"
-	private := getOption("private", "1", cmdOpts)[0] == "1"
 	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
+	private, err := getBoolOptionValue("private", "true", cmdOpts)
+	if err != nil {
+		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
-	if !isResourcePathValid(p.meta, modulePath) {
+	if !isResourcePathValid(mcc.meta, modulePath) {
 		return 1
 	}
 
 	// Create module
 	pathParts := strings.Split(modulePath, "/")
 	if len(pathParts) < 3 {
-		p.meta.Logger.Error(output.FormatError("resource path is not valid", nil))
+		mcc.meta.Logger.Error(output.FormatError("resource path is not valid", nil))
 		return 1
 	}
 
@@ -88,35 +94,34 @@ func (p moduleCreateCommand) doModuleCreate(ctx context.Context, client *tharsis
 		RepositoryURL: repositoryURL,
 	})
 	if err != nil {
-		p.meta.UI.Error(output.FormatError("failed to create module", err))
+		mcc.meta.UI.Error(output.FormatError("failed to create module", err))
 		return 1
 	}
 
-	return p.outputModule(toJSON, module)
+	return mcc.outputModule(toJSON, module)
 }
 
-func (p moduleCreateCommand) outputModule(toJSON bool, module *types.TerraformModule) int {
+func (mcc moduleCreateCommand) outputModule(toJSON bool, module *types.TerraformModule) int {
 	if toJSON {
 		buf, err := objectToJSON(module)
 		if err != nil {
-			p.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+			mcc.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
 			return 1
 		}
-		p.meta.UI.Output(string(buf))
+		mcc.meta.UI.Output(string(buf))
 	} else {
-		// TODO: Update other commands to use table formatter for resource output
 		tableInput := [][]string{
 			{"id", "name", "resource path", "private", "repository url"},
-			{module.Metadata.ID, module.Name, module.ResourcePath, fmt.Sprintf("%t", module.Private), module.ResourcePath},
+			{module.Metadata.ID, module.Name, module.ResourcePath, fmt.Sprintf("%t", module.Private), module.RepositoryURL},
 		}
-		p.meta.UI.Output(tableformatter.FormatTable(tableInput))
+		mcc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}
 
 	return 0
 }
 
 // buildModuleCreateDefs returns defs used by module create command.
-func buildModuleCreateDefs() optparser.OptionDefinitions {
+func (mcc moduleCreateCommand) buildModuleCreateDefs() optparser.OptionDefinitions {
 	defs := optparser.OptionDefinitions{
 		"private": {
 			Arguments: []string{"Private"},
@@ -131,16 +136,16 @@ func buildModuleCreateDefs() optparser.OptionDefinitions {
 	return buildJSONOptionDefs(defs)
 }
 
-func (p moduleCreateCommand) Synopsis() string {
+func (mcc moduleCreateCommand) Synopsis() string {
 	return "Create a new module."
 }
 
-func (p moduleCreateCommand) Help() string {
-	return p.HelpModuleCreate()
+func (mcc moduleCreateCommand) Help() string {
+	return mcc.HelpModuleCreate()
 }
 
 // HelpModuleCreate produces the help string for the 'module create' command.
-func (p moduleCreateCommand) HelpModuleCreate() string {
+func (mcc moduleCreateCommand) HelpModuleCreate() string {
 	return fmt.Sprintf(`
 Usage: %s [global options] module create [options] <module_resource_path>
 
@@ -148,7 +153,7 @@ Usage: %s [global options] module create [options] <module_resource_path>
 
 %s
 
-`, p.meta.BinaryName, buildHelpText(buildModuleCreateDefs()))
+`, mcc.meta.BinaryName, buildHelpText(mcc.buildModuleCreateDefs()))
 }
 
 // The End.
