@@ -20,27 +20,27 @@ func NewModuleCommandFactory(meta *Metadata) func() (cli.Command, error) {
 	}
 }
 
-func (gc moduleCommand) Run(args []string) int {
+func (mc moduleCommand) Run(args []string) int {
 	// Show the help text.
-	gc.meta.UI.Output(gc.HelpModule(true))
+	mc.meta.UI.Output(mc.HelpModule(true))
 	return 1
 }
 
-func (gc moduleCommand) Synopsis() string {
+func (mc moduleCommand) Synopsis() string {
 	return "Do operations on a terraform module."
 }
 
-func (gc moduleCommand) Help() string {
-	return gc.HelpModule(false)
+func (mc moduleCommand) Help() string {
+	return mc.HelpModule(false)
 }
 
 // HelpModule produces the help string for the 'module' command.
-func (gc moduleCommand) HelpModule(subCommands bool) string {
+func (mc moduleCommand) HelpModule(subCommands bool) string {
 	usage := fmt.Sprintf(`
 Usage: %s [global options] module ...
 
    The module commands do operations on a Terraform module.
-`, gc.meta.BinaryName)
+`, mc.meta.BinaryName)
 	sc := `
 
 Subcommands:
