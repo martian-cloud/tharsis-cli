@@ -1,0 +1,7 @@
+[semgrep]
+  [[semgrep.ruleset]]
+    disable = true
+    [semgrep.ruleset.identifier]
+        type = "semgrep_id"
+        # File path check is disabled because this is a CLI run by the user
+        value = "gosec.G304-1"
