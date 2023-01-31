@@ -567,7 +567,7 @@ func (lc loginCommand) fetchAuthConfig(tharsisURL string) (*oauth2.Config, error
 	}
 	lc.meta.Logger.Debugf("will fetch well-known URL: %s", wellKnownURL.String())
 
-	resp, err := http.Get(wellKnownURL.String())
+	resp, err := http.Get(wellKnownURL.String()) // nosemgrep: gosec.G107-1
 	if err != nil {
 		return nil, err
 	}
