@@ -126,9 +126,9 @@ func (glc groupListCommand) doGroupList(ctx context.Context, client *tharsis.Cli
 	} else {
 		// Format the output.
 		tableInput := make([][]string, len(groupsOutput.Groups)+1)
-		tableInput[0] = []string{"name", "fullPath", "description", "id"}
+		tableInput[0] = []string{"id", "name", "description", "full path"}
 		for ix, group := range groupsOutput.Groups {
-			tableInput[ix+1] = []string{group.Name, group.FullPath, group.Description, group.Metadata.ID}
+			tableInput[ix+1] = []string{group.Metadata.ID, group.Name, group.Description, group.FullPath}
 		}
 		glc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 		//
@@ -144,23 +144,11 @@ func (glc groupListCommand) doGroupList(ctx context.Context, client *tharsis.Cli
 }
 
 func (glc groupListCommand) buildGroupListDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"cursor": {
-			Arguments: []string{"Cursor_String"},
-			Synopsis:  "The cursor string for manual pagination.",
-		},
-		"limit": {
-			Arguments: []string{"count"},
-			Synopsis:  "Maximum number of result elements to return.",
-		},
-		"parent-path": {
-			Arguments: []string{"Parent_Path"},
-			Synopsis:  "Filter to only direct sub-groups of this parent group.",
-		},
-		"sort-order": {
-			Arguments: []string{"Sort_Order"},
-			Synopsis:  "Sort in this direction, ASC or DESC.",
-		},
+	defs := buildPaginationOptionDefs()
+
+	defs["parent-path"] = &optparser.OptionDefinition{
+		Arguments: []string{"Parent_Path"},
+		Synopsis:  "Filter to only direct sub-groups of this parent group.",
 	}
 
 	return buildJSONOptionDefs(defs)

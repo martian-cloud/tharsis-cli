@@ -44,8 +44,20 @@ Usage: %s [global options] module ...
 	sc := `
 
 Subcommands:
-    create            Create a new module.
-    upload-version    Upload a new module version to the module registry.`
+    create                       Create a new module.
+    create-attestation           Create a new module attestation.
+    delete                       Delete a module.
+    delete-attestation           Delete a module attestation.
+    delete-version               Delete a module version.
+    get                          Get a single module.
+    get-version                  Get a single module version.
+    list                         List modules.
+    list-attestations            List attestations for a module.
+    list-version-attestations    List attestations for a module version.
+    list-versions                List module versions.
+    update                       Update a module.
+    update-attestation           Update a module attestation.
+    upload-version               Upload a new module version to the module registry.`
 
 	// Avoid duplicate subcommands when -h is used.
 	if subCommands {

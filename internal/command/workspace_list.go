@@ -148,10 +148,11 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 	} else {
 		// Format the output.
 		tableInput := make([][]string, len(workspacesOutput.Workspaces)+1)
-		tableInput[0] = []string{"name", "fullPath", "description", "id"}
+		tableInput[0] = []string{"id", "name", "description", "full path", "max job duration (minutes)",
+			"terraform version", "prevent destroy plan"}
 		for ix, workspace := range workspacesOutput.Workspaces {
-			tableInput[ix+1] = []string{workspace.Name, workspace.FullPath,
-				workspace.Description, workspace.Metadata.ID}
+			tableInput[ix+1] = []string{workspace.Metadata.ID, workspace.Name, workspace.Description, workspace.FullPath,
+				fmt.Sprintf("%d", workspace.MaxJobDuration), workspace.TerraformVersion, fmt.Sprintf("%t", workspace.PreventDestroyPlan)}
 		}
 		wlc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 		//
@@ -167,27 +168,16 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 }
 
 func (wlc workspaceListCommand) buildWorkspaceListDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"cursor": {
-			Arguments: []string{"Cursor_String"},
-			Synopsis:  "The cursor string for manual pagination.",
-		},
-		"limit": {
-			Arguments: []string{"count"},
-			Synopsis:  "Maximum number of result elements to return.",
-		},
-		"group-path": {
-			Arguments: []string{"Group_Path"},
-			Synopsis:  "Filter to only workspaces in this group.",
-		},
-		"sort-by": {
-			Arguments: []string{"Sort_By"},
-			Synopsis:  "Sort by this field: PATH or UPDATED.",
-		},
-		"sort-order": {
-			Arguments: []string{"Sort_Order"},
-			Synopsis:  "Sort in this direction, ASC or DESC.",
-		},
+	defs := buildPaginationOptionDefs()
+
+	defs["group-path"] = &optparser.OptionDefinition{
+		Arguments: []string{"Group_Path"},
+		Synopsis:  "Filter to only workspaces in this group.",
+	}
+
+	defs["sort-by"] = &optparser.OptionDefinition{
+		Arguments: []string{"Sort_By"},
+		Synopsis:  "Sort by this field: PATH or UPDATED.",
 	}
 
 	return buildJSONOptionDefs(defs)
