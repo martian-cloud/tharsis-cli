@@ -10,7 +10,7 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 // moduleCreateCommand is the top-level structure for the module create command.
@@ -28,6 +28,11 @@ func NewModuleCreateCommandFactory(meta *Metadata) func() (cli.Command, error) {
 }
 
 func (mcc moduleCreateCommand) Run(args []string) int {
+	mcc.meta.Logger.Debugf("Starting the 'module create' command with %d arguments:", len(args))
+	for ix, arg := range args {
+		mcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+	}
+
 	// Cannot delay reading settings past this point.
 	settings, err := mcc.meta.ReadSettings()
 	if err != nil {
@@ -49,7 +54,7 @@ func (mcc moduleCreateCommand) Run(args []string) int {
 func (mcc moduleCreateCommand) doModuleCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
 	mcc.meta.Logger.Debugf("will do module create, %d opts", len(opts))
 
-	defs := mcc.buildModuleCreateDefs()
+	defs := buildSharedModuleDefs()
 	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(mcc.meta.BinaryName+" module create", defs, opts)
 	if err != nil {
 		mcc.meta.Logger.Error(output.FormatError("failed to parse module create options", err))
@@ -86,42 +91,46 @@ func (mcc moduleCreateCommand) doModuleCreate(ctx context.Context, client *thars
 		return 1
 	}
 
-	module, err := client.TerraformModule.CreateModule(ctx, &types.CreateTerraformModuleInput{
+	input := &sdktypes.CreateTerraformModuleInput{
 		GroupPath:     strings.Join(pathParts[:len(pathParts)-2], "/"),
 		Name:          pathParts[len(pathParts)-2],
 		System:        pathParts[len(pathParts)-1],
 		Private:       private,
 		RepositoryURL: repositoryURL,
-	})
+	}
+	mcc.meta.Logger.Debugf("module create input: %#v", input)
+
+	module, err := client.TerraformModule.CreateModule(ctx, input)
 	if err != nil {
 		mcc.meta.UI.Error(output.FormatError("failed to create module", err))
 		return 1
 	}
 
-	return mcc.outputModule(toJSON, module)
+	return outputModule(mcc.meta, toJSON, module)
 }
 
-func (mcc moduleCreateCommand) outputModule(toJSON bool, module *types.TerraformModule) int {
+// outputModule is the final output for most module operations.
+func outputModule(meta *Metadata, toJSON bool, module *sdktypes.TerraformModule) int {
 	if toJSON {
 		buf, err := objectToJSON(module)
 		if err != nil {
-			mcc.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
 			return 1
 		}
-		mcc.meta.UI.Output(string(buf))
+		meta.UI.Output(string(buf))
 	} else {
 		tableInput := [][]string{
 			{"id", "name", "resource path", "private", "repository url"},
 			{module.Metadata.ID, module.Name, module.ResourcePath, fmt.Sprintf("%t", module.Private), module.RepositoryURL},
 		}
-		mcc.meta.UI.Output(tableformatter.FormatTable(tableInput))
+		meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}
 
 	return 0
 }
 
-// buildModuleCreateDefs returns defs used by module create command.
-func (mcc moduleCreateCommand) buildModuleCreateDefs() optparser.OptionDefinitions {
+// buildSharedModuleDefs returns defs used by module create command.
+func buildSharedModuleDefs() optparser.OptionDefinitions {
 	defs := optparser.OptionDefinitions{
 		"private": {
 			Arguments: []string{"Private"},
@@ -147,13 +156,13 @@ func (mcc moduleCreateCommand) Help() string {
 // HelpModuleCreate produces the help string for the 'module create' command.
 func (mcc moduleCreateCommand) HelpModuleCreate() string {
 	return fmt.Sprintf(`
-Usage: %s [global options] module create [options] <module_resource_path>
+Usage: %s [global options] module create [options] <module-path>
 
    The module create command creates a new module.
 
 %s
 
-`, mcc.meta.BinaryName, buildHelpText(mcc.buildModuleCreateDefs()))
+`, mcc.meta.BinaryName, buildHelpText(buildSharedModuleDefs()))
 }
 
 // The End.

@@ -1,0 +1,161 @@
+package command
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/mitchellh/cli"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
+	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+)
+
+// moduleUpdateCommand is the top-level structure for the module update command.
+type moduleUpdateCommand struct {
+	meta *Metadata
+}
+
+// NewModuleUpdateCommandFactory returns a moduleUpdateCommand struct.
+func NewModuleUpdateCommandFactory(meta *Metadata) func() (cli.Command, error) {
+	return func() (cli.Command, error) {
+		return moduleUpdateCommand{
+			meta: meta,
+		}, nil
+	}
+}
+
+func (muc moduleUpdateCommand) Run(args []string) int {
+	muc.meta.Logger.Debugf("Starting the 'module update' command with %d arguments:", len(args))
+	for ix, arg := range args {
+		muc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+	}
+
+	// Cannot delay reading settings past this point.
+	settings, err := muc.meta.ReadSettings()
+	if err != nil {
+		muc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
+		return 1
+	}
+
+	client, err := settings.CurrentProfile.GetSDKClient()
+	if err != nil {
+		muc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		return 1
+	}
+
+	ctx := context.Background()
+
+	return muc.doModuleUpdate(ctx, client, args)
+}
+
+func (muc moduleUpdateCommand) doModuleUpdate(ctx context.Context, client *tharsis.Client, opts []string) int {
+	muc.meta.Logger.Debugf("will do module update, %d opts", len(opts))
+
+	defs := muc.buildUpdateOptionDefs()
+	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(muc.meta.BinaryName+" module update", defs, opts)
+	if err != nil {
+		muc.meta.Logger.Error(output.FormatError("failed to parse module update options", err))
+		return 1
+	}
+	if len(cmdArgs) < 1 {
+		muc.meta.Logger.Error(output.FormatError("missing module update path", nil), muc.HelpModuleUpdate())
+		return 1
+	}
+	if len(cmdArgs) > 1 {
+		msg := fmt.Sprintf("excessive module update arguments: %s", cmdArgs)
+		muc.meta.Logger.Error(output.FormatError(msg, nil), muc.HelpModuleUpdate())
+		return 1
+	}
+
+	modulePath := cmdArgs[0]
+	name := getOption("name", "", cmdOpts)[0]
+	system := getOption("system", "", cmdOpts)[0]
+	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
+	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	private, err := getBoolOptionValue("private", "true", cmdOpts)
+	if err != nil {
+		muc.meta.UI.Error(err.Error())
+		return 1
+	}
+
+	if !isResourcePathValid(muc.meta, modulePath) {
+		return 1
+	}
+
+	// Get the module so, we can find it's ID.
+	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &modulePath})
+	if err != nil {
+		muc.meta.Logger.Error(output.FormatError("failed to get module", err))
+		return 1
+	}
+
+	// Prepare the inputs.
+	input := &sdktypes.UpdateTerraformModuleInput{
+		ID:      module.Metadata.ID,
+		Private: &private,
+	}
+
+	if name != "" {
+		input.Name = &name
+	}
+
+	if system != "" {
+		input.System = &system
+	}
+
+	if repositoryURL != "" {
+		input.RepositoryURL = &repositoryURL
+	}
+
+	muc.meta.Logger.Debugf("module update input: %#v", input)
+
+	// Update the module.
+	updatedModule, err := client.TerraformModule.UpdateModule(ctx, input)
+	if err != nil {
+		muc.meta.Logger.Error(output.FormatError("failed to update module", err))
+		return 1
+	}
+
+	return outputModule(muc.meta, toJSON, updatedModule)
+}
+
+// buildUpdateOptionDefs returns the common defs used by 'module update' command.
+func (muc moduleUpdateCommand) buildUpdateOptionDefs() optparser.OptionDefinitions {
+	defs := buildSharedModuleDefs()
+
+	defs["name"] = &optparser.OptionDefinition{
+		Arguments: []string{"Name"},
+		Synopsis:  "The name of the Terraform module.",
+	}
+
+	defs["system"] = &optparser.OptionDefinition{
+		Arguments: []string{"System"},
+		Synopsis:  "The target system for the module (e.g. aws, azure, etc.).",
+	}
+
+	return defs
+}
+
+func (muc moduleUpdateCommand) Synopsis() string {
+	return "Update a module."
+}
+
+func (muc moduleUpdateCommand) Help() string {
+	return muc.HelpModuleUpdate()
+}
+
+// HelpModuleUpdate produces the help string for the 'module update' command.
+func (muc moduleUpdateCommand) HelpModuleUpdate() string {
+	return fmt.Sprintf(`
+Usage: %s [global options] module update [options] <module-path>
+
+   The module update command updates a module. Shows final
+   output as JSON, if specified.
+
+%s
+
+`, muc.meta.BinaryName, buildHelpText(muc.buildUpdateOptionDefs()))
+}
+
+// The End.
