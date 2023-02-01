@@ -139,6 +139,24 @@ func buildJSONOptionDefs(defs optparser.OptionDefinitions) optparser.OptionDefin
 	return defs
 }
 
+// buildPaginationOptionDefs returns pagination defs shared between several commands.
+func buildPaginationOptionDefs() optparser.OptionDefinitions {
+	return optparser.OptionDefinitions{
+		"cursor": {
+			Arguments: []string{"Cursor_String"},
+			Synopsis:  "The cursor string for manual pagination.",
+		},
+		"limit": {
+			Arguments: []string{"count"},
+			Synopsis:  "Maximum number of result elements to return.",
+		},
+		"sort-order": {
+			Arguments: []string{"Sort_Order"},
+			Synopsis:  "Sort in this direction, ASC or DESC.",
+		},
+	}
+}
+
 // objectToJSON marshals object and returns the result as a string.
 func objectToJSON(object interface{}) (string, error) {
 	buf, err := json.MarshalIndent(object, "", "    ")
