@@ -59,7 +59,7 @@ func (rc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Clie
 		return 1
 	}
 	if len(cmdArgs) < 1 || cmdArgs[0] == "" {
-		rc.meta.Logger.Error(output.FormatError("missing run cancel id", nil), rc.HelpRunCancel())
+		rc.meta.Logger.Error(output.FormatError("missing run cancel ID", nil), rc.HelpRunCancel())
 		return 1
 	}
 	if len(cmdArgs) > 1 {

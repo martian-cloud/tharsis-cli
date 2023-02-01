@@ -13,7 +13,7 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 // moduleUploadVersionCommand is the top-level structure for the module upload-version command.
@@ -64,7 +64,7 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 		return 1
 	}
 	if len(cmdArgs) < 1 {
-		muc.meta.Logger.Error(output.FormatError("missing module upload-version <module-path>", nil), muc.HelpModuleUploadVersion())
+		muc.meta.Logger.Error(output.FormatError("missing module upload-version module path", nil), muc.HelpModuleUploadVersion())
 		return 1
 	}
 	if len(cmdArgs) > 1 {
@@ -117,7 +117,7 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 	log.WithField("module", modulePath).WithField("version", version).Info("creating module version...")
 
 	// Create module version
-	moduleVersion, err := client.TerraformModuleVersion.CreateModuleVersion(ctx, &types.CreateTerraformModuleVersionInput{
+	moduleVersion, err := client.TerraformModuleVersion.CreateModuleVersion(ctx, &sdktypes.CreateTerraformModuleVersionInput{
 		ModulePath: modulePath,
 		Version:    version,
 		SHASum:     hex.EncodeToString(slug.SHASum),
@@ -136,7 +136,7 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 		muc.meta.UI.Error(output.FormatError("failed to upload module version", err))
 
 		// Delete module version
-		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &types.DeleteTerraformModuleVersionInput{
+		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{
 			ID: moduleVersion.Metadata.ID,
 		}); err != nil {
 			muc.meta.UI.Error(fmt.Sprintf("failed to delete module version: %v", err))
@@ -148,13 +148,13 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 
 	// Wait for module version upload to complete
 	// Wait for the upload to complete:
-	var updatedModuleVersion *types.TerraformModuleVersion
+	var updatedModuleVersion *sdktypes.TerraformModuleVersion
 	for {
 
 		log.Info(fmt.Sprintf("upload in progress [%s elapsed]", time.Since(uploadStartTime)))
 
-		updatedModuleVersion, err = client.TerraformModuleVersion.GetModuleVersion(ctx, &types.GetTerraformModuleVersionInput{
-			ID: moduleVersion.Metadata.ID,
+		updatedModuleVersion, err = client.TerraformModuleVersion.GetModuleVersion(ctx, &sdktypes.GetTerraformModuleVersionInput{
+			ID: &moduleVersion.Metadata.ID,
 		})
 		if err != nil {
 			muc.meta.UI.Error(output.FormatError("failed to check module version upload status", err))
@@ -172,7 +172,7 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 		log.WithField("error", updatedModuleVersion.Error).Error("module version upload failed")
 		muc.meta.UI.Output(updatedModuleVersion.Diagnostics)
 		// Delete module version
-		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &types.DeleteTerraformModuleVersionInput{
+		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{
 			ID: moduleVersion.Metadata.ID,
 		}); err != nil {
 			muc.meta.UI.Error(fmt.Sprintf("failed to delete module version: %v", err))
@@ -224,7 +224,7 @@ func (muc moduleUploadVersionCommand) Help() string {
 // HelpModuleUploadVersion produces the help string for the 'module upload-version' command.
 func (muc moduleUploadVersionCommand) HelpModuleUploadVersion() string {
 	return fmt.Sprintf(`
-Usage: %s [global options] module upload-version [options] <module_resource_path>
+Usage: %s [global options] module upload-version [options] <module-path>
 
    The module upload-version command uploads a new
    module version to the module registry.
