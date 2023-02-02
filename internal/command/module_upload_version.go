@@ -139,7 +139,7 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{
 			ID: moduleVersion.Metadata.ID,
 		}); err != nil {
-			muc.meta.UI.Error(fmt.Sprintf("failed to delete module version: %v", err))
+			muc.meta.UI.Error(output.FormatError("failed to delete module version", err))
 		}
 		return 1
 	}
@@ -175,7 +175,7 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{
 			ID: moduleVersion.Metadata.ID,
 		}); err != nil {
-			muc.meta.UI.Error(fmt.Sprintf("failed to delete module version: %v", err))
+			muc.meta.UI.Error(output.FormatError("failed to delete module version", err))
 		}
 		return 1
 	}
@@ -209,6 +209,7 @@ func (muc moduleUploadVersionCommand) buildModuleUploadVersionDefs() optparser.O
 		"version": {
 			Arguments: []string{"Version"},
 			Synopsis:  "The semantic version for the new module version.",
+			Required:  true,
 		},
 	}
 }

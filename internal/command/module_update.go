@@ -75,7 +75,7 @@ func (muc moduleUpdateCommand) doModuleUpdate(ctx context.Context, client *thars
 	toJSON := getOption("json", "", cmdOpts)[0] == "1"
 	private, err := getBoolOptionValue("private", "true", cmdOpts)
 	if err != nil {
-		muc.meta.UI.Error(err.Error())
+		muc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
 
