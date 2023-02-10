@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
@@ -98,7 +99,7 @@ func (cc configureCommand) Run(opts []string) int {
 		gotSettings = &settings.Settings{}
 	}
 
-	return cc.updateOneProfile(gotSettings, profileName, endpointURL)
+	return cc.updateOneProfile(gotSettings, profileName, strings.TrimSuffix(endpointURL, "/"))
 }
 
 func (cc configureCommand) updateOneProfile(oldSettings *settings.Settings, name, tharsisURL string) int {

@@ -15,7 +15,6 @@ const (
 	redBar        = "\033[31m" + bar
 	newline       = "\n"
 	redBarNewline = redBar + newline
-	flagProvided  = "flag provided"
 )
 
 // FormatError outputs the error with proper formatting for CLI.
@@ -23,12 +22,6 @@ func FormatError(summary string, err error) string {
 	msg := formatError(summary, "")
 
 	if err != nil {
-		// Avoid duplicate err message when flag library already outputs one.
-		// flag library will automatically output "flag provided but not defined"
-		if strings.Contains(err.Error(), flagProvided) {
-			return ""
-		}
-
 		return msg + formatError("", strings.TrimSpace(err.Error()))
 	}
 

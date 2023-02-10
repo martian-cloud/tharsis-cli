@@ -455,35 +455,35 @@ func (lc loginCommand) Run(args []string) int {
 	// Use the 'well-known' endpoint to get the OAuth2 configuration.
 	oauthCfg, err := lc.fetchAuthConfig(currentSettings.CurrentProfile.TharsisURL)
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to fetch OAuth config", err))
 		return 1
 	}
 
 	// Build the request state UUID.
 	requestState, err := buildRequestState()
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to build request state", err))
 		return 1
 	}
 
 	// Build the proof key and challenge values.
 	proofKey, proofKeyChallenge, err := buildProofKeyChallenge()
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to build proof key challenge", err))
 		return 1
 	}
 
 	// Open the net.listener and build the callback URL.
 	netListener, callbackURL, err := openNetListener()
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to create temporary web server", err))
 		return 1
 	}
 
 	// Launch the embedded web server.
 	webServerChannel, server, err := lc.launchWebServer(requestState, proofKey, netListener)
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to launch temporary web server", err))
 		return 1
 	}
 
@@ -498,13 +498,13 @@ func (lc loginCommand) Run(args []string) int {
 	// Launch the web browser.
 	err = lc.launchBrowser(authCodeURL, currentSettings)
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to launch web browser for OAuth redirect", err))
 		return 1
 	}
 
 	settingsFilePath, err := settings.DefaultSettingsFilename()
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to get default settings file name", err))
 		return 1
 	}
 	lc.meta.UI.Output("Tharsis has opened your default browser to complete the SSO login.")
@@ -515,14 +515,14 @@ func (lc loginCommand) Run(args []string) int {
 	// Capture the token.  This also terminates the web server.
 	token, err := lc.captureToken(oauthCfg, proofKey, webServerChannel, server)
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to capture token in temporary web server", err))
 		return 1
 	}
 
 	// Store the token.
 	err = lc.storeToken(token, currentSettings)
 	if err != nil {
-		lc.meta.Logger.Error(output.FormatError(err.Error(), nil))
+		lc.meta.Logger.Error(output.FormatError("failed to store token in settings file", err))
 		return 1
 	}
 
@@ -532,7 +532,7 @@ func (lc loginCommand) Run(args []string) int {
 }
 
 func (lc loginCommand) Synopsis() string {
-	return "Log in to the OAuth2 provider and return an authentication token"
+	return "Log in to the OAuth2 provider and return an authentication token."
 }
 
 func (lc loginCommand) Help() string {
