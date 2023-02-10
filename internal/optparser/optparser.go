@@ -4,15 +4,11 @@
 package optparser
 
 import (
-	"errors"
 	"flag"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 )
-
-// ErrHelp handles a special case where --help doesn't return a user-friendly message.
-var ErrHelp = errors.New("flag provided but not defined: -help")
 
 // The optparser module parses the rest of a command line after the CLI
 // platform has done what it does.  An option starts with one or two hyphens:
@@ -79,14 +75,9 @@ func ParseCommandOptions(headline string, definitions OptionDefinitions,
 	}
 
 	// Do the parsing.
-	flags.Usage = func() {} // Override Usage to prevent unnecessary --help output.
+	flags.SetOutput(io.Discard) // Don't need flag library to output messages when we have our own.
 	err := flags.Parse(words)
 	if err != nil {
-		// Handle special case to display user friendly message.
-		if err == flag.ErrHelp {
-			fmt.Fprintf(os.Stderr, "%s\n", ErrHelp)
-			return nil, nil, err
-		}
 		return nil, nil, err
 	}
 	arguments := flags.Args()

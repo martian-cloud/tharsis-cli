@@ -63,10 +63,10 @@ func realMain() int {
 		},
 		profileOption: {
 			Arguments: []string{"PROFILE"},
-			Synopsis:  "profile name from config file, defaults to \"default\"",
+			Synopsis:  "Profile name from config file, defaults to \"default\".",
 		},
 		versionOptionShort: {
-			Synopsis: fmt.Sprintf("show the %s version information", displayTitle),
+			Synopsis: fmt.Sprintf("Show the %s version information.", displayTitle),
 		},
 	}
 
@@ -80,10 +80,25 @@ func realMain() int {
 	log.Debugf("display title: %s", displayTitle)
 	log.Debugf("raw arguments: %#v", rawArgs)
 
+	// For any variation of "-h" or "-help", simply use "-h".
+	// Since help option can be used for any command, we must
+	// handle it the same anywhere.
+	for ix, arg := range rawArgs {
+		if arg == "--h" || arg == "--help" || arg == "-help" {
+			rawArgs[ix] = "-h"
+		}
+	}
+
+	// Only replace "--version" and "--v" at the global level i.e. the first argument.
+	// Allows using the same argument in commands and subcommands.
+	if rawArgs[0] == "--version" || rawArgs[0] == "-version" || rawArgs[0] == "--v" {
+		rawArgs[0] = "-v"
+	}
+
 	// Read any global options.
 	globalOptions, commandArgs, err := optparser.ParseCommandOptions(binaryName+" global options", globalOptionNames, rawArgs)
 	if err != nil {
-		// Logging the error here produces redundant output since flag library already does it.
+		log.Info(output.FormatError("failed to parse global options", err))
 		return 1
 	}
 
