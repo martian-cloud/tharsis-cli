@@ -32,7 +32,7 @@ func (sc ssoCommand) Run(args []string) int {
 }
 
 func (sc ssoCommand) Synopsis() string {
-	return "Log in to the OAuth2 provider and return an authentication token"
+	return "Log in to the OAuth2 provider and return an authentication token."
 }
 
 func (sc ssoCommand) Help() string {
@@ -48,7 +48,7 @@ Usage: %s [global options] sso login
 	subs := `
 
 Subcommands:
-    login    Log in to the OAuth2 provider and return an authentication token`
+    login    Log in to the OAuth2 provider and return an authentication token.`
 
 	// Avoid duplicate subcommands when -h is used.
 	if subCommands {
