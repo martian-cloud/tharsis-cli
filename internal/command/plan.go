@@ -209,7 +209,7 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 		// Check, and process the directory path.
 		pErr := processDirectoryPath(directoryPath, input.isDestroy)
 		if pErr != nil {
-			meta.Logger.Error(output.FormatError(pErr.Error(), nil))
+			meta.Logger.Error(output.FormatError("failed to process directory path", pErr))
 			return nil, 1
 		}
 
@@ -218,7 +218,7 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 			id, cErr := createUploadConfigVersion(ctx, client, meta,
 				input.workspacePath, directoryPath, input.isSpeculative)
 			if cErr != nil {
-				meta.Logger.Error(output.FormatError(cErr.Error(), nil))
+				meta.Logger.Error(output.FormatError("failed to upload configuration version", cErr))
 				return nil, 1
 			}
 			createdConfigurationVersionID = &id
