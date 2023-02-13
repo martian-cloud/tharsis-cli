@@ -74,7 +74,7 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 	}
 
 	modulePath := cmdArgs[0]
-	directoryPath := getOption("directory-path", "", cmdOpts)[0]
+	directoryPath := getOption("directory-path", ".", cmdOpts)[0] // default to "." (should work in *x and Windows)
 	version := getOption("version", "", cmdOpts)[0]
 
 	// Error is already logged.

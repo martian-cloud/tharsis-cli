@@ -91,7 +91,7 @@ func realMain() int {
 
 	// Only replace "--version" and "--v" at the global level i.e. the first argument.
 	// Allows using the same argument in commands and subcommands.
-	if rawArgs[0] == "--version" || rawArgs[0] == "-version" || rawArgs[0] == "--v" {
+	if len(rawArgs) > 0 && (rawArgs[0] == "--version" || rawArgs[0] == "-version" || rawArgs[0] == "--v") {
 		rawArgs[0] = "-v"
 	}
 
@@ -142,9 +142,6 @@ func realMain() int {
 		"group delete":                        command.NewGroupDeleteCommandFactory(meta),
 		"plan":                                command.NewPlanCommandFactory(meta),
 		"destroy":                             command.NewDestroyCommandFactory(meta),
-		"provider":                            command.NewProviderCommandFactory(meta),
-		"provider create":                     command.NewProviderCreateCommandFactory(meta),
-		"provider upload-version":             command.NewProviderUploadVersionCommandFactory(meta),
 		"module":                              command.NewModuleCommandFactory(meta),
 		"module get":                          command.NewModuleGetCommandFactory(meta),
 		"module list":                         command.NewModuleListCommandFactory(meta),
@@ -165,6 +162,9 @@ func realMain() int {
 		"service-account create-token":        command.NewServiceAccountCreateTokenCommandFactory(meta),
 		"sso":                                 command.NewSSOCommandFactory(meta),
 		"sso login":                           command.NewLoginCommandFactory(meta),
+		"terraform-provider":                  command.NewTerraformProviderCommandFactory(meta),
+		"terraform-provider create":           command.NewTerraformProviderCreateCommandFactory(meta),
+		"terraform-provider upload-version":   command.NewTerraformProviderUploadVersionCommandFactory(meta),
 		"workspace":                           command.NewWorkspaceCommandFactory(meta),
 		"workspace assign-managed-identity":   command.NewWorkspaceAssignManagedIdentityCommandFactory(meta),
 		"workspace unassign-managed-identity": command.NewWorkspaceUnassignManagedIdentityCommandFactory(meta),
