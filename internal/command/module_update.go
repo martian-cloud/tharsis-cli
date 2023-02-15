@@ -52,7 +52,7 @@ func (muc moduleUpdateCommand) Run(args []string) int {
 func (muc moduleUpdateCommand) doModuleUpdate(ctx context.Context, client *tharsis.Client, opts []string) int {
 	muc.meta.Logger.Debugf("will do module update, %d opts", len(opts))
 
-	defs := muc.buildUpdateOptionDefs()
+	defs := buildSharedModuleDefs()
 	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(muc.meta.BinaryName+" module update", defs, opts)
 	if err != nil {
 		muc.meta.Logger.Error(output.FormatError("failed to parse module update options", err))
@@ -69,8 +69,6 @@ func (muc moduleUpdateCommand) doModuleUpdate(ctx context.Context, client *thars
 	}
 
 	modulePath := cmdArgs[0]
-	name := getOption("name", "", cmdOpts)[0]
-	system := getOption("system", "", cmdOpts)[0]
 	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
 	toJSON := getOption("json", "", cmdOpts)[0] == "1"
 	private, err := getBoolOptionValue("private", "true", cmdOpts)
@@ -96,14 +94,6 @@ func (muc moduleUpdateCommand) doModuleUpdate(ctx context.Context, client *thars
 		Private: &private,
 	}
 
-	if name != "" {
-		input.Name = &name
-	}
-
-	if system != "" {
-		input.System = &system
-	}
-
 	if repositoryURL != "" {
 		input.RepositoryURL = &repositoryURL
 	}
@@ -118,23 +108,6 @@ func (muc moduleUpdateCommand) doModuleUpdate(ctx context.Context, client *thars
 	}
 
 	return outputModule(muc.meta, toJSON, updatedModule)
-}
-
-// buildUpdateOptionDefs returns the common defs used by 'module update' command.
-func (muc moduleUpdateCommand) buildUpdateOptionDefs() optparser.OptionDefinitions {
-	defs := buildSharedModuleDefs()
-
-	defs["name"] = &optparser.OptionDefinition{
-		Arguments: []string{"Name"},
-		Synopsis:  "The name of the Terraform module.",
-	}
-
-	defs["system"] = &optparser.OptionDefinition{
-		Arguments: []string{"System"},
-		Synopsis:  "The target system for the module (e.g. aws, azure, etc.).",
-	}
-
-	return defs
 }
 
 func (muc moduleUpdateCommand) Synopsis() string {
@@ -155,7 +128,7 @@ Usage: %s [global options] module update [options] <module-path>
 
 %s
 
-`, muc.meta.BinaryName, buildHelpText(muc.buildUpdateOptionDefs()))
+`, muc.meta.BinaryName, buildHelpText(buildSharedModuleDefs()))
 }
 
 // The End.
