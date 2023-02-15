@@ -152,7 +152,7 @@ func (mlc moduleListCommand) doModuleList(ctx context.Context, client *tharsis.C
 		tableInput[0] = []string{"id", "name", "resource path", "private", "repository url"}
 		for ix, module := range modulesOutput.TerraformModules {
 			tableInput[ix+1] = []string{module.Metadata.ID, module.Name, module.ResourcePath,
-				fmt.Sprintf("%t", module.Private), module.ResourcePath}
+				fmt.Sprintf("%t", module.Private), module.RepositoryURL}
 		}
 		mlc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 		//
