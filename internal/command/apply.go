@@ -7,9 +7,9 @@ package command
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/job"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -90,7 +90,7 @@ func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts
 	autoApprove := getOption("auto-approve", "", cmdOpts)[0] == "1"
 	inputRequired, err := getBoolOptionValue("input", "true", cmdOpts)
 	if err != nil {
-		ac.meta.UI.Error(err.Error())
+		ac.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
 	moduleSource := getOption("module-source", "", cmdOpts)[0]
@@ -184,26 +184,40 @@ func startApplyStage(ctx context.Context, comment string, autoApprove, inputRequ
 		return 1
 	}
 
-	// Display the run apply job's logs.
-	applyLogChannel, err := client.Job.GetJobLogs(ctx, &sdktypes.GetJobLogsInput{
-		ID:          *appliedRun.Apply.CurrentJobID,
-		StartOffset: 0,
-		Limit:       logLimit,
-	})
-	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to connect to read apply logs", err))
-		return 1
+	logsInput := &sdktypes.JobLogsSubscriptionInput{
+		JobID:         *appliedRun.Apply.CurrentJobID,
+		RunID:         appliedRun.Metadata.ID,
+		WorkspacePath: appliedRun.WorkspacePath,
 	}
-	err = job.DisplayLogs(applyLogChannel, meta.UI)
+
+	meta.Logger.Debugf("apply: job logs input: %#v", logsInput)
+
+	// Subscribe to job log events so we know when to fetch new logs.
+	logChannel, err := client.Job.SubscribeToJobLogs(ctx, logsInput)
 	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to read apply logs", err))
+		meta.Logger.Error(output.FormatError("failed to get job logs", err))
 		return 1
 	}
 
-	// Check whether the apply passed (vs. failed).
+	for {
+		logEvent, ok := <-logChannel
+		if !ok {
+			// No more logs since channel was closed.
+			break
+		}
+
+		if logEvent.Error != nil {
+			// Catch any incoming errors.
+			meta.Logger.Error(output.FormatError("failed to get job logs", logEvent.Error))
+			return 1
+		}
+
+		meta.UI.Output(strings.TrimSpace(logEvent.Logs))
+	}
+
 	finishedRun, err := client.Run.GetRun(ctx, &sdktypes.GetRunInput{ID: createdRun.Metadata.ID})
 	if err != nil {
-		meta.Logger.Error(output.FormatError("Failed to get post-apply run", err))
+		meta.Logger.Error(output.FormatError("failed to get finished run", err))
 		return 1
 	}
 

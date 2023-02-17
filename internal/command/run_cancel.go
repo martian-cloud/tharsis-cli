@@ -78,51 +78,50 @@ func (rc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Clie
 	}
 
 	// Subscribe to run events and wait for event to be canceled.
-	done := make(chan bool)
-	go func() {
-		defer close(done)
-
-		eventChan, err := client.Run.SubscribeToWorkspaceRunEvents(ctx,
-			&sdktypes.RunSubscriptionInput{
-				WorkspacePath: run.WorkspacePath,
-				RunID:         &id,
-			})
-		if err != nil {
-			rc.meta.Logger.Error(output.FormatError("failed subscribe to workspace run events", err))
-			return
-		}
-
-		input := &sdktypes.CancelRunInput{RunID: id, Force: &force}
-		rc.meta.Logger.Debugf("run cancel input: %#v", input)
-
-		_, err = client.Run.CancelRun(ctx, input)
-		if err != nil {
-			rc.meta.Logger.Error(output.FormatError("failed to cancel a run", err))
-			return
-		}
-
-		// Wait for the run to be canceled.
-		for {
-			eventRun := <-eventChan
-			if eventRun.Status == sdktypes.RunCanceled {
-				done <- true
-				return
-			}
-		}
-	}()
-
-	// Wait for a event on channel done.
-	select {
-	case <-ctx.Done():
-		rc.meta.Logger.Error(output.FormatError("failed to cancel a run", ctx.Err()))
+	eventChan, err := client.Run.SubscribeToWorkspaceRunEvents(ctx,
+		&sdktypes.RunSubscriptionInput{
+			WorkspacePath: run.WorkspacePath,
+			RunID:         &id,
+		})
+	if err != nil {
+		rc.meta.Logger.Error(output.FormatError("failed subscribe to workspace run events", err))
 		return 1
-	case completed := <-done:
-		if completed {
-			rc.meta.UI.Output("run cancel succeeded.")
-		}
 	}
 
-	return 0
+	input := &sdktypes.CancelRunInput{RunID: id, Force: &force}
+	rc.meta.Logger.Debugf("run cancel input: %#v", input)
+
+	_, err = client.Run.CancelRun(ctx, input)
+	if err != nil {
+		rc.meta.Logger.Error(output.FormatError("failed to cancel a run", err))
+		return 1
+	}
+
+	rc.meta.UI.Info("Run cancellation in progress...")
+
+	// Wait for an event on eventChan.
+	for {
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+		case eventRun := <-eventChan:
+			switch eventRun.Status {
+			case sdktypes.RunApplied,
+				sdktypes.RunPlanned,
+				sdktypes.RunPlannedAndFinished,
+				sdktypes.RunErrored:
+				err = fmt.Errorf("run status: %s", eventRun.Status)
+			case sdktypes.RunCanceled:
+				rc.meta.UI.Info("Run cancel succeeded")
+				return 0
+			}
+		}
+
+		if err != nil {
+			rc.meta.Logger.Error(output.FormatError("failed to cancel a run", err))
+			return 1
+		}
+	}
 }
 
 func (rc runCancelCommand) buildRunCancelDefs() optparser.OptionDefinitions {
