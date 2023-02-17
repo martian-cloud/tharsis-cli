@@ -3,6 +3,7 @@ module gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli
 go 1.18
 
 require (
+	github.com/aws/smithy-go v1.13.5
 	github.com/caarlos0/log v0.2.1
 	github.com/hashicorp/go-slug v0.10.1
 	github.com/hashicorp/go-uuid v1.0.3
@@ -11,7 +12,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/zclconf/go-cty v1.12.1
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.18.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.19.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/oauth2 v0.4.0
 )
