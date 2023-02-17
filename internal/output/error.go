@@ -1,8 +1,5 @@
-// Package output is responsible for formatting
-// the final output / errors the user sees in the
-// CLI. It automatically parses any GraphQL errors
-// from a given error and displays the 'detail'
-// field if present.
+// Package output is responsible for formatting the
+// final output / errors the user sees in the CLI.
 package output
 
 import (
@@ -10,7 +7,7 @@ import (
 )
 
 const (
-	bar           = "| "
+	bar           = "│ "
 	reset         = "\033[0m"
 	redBar        = "\033[31m" + bar
 	newline       = "\n"

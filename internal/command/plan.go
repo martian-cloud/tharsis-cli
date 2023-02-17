@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/job"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
@@ -19,9 +18,6 @@ import (
 )
 
 const (
-	// logLimit sets the limit for log clump size for both plan and apply
-	logLimit = 1024 * 1024
-
 	// Run status string prefix for a successful plan.
 	// The other good value is "planned_and_finished".
 	planSucceededRunPrefix = "planned"
@@ -259,27 +255,40 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 
 	meta.Logger.Debugf("plan: createdRun: %#v", createdRun)
 
-	// Display the logs
-	// (We're guaranteed that Plan is not nil.)
-	planLogChannel, err := client.Job.GetJobLogs(ctx, &sdktypes.GetJobLogsInput{
-		ID:          *createdRun.Plan.CurrentJobID,
-		StartOffset: 0,
-		Limit:       logLimit,
-	})
-	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to connect to read plan logs", err))
-		return nil, 1
+	logsInput := &sdktypes.JobLogsSubscriptionInput{
+		JobID:         *createdRun.Plan.CurrentJobID,
+		RunID:         createdRun.Metadata.ID,
+		WorkspacePath: createdRun.WorkspacePath,
 	}
-	err = job.DisplayLogs(planLogChannel, meta.UI)
+
+	meta.Logger.Debugf("plan: job logs input: %#v", logsInput)
+
+	// Subscribe to job log events so we know when to fetch new logs.
+	logChannel, err := client.Job.SubscribeToJobLogs(ctx, logsInput)
 	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to read plan logs", err))
+		meta.Logger.Error(output.FormatError("failed to get job logs", err))
 		return nil, 1
 	}
 
-	// Check whether the plan passed (vs. failed).
+	for {
+		logEvent, ok := <-logChannel
+		if !ok {
+			// No more logs since channel was closed.
+			break
+		}
+
+		if logEvent.Error != nil {
+			// Catch any incoming errors.
+			meta.Logger.Error(output.FormatError("failed to get job logs", logEvent.Error))
+			return nil, 1
+		}
+
+		meta.UI.Output(strings.TrimSpace(logEvent.Logs))
+	}
+
 	plannedRun, err := client.Run.GetRun(ctx, &sdktypes.GetRunInput{ID: createdRun.Metadata.ID})
 	if err != nil {
-		meta.Logger.Error(output.FormatError("Failed to get post-plan run", err))
+		meta.Logger.Error(output.FormatError("failed to get planned run", err))
 		return nil, 1
 	}
 
