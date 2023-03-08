@@ -11,7 +11,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/zclconf/go-cty v1.13.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.21.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.21.1
 	go.uber.org/zap v1.24.0
 	golang.org/x/oauth2 v0.6.0
 )
@@ -57,7 +57,6 @@ require (
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
-	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/stretchr/testify v1.8.2 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
