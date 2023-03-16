@@ -661,7 +661,7 @@ func openNetListener() (net.Listener, string, error) {
 }
 
 // launchWebServer launches the embedded web server and returns the termination channel.
-func (lc loginCommand) launchWebServer(requestState, proofKey string,
+func (lc loginCommand) launchWebServer(requestState, _ string,
 	netListener net.Listener) (chan string, *http.Server, error) {
 	lc.meta.Logger.Debug("callback server: creating server")
 	codeChannel := make(chan string)
