@@ -21,6 +21,11 @@ func NewModuleCommandFactory(meta *Metadata) func() (cli.Command, error) {
 }
 
 func (mc moduleCommand) Run(args []string) int {
+	mc.meta.Logger.Debugf("Starting the 'module' command with %d arguments:", len(args))
+	for ix, arg := range args {
+		mc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+	}
+
 	// Show the help text.
 	mc.meta.UI.Output(mc.HelpModule(true))
 	return 1

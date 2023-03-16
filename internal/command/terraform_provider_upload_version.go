@@ -110,19 +110,19 @@ func (tpuc terraformProviderUploadVersionCommand) doTerraformProviderUploadVersi
 	tpuc.meta.UI.Output(fmt.Sprintf("• starting terraform-provider version upload: provider-full-path=%s directory=%s",
 		tfProviderPath, directoryPath))
 
-	tfProviderManifest, err := tpuc.readTerraformProviderManifest(ctx, directoryPath)
+	tfProviderManifest, err := tpuc.readTerraformProviderManifest(directoryPath)
 	if err != nil {
 		tpuc.meta.UI.Error(output.FormatError("failed to read Terraform provider manifest", err))
 		return 1
 	}
 
-	tfProviderVersionMetadata, err := tpuc.readTerraformProviderVersionMetdata(ctx, directoryPath)
+	tfProviderVersionMetadata, err := tpuc.readTerraformProviderVersionMetadata(directoryPath)
 	if err != nil {
 		tpuc.meta.UI.Error(output.FormatError("failed to read Terraform provider version metadata", err))
 		return 1
 	}
 
-	artifacts, err := tpuc.readTerraformProviderVersionArtifacts(ctx, directoryPath)
+	artifacts, err := tpuc.readTerraformProviderVersionArtifacts(directoryPath)
 	if err != nil {
 		tpuc.meta.UI.Error(output.FormatError("failed to read Terraform provider version artifacts", err))
 		return 1
@@ -332,8 +332,7 @@ func (tpuc terraformProviderUploadVersionCommand) uploadPlatformArchive(
 	return nil
 }
 
-func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderManifest(ctx context.Context,
-	dir string) (*terraformProviderManifestType, error) {
+func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderManifest(dir string) (*terraformProviderManifestType, error) {
 	tpuc.meta.UI.Output("• reading terraform-registry-manifest.json")
 
 	// Locate `terraform-registry-manifest.json` file which includes the protocol versions
@@ -351,8 +350,7 @@ func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderManifest(
 	return &tfProviderManifest, nil
 }
 
-func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderVersionMetdata(ctx context.Context,
-	dir string) (*terraformProviderVersionMetadataType, error) {
+func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderVersionMetadata(dir string) (*terraformProviderVersionMetadataType, error) {
 	tpuc.meta.UI.Output("• reading metadata.json")
 
 	// Load version string from the metadata.json file in the dist directory
@@ -369,8 +367,7 @@ func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderVersionMe
 	return &tfProviderVersionMetadata, nil
 }
 
-func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderVersionArtifacts(ctx context.Context,
-	dir string) ([]artifactType, error) {
+func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderVersionArtifacts(dir string) ([]artifactType, error) {
 	tpuc.meta.UI.Output("• reading artifacts.json")
 
 	// Load the artifacts.json file to get the list of files/platforms that will be uploaded
