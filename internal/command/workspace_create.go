@@ -109,9 +109,9 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 
 	// Check if workspace already exists.
 	if ifNotExists {
-		ws, gErr := client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{Path: &workspacePath})
-		if gErr != nil {
-			wcc.meta.Logger.Error(output.FormatError("failed to get workspace", gErr))
+		ws, wErr := client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{Path: &workspacePath})
+		if (wErr != nil) && !tharsis.IsNotFoundError(wErr) {
+			wcc.meta.Logger.Error(output.FormatError("failed to check workspace", wErr))
 			return 1
 		}
 
