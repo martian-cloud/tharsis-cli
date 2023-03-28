@@ -81,7 +81,7 @@ func (wam workspaceGetAssignedManagedIdentitiesCommand) doWorkspaceGetAssignedMa
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.GetAssignedManagedIdentitiesInput{Path: workspacePath}
+	input := &sdktypes.GetAssignedManagedIdentitiesInput{Path: &workspacePath}
 	wam.meta.Logger.Debugf("workspace get-assigned-managed-identities input: %#v", input)
 
 	// Get the managed identities.
