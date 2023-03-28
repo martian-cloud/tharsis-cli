@@ -138,6 +138,7 @@ func realMain() int {
 		"group list":                          command.NewGroupListCommandFactory(meta),
 		"group get":                           command.NewGroupGetCommandFactory(meta),
 		"group create":                        command.NewGroupCreateCommandFactory(meta),
+		"group migrate":                       command.NewGroupMigrateCommandFactory(meta),
 		"group update":                        command.NewGroupUpdateCommandFactory(meta),
 		"group delete":                        command.NewGroupDeleteCommandFactory(meta),
 		"plan":                                command.NewPlanCommandFactory(meta),

@@ -56,6 +56,7 @@ Subcommands:
     delete                  Delete a group.
     get                     Get a single group.
     list                    List groups.
+    migrate                 Migrate a group.
     set-environment-vars    Set environment variables for a group.
     set-terraform-vars      Set terraform variables for a group.
     update                  Update a group.`
