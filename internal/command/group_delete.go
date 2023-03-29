@@ -53,7 +53,8 @@ func (gdc groupDeleteCommand) doGroupDelete(ctx context.Context, client *tharsis
 	gdc.meta.Logger.Debugf("will do group delete, %d opts", len(opts))
 
 	// No options to parse.
-	_, cmdArgs, err := optparser.ParseCommandOptions(gdc.meta.BinaryName+" group delete", optparser.OptionDefinitions{}, opts)
+	defs := gdc.buildGroupDeleteDefs()
+	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(gdc.meta.BinaryName+" group delete", defs, opts)
 	if err != nil {
 		gdc.meta.Logger.Error(output.FormatError("failed to parse group delete options", err))
 		return 1
@@ -69,6 +70,11 @@ func (gdc groupDeleteCommand) doGroupDelete(ctx context.Context, client *tharsis
 	}
 
 	groupPath := cmdArgs[0]
+	force, err := getBoolOptionValue("force", "false", cmdOpts)
+	if err != nil {
+		gdc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(gdc.meta, groupPath) {
@@ -76,7 +82,10 @@ func (gdc groupDeleteCommand) doGroupDelete(ctx context.Context, client *tharsis
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.DeleteGroupInput{GroupPath: &groupPath}
+	input := &sdktypes.DeleteGroupInput{
+		GroupPath: &groupPath,
+		Force:     &force,
+	}
 	gdc.meta.Logger.Debugf("group delete input: %#v", input)
 
 	// Delete the group.
@@ -92,6 +101,15 @@ func (gdc groupDeleteCommand) doGroupDelete(ctx context.Context, client *tharsis
 	return 0
 }
 
+func (groupDeleteCommand) buildGroupDeleteDefs() optparser.OptionDefinitions {
+	return optparser.OptionDefinitions{
+		"force": {
+			Arguments: []string{},
+			Synopsis:  "Force the deletion of a group.",
+		},
+	}
+}
+
 func (gdc groupDeleteCommand) Synopsis() string {
 	return "Delete a group."
 }
@@ -103,13 +121,13 @@ func (gdc groupDeleteCommand) Help() string {
 // HelpGroupDelete produces the help string for the 'group delete' command.
 func (gdc groupDeleteCommand) HelpGroupDelete() string {
 	return fmt.Sprintf(`
-Usage: %s [global options] group delete <full_path>
+Usage: %s [global options] group delete [options] <full_path>
 
    The group delete command deletes a group.
 
    Use with caution as deleting a group is irreversible!
 
-`, gdc.meta.BinaryName)
-}
+%s
 
-// The End.
+`, gdc.meta.BinaryName, buildHelpText(gdc.buildGroupDeleteDefs()))
+}
