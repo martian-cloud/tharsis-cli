@@ -12,14 +12,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/caarlos0/log"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
-
-// Used for parsing variables as key=value pairs.
-const equalsDelimiter = "="
 
 // ProcessVariablesInput defines the input for ProcessVariables.
 type ProcessVariablesInput struct {
@@ -29,7 +27,7 @@ type ProcessVariablesInput struct {
 	EnvVariables   []string
 }
 
-// Variable represents a parsed terraform or environment variable
+// Variable represents a parsed terraform or environment variable.
 type Variable struct {
 	Value    string
 	Key      string
@@ -81,22 +79,23 @@ func ProcessVariables(input ProcessVariablesInput) ([]Variable, error) {
 	return variables, nil
 }
 
-// processVariables iterates through the variables slice and splits
-// variables using an equalsDelimiter.
-// Populates a slice of RunVariable and returns the result.
+// processVariables iterates through the variables slice and splits variables
+// using "=". Populates a slice of RunVariable and returns the result.
 func processVariables(variables []string, category sdktypes.VariableCategory) ([]Variable, error) {
-	// Split key-value pairs and populate RunVariable slice.
 	var runVariables []Variable
-	for i, pair := range variables {
 
-		// Helpful message incase a variable was accidentally empty.
+	seen := map[string]int{} // Keep track of duplicates.
+	for i, pair := range variables {
+		pair = strings.TrimSpace(pair)
+
 		if pair == "" {
-			return nil, fmt.Errorf("%s variable is empty at position %d", category, i+1)
+			// Skip empty lines or variables.
+			continue
 		}
 
-		s := strings.Split(pair, equalsDelimiter)
+		s := strings.SplitN(pair, "=", 2)
 
-		if len(s) < 2 {
+		if len(s) != 2 {
 			return nil, fmt.Errorf("%s variable is not a key=value pair at position %d", category, i+1)
 		}
 
@@ -105,19 +104,25 @@ func processVariables(variables []string, category sdktypes.VariableCategory) ([
 
 		// Make sure there is a key and value pair, output a helpful error otherwise.
 		// Assumes that a value could be empty.
-		if key == "" {
-			return nil, fmt.Errorf("%s variable is not a key=value pair at position %d", category, i+1)
+		if key == "" || strings.Contains(key, " ") {
+			return nil, fmt.Errorf("%s variable has an invalid key at position %d", category, i+1)
 		}
 
-		// Populate a run variable.
-		var runVariable Variable
-		runVariable.Key = key
-		runVariable.Value = val
-		runVariable.HCL = false // Set HCL to false for variable passed in via an argument.
-		runVariable.Category = category
+		// Log a warning if a variable is being mistakenly overwritten.
+		if position, ok := seen[key]; ok {
+			log.Warnf("%s variable '%s' was previously declared at position %d", category, key, position)
+		}
+
+		// Add the variable and its position, so we can track it.
+		seen[key] = i + 1
 
 		// Append variable to slice.
-		runVariables = append(runVariables, runVariable)
+		runVariables = append(runVariables, Variable{
+			Key:      key,
+			Value:    val,
+			HCL:      false, // Set HCL to false for variable passed in via an argument.
+			Category: category,
+		})
 	}
 
 	return runVariables, nil
@@ -156,25 +161,20 @@ func processTfVarsFile(filePath string) ([]Variable, error) {
 			return nil, fmt.Errorf("%s", diags.Error())
 		}
 
-		raw := json.RawMessage(bytes)
-		rawToString := string(raw) // Value must be a pointer.
+		val := string(json.RawMessage(bytes))
 
-		// Create run variable.
-		var runVariable Variable
-		runVariable.Key = key
-		runVariable.Category = sdktypes.TerraformVariableCategory
-
-		// Set HCL if value is not a string type (complex variable)
-		if !value.Type().Equals(cty.String) {
-			runVariable.HCL = true
-		} else {
-			runVariable.HCL = false
-			rawToString = value.AsString() // No quotes around string
+		// Remove quotes around string values.
+		if value.Type().Equals(cty.String) {
+			val = value.AsString()
 		}
-		runVariable.Value = rawToString
 
 		// Append variable to slice.
-		runVariables = append(runVariables, runVariable)
+		runVariables = append(runVariables, Variable{
+			Key:      key,
+			Category: sdktypes.TerraformVariableCategory,
+			HCL:      !value.Type().Equals(cty.String), // Set HCL if value is not a string type (complex variable).
+			Value:    val,
+		})
 	}
 
 	return runVariables, nil

@@ -139,7 +139,7 @@ func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client
 func (wo workspaceOutputsCommand) displayWorkspaceOutput(raw, toJSON bool, outputName string,
 	outputs []sdktypes.StateVersionOutput) int {
 
-	outputMap, err := buildStateOutputValueMap(outputs)
+	outputMap, err := wo.buildStateOutputValueMap(outputs)
 	if err != nil {
 		wo.meta.Logger.Error(output.FormatError("failed to build state version output value map", err))
 		return 1
@@ -223,7 +223,7 @@ func (wo workspaceOutputsCommand) displayWorkspaceOutput(raw, toJSON bool, outpu
 // to it's value and its attributes. Used for displaying a
 // subset of the returned StateVersionOutput values and for
 // marshalling the cty.Values into their appropriate types.
-func buildStateOutputValueMap(outputs []sdktypes.StateVersionOutput) (map[string]*stateOutputValue, error) {
+func (wo workspaceOutputsCommand) buildStateOutputValueMap(outputs []sdktypes.StateVersionOutput) (map[string]*stateOutputValue, error) {
 	valueMap := make(map[string]*stateOutputValue, len(outputs))
 
 	// Build a map of output name --> stateOutputValue.
