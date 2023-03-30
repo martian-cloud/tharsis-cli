@@ -69,7 +69,11 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 	}
 
 	// Extract option values.
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		wlc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	cursor := getOption("cursor", "", cmdOpts)[0]
 	limit, err := strconv.ParseInt(getOption("limit", "100", cmdOpts)[0], 10, 64) // 100 is the maximum allowed by GraphQL
 	if err != nil {
@@ -148,11 +152,15 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 	} else {
 		// Format the output.
 		tableInput := make([][]string, len(workspacesOutput.Workspaces)+1)
-		tableInput[0] = []string{"id", "name", "description", "full path", "max job duration (minutes)",
-			"terraform version", "prevent destroy plan"}
+		tableInput[0] = []string{
+			"id", "name", "description", "full path", "max job duration (minutes)",
+			"terraform version", "prevent destroy plan",
+		}
 		for ix, workspace := range workspacesOutput.Workspaces {
-			tableInput[ix+1] = []string{workspace.Metadata.ID, workspace.Name, workspace.Description, workspace.FullPath,
-				fmt.Sprintf("%d", workspace.MaxJobDuration), workspace.TerraformVersion, fmt.Sprintf("%t", workspace.PreventDestroyPlan)}
+			tableInput[ix+1] = []string{
+				workspace.Metadata.ID, workspace.Name, workspace.Description, workspace.FullPath,
+				fmt.Sprintf("%d", workspace.MaxJobDuration), workspace.TerraformVersion, fmt.Sprintf("%t", workspace.PreventDestroyPlan),
+			}
 		}
 		wlc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 		//
@@ -218,5 +226,3 @@ Usage: %s [global options] workspace list [options]
 		buildHelpText(wlc.buildWorkspaceListDefs()),
 	)
 }
-
-// The End.

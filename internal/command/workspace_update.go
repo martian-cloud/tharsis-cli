@@ -78,7 +78,11 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 		wuc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		wuc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(wuc.meta, path) {
@@ -176,5 +180,3 @@ Usage: %s [global options] workspace update [options] <full_path>
 
 `, wuc.meta.BinaryName, buildHelpText(defs))
 }
-
-// The End.

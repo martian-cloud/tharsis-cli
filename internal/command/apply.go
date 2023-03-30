@@ -87,7 +87,11 @@ func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts
 	workspacePath := cmdArgs[0]
 	directoryPath := getOption("directory-path", "", cmdOpts)[0]
 	comment := getOption("comment", "", cmdOpts)[0]
-	autoApprove := getOption("auto-approve", "", cmdOpts)[0] == "1"
+	autoApprove, err := getBoolOptionValue("auto-approve", "false", cmdOpts)
+	if err != nil {
+		ac.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	inputRequired, err := getBoolOptionValue("input", "true", cmdOpts)
 	if err != nil {
 		ac.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
@@ -130,8 +134,8 @@ func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts
 
 // startApplyStage a run after it has been planned.
 func startApplyStage(ctx context.Context, comment string, autoApprove, inputRequired bool,
-	client *tharsis.Client, createdRun *sdktypes.Run, meta *Metadata) int {
-
+	client *tharsis.Client, createdRun *sdktypes.Run, meta *Metadata,
+) int {
 	// If the run has transitioned to plannedAndFinished,
 	// plan contains no changes and apply does not have to be run.
 	if createdRun.Status == sdktypes.RunPlannedAndFinished {

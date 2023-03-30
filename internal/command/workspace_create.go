@@ -73,7 +73,11 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 
 	workspacePath := cmdArgs[0]
 	description := getOption("description", "", cmdOpts)[0]
-	ifNotExists := getOption("if-not-exists", "", cmdOpts)[0] == "1"
+	ifNotExists, err := getBoolOptionValue("if-not-exists", "false", cmdOpts)
+	if err != nil {
+		wcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
 	identityPaths := getOption("managed-identity", "", cmdOpts)
 	maxJobDuration := getOption("max-job-duration", "", cmdOpts)[0]
@@ -82,7 +86,11 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 		wcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		wcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(wcc.meta, workspacePath) {
@@ -264,5 +272,3 @@ Usage: %s [global options] workspace create [options] <full_path>
 
 `, wcc.meta.BinaryName, buildHelpText(wcc.buildWorkspaceCreateDefs()))
 }
-
-// The End.

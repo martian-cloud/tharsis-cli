@@ -72,7 +72,11 @@ func (mcc moduleCreateAttestationCommand) doModuleCreateAttestation(ctx context.
 	modulePath := cmdArgs[0]
 	attestationData := getOption("data", "", cmdOpts)[0]
 	description := getOption("description", "", cmdOpts)[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isResourcePathValid(mcc.meta, modulePath) {
@@ -107,8 +111,10 @@ func outputModuleAttestation(meta *Metadata, toJSON bool, attestation *sdktypes.
 	} else {
 		tableInput := [][]string{
 			{"id", "module id", "description", "schema type", "predicate type"},
-			{attestation.Metadata.ID, attestation.ModuleID, attestation.Description,
-				attestation.SchemaType, attestation.PredicateType},
+			{
+				attestation.Metadata.ID, attestation.ModuleID, attestation.Description,
+				attestation.SchemaType, attestation.PredicateType,
+			},
 		}
 		meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}
@@ -154,5 +160,3 @@ Usage: %s [global options] module create-attestation [options] <module-path>
 
 `, mcc.meta.BinaryName, buildHelpText(mcc.buildDefs()))
 }
-
-// The End.

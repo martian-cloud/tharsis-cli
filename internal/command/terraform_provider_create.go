@@ -72,7 +72,11 @@ func (tpcc terraformProviderCreateCommand) doTerraformProviderCreate(ctx context
 	}
 
 	tfProviderPath := cmdArgs[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		tpcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
 	private, err := getBoolOptionValue("private", "true", cmdOpts)
 	if err != nil {
@@ -102,7 +106,8 @@ func (tpcc terraformProviderCreateCommand) doTerraformProviderCreate(ctx context
 }
 
 func (tpcc terraformProviderCreateCommand) outputTerraformProvider(toJSON bool,
-	tfProvider *types.TerraformProvider) int {
+	tfProvider *types.TerraformProvider,
+) int {
 	if toJSON {
 		buf, err := objectToJSON(tfProvider)
 		if err != nil {
@@ -170,5 +175,3 @@ Usage: %s [global options] terraform-provider create [options] <full_path>
 
 `, tpcc.meta.BinaryName, buildHelpText(tpcc.buildTerraformProviderCreateDefs()))
 }
-
-// The End.
