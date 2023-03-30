@@ -50,7 +50,8 @@ func (sal serviceAccountCreateTokenCommand) Run(args []string) int {
 }
 
 func (sal serviceAccountCreateTokenCommand) doServiceAccountCreateToken(ctx context.Context,
-	client *tharsis.Client, opts []string) int {
+	client *tharsis.Client, opts []string,
+) int {
 	sal.meta.Logger.Debugf("will do service-account create-token, %d opts", len(opts))
 
 	defs := sal.buildOptions()
@@ -74,7 +75,11 @@ func (sal serviceAccountCreateTokenCommand) doServiceAccountCreateToken(ctx cont
 
 	serviceAccountPath := cmdArgs[0]
 	token := getOption("token", "", cmdOpts)[0] // required; see help message
-	asJSON := getOption("json", "", cmdOpts)[0] == "1"
+	asJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		sal.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Make sure the service account path has a slash and get the parent group path.
 	if !isResourcePathValid(sal.meta, serviceAccountPath) {
@@ -103,7 +108,6 @@ func (sal serviceAccountCreateTokenCommand) doServiceAccountCreateToken(ctx cont
 
 		sal.meta.UI.Output(marshalled)
 	} else {
-
 		// Just print the token (and not the expiration).
 		sal.meta.UI.Output(resp.Token)
 	}
@@ -154,5 +158,3 @@ Usage: %s [global options] service-account create-token [options] <service_accou
 
 `, sal.meta.BinaryName, buildHelpText(sal.buildOptions()))
 }
-
-// The End.

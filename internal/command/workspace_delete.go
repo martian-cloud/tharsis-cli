@@ -69,7 +69,11 @@ func (wdc workspaceDeleteCommand) doWorkspaceDelete(ctx context.Context, client 
 	}
 
 	workspacePath := cmdArgs[0]
-	force := getOption("force", "", cmdOpts)[0] == "1"
+	force, err := getBoolOptionValue("force", "false", cmdOpts)
+	if err != nil {
+		wdc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(wdc.meta, workspacePath) {
@@ -125,5 +129,3 @@ Usage: %s [global options] workspace delete <full_path>
 
 `, wdc.meta.BinaryName, buildHelpText(wdc.buildWorkspaceDeleteDefs()))
 }
-
-// The End.

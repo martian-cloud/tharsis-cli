@@ -73,7 +73,11 @@ func (mlc moduleListVersionsCommand) doModuleListVersions(ctx context.Context, c
 
 	// Extract option values.
 	modulePath := cmdArgs[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		mlc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	cursor := getOption("cursor", "", cmdOpts)[0]
 	limit, err := strconv.ParseInt(getOption("limit", "100", cmdOpts)[0], 10, 64) // 100 is the maximum allowed by GraphQL
 	if err != nil {
@@ -158,8 +162,10 @@ func (mlc moduleListVersionsCommand) doModuleListVersions(ctx context.Context, c
 		tableInput := make([][]string, len(versionsOutput.ModuleVersions)+1)
 		tableInput[0] = []string{"id", "module id", "version", "shasum", "status", "latest"}
 		for ix, moduleVersion := range versionsOutput.ModuleVersions {
-			tableInput[ix+1] = []string{moduleVersion.Metadata.ID, moduleVersion.ModuleID, moduleVersion.Version,
-				moduleVersion.SHASum, moduleVersion.Status, fmt.Sprintf("%t", moduleVersion.Latest)}
+			tableInput[ix+1] = []string{
+				moduleVersion.Metadata.ID, moduleVersion.ModuleID, moduleVersion.Version,
+				moduleVersion.SHASum, moduleVersion.Status, fmt.Sprintf("%t", moduleVersion.Latest),
+			}
 		}
 		mlc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 		//
@@ -220,5 +226,3 @@ Usage: %s [global options] module list-versions [options] <module-path>
 		buildHelpText(mlc.buildModuleListVersionsDefs()),
 	)
 }
-
-// The End.

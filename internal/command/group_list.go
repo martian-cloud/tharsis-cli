@@ -68,7 +68,11 @@ func (glc groupListCommand) doGroupList(ctx context.Context, client *tharsis.Cli
 	}
 
 	// Extract option values.
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		glc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	cursor := getOption("cursor", "", cmdOpts)[0]
 	limit, err := strconv.ParseInt(getOption("limit", "100", cmdOpts)[0], 10, 64) // 100 is the maximum allowed by GraphQL
 	if err != nil {
@@ -189,5 +193,3 @@ Usage: %s [global options] group list [options]
 		buildHelpText(glc.buildGroupListDefs()),
 	)
 }
-
-// The End.

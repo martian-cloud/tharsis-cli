@@ -71,7 +71,11 @@ func (mcc moduleCreateCommand) doModuleCreate(ctx context.Context, client *thars
 	}
 
 	modulePath := cmdArgs[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
 	private, err := getBoolOptionValue("private", "true", cmdOpts)
 	if err != nil {
@@ -164,5 +168,3 @@ Usage: %s [global options] module create [options] <module-path>
 
 `, mcc.meta.BinaryName, buildHelpText(buildSharedModuleDefs()))
 }
-
-// The End.
