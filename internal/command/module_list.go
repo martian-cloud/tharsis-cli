@@ -68,7 +68,11 @@ func (mlc moduleListCommand) doModuleList(ctx context.Context, client *tharsis.C
 	}
 
 	// Extract option values.
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		mlc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	cursor := getOption("cursor", "", cmdOpts)[0]
 	limit, err := strconv.ParseInt(getOption("limit", "100", cmdOpts)[0], 10, 64) // 100 is the maximum allowed by GraphQL
 	if err != nil {
@@ -151,8 +155,10 @@ func (mlc moduleListCommand) doModuleList(ctx context.Context, client *tharsis.C
 		tableInput := make([][]string, len(modulesOutput.TerraformModules)+1)
 		tableInput[0] = []string{"id", "name", "resource path", "private", "repository url"}
 		for ix, module := range modulesOutput.TerraformModules {
-			tableInput[ix+1] = []string{module.Metadata.ID, module.Name, module.ResourcePath,
-				fmt.Sprintf("%t", module.Private), module.RepositoryURL}
+			tableInput[ix+1] = []string{
+				module.Metadata.ID, module.Name, module.ResourcePath,
+				fmt.Sprintf("%t", module.Private), module.RepositoryURL,
+			}
 		}
 		mlc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 		//
@@ -219,5 +225,3 @@ Usage: %s [global options] module list [options]
 		buildHelpText(mlc.buildModuleListDefs()),
 	)
 }
-
-// The End.

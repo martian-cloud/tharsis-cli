@@ -72,7 +72,11 @@ func (dc destroyCommand) doDestroy(ctx context.Context, client *tharsis.Client, 
 	workspacePath := cmdArgs[0]
 	directoryPath := getOption("directory-path", "", cmdOpts)[0]
 	comment := getOption("comment", "", cmdOpts)[0]
-	autoApprove := getOption("auto-approve", "", cmdOpts)[0] == "1"
+	autoApprove, err := getBoolOptionValue("auto-approve", "false", cmdOpts)
+	if err != nil {
+		dc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	inputRequired, err := getBoolOptionValue("input", "true", cmdOpts)
 	if err != nil {
 		dc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
@@ -145,5 +149,3 @@ Combining --tf-var or --env-var and --tf-var-file or --env-var-file is not allow
 
 `, dc.meta.BinaryName, buildHelpText(defs))
 }
-
-// The End.

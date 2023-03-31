@@ -70,7 +70,11 @@ func (wgc workspaceGetCommand) doWorkspaceGet(ctx context.Context, client *thars
 	}
 
 	workspacePath := cmdArgs[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		wgc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(wgc.meta, workspacePath) {
@@ -111,5 +115,3 @@ Usage: %s [global options] workspace get [options] <full_path>
 
 `, wgc.meta.BinaryName, buildHelpText(buildJSONOptionDefs(optparser.OptionDefinitions{})))
 }
-
-// The End.

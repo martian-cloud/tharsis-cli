@@ -70,7 +70,11 @@ func (wam workspaceAssignManagedIdentityCommand) doWorkspaceAssignManagedIdentit
 
 	workspacePath := cmdArgs[0]
 	identityPath := cmdArgs[1]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		wam.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Do some basic validation on workspace path.
 	if !isNamespacePathValid(wam.meta, workspacePath) {
@@ -139,5 +143,3 @@ Usage: %s [global options] workspace assign-managed-identity [options] <workspac
 
 `, wam.meta.BinaryName, buildHelpText(buildJSONOptionDefs(optparser.OptionDefinitions{})))
 }
-
-// The End.

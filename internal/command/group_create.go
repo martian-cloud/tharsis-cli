@@ -72,8 +72,16 @@ func (gcc groupCreateCommand) doGroupCreate(ctx context.Context, client *tharsis
 
 	groupPath := cmdArgs[0]
 	description := getOption("description", "", cmdOpts)[0]
-	ifNotExists := getOption("if-not-exists", "", cmdOpts)[0] == "1"
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	ifNotExists, err := getBoolOptionValue("if-not-exists", "false", cmdOpts)
+	if err != nil {
+		gcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		gcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	var name, parentPath string
 
 	// Error is already logged.
@@ -170,5 +178,3 @@ Usage: %s [global options] group create [options] <full_path>
 
 `, gcc.meta.BinaryName, buildHelpText(buildCommonCreateOptionDefs("group")))
 }
-
-// The End.
