@@ -69,7 +69,11 @@ func (mgc moduleGetCommand) doModuleGet(ctx context.Context, client *tharsis.Cli
 	}
 
 	modulePath := cmdArgs[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		mgc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	if !isResourcePathValid(mgc.meta, modulePath) {
 		return 1
@@ -108,5 +112,3 @@ Usage: %s [global options] module get [options] <module-path>
 
 `, mgc.meta.BinaryName, buildHelpText(buildJSONOptionDefs(optparser.OptionDefinitions{})))
 }
-
-// The End.

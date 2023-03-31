@@ -69,7 +69,11 @@ func (muc moduleUpdateAttestationCommand) doModuleUpdateAttestation(ctx context.
 	}
 
 	description := getOption("description", "", cmdOpts)[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		muc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Prepare the inputs.
 	input := &sdktypes.UpdateTerraformModuleAttestationInput{
@@ -120,5 +124,3 @@ Usage: %s [global options] module update-attestation [options] <id>
 
 `, muc.meta.BinaryName, buildHelpText(muc.buildUpdateOptionDefs()))
 }
-
-// The End.

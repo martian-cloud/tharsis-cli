@@ -68,7 +68,11 @@ func (rc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Clie
 		return 1
 	}
 
-	force := getOption("force", "", cmdOpts)[0] == "1"
+	force, err := getBoolOptionValue("force", "false", cmdOpts)
+	if err != nil {
+		rc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	id := cmdArgs[0]
 
 	run, err := client.Run.GetRun(ctx, &sdktypes.GetRunInput{ID: id})
@@ -154,5 +158,3 @@ Usage: %s [global options] run cancel [options] <id>
 
 `, rc.meta.BinaryName, buildHelpText(rc.buildRunCancelDefs()))
 }
-
-// The End.

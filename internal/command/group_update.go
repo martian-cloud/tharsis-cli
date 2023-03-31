@@ -70,7 +70,11 @@ func (guc groupUpdateCommand) doGroupUpdate(ctx context.Context, client *tharsis
 
 	path := cmdArgs[0]
 	description := getOption("description", "", cmdOpts)[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		guc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(guc.meta, path) {
@@ -115,5 +119,3 @@ Usage: %s [global options] group update [options] <full_path>
 
 `, guc.meta.BinaryName, buildHelpText(buildCommonUpdateOptionDefs("group")))
 }
-
-// The End.

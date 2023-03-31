@@ -71,7 +71,11 @@ func (mgc moduleGetVersionCommand) doModuleGetVersion(ctx context.Context, clien
 
 	modulePath := cmdArgs[0]
 	versionTag := getOption("version", "", cmdOpts)[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		mgc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	if !isResourcePathValid(mgc.meta, modulePath) {
 		return 1
@@ -162,5 +166,3 @@ Usage: %s [global options] module get-version [options] <module-path>
 
 `, mgc.meta.BinaryName, buildHelpText(mgc.buildModuleGetVersionDefs()))
 }
-
-// The End.

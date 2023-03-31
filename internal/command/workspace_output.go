@@ -85,8 +85,16 @@ func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client
 	}
 
 	workspacePath := cmdArgs[0]
-	raw := getOption("raw", "", cmdOpts)[0] == "1"
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	raw, err := getBoolOptionValue("raw", "false", cmdOpts)
+	if err != nil {
+		wo.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		wo.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	outputName := getOption("output-name", "", cmdOpts)[0]
 
 	// Validate the workspace path.
@@ -137,8 +145,8 @@ func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client
 // displayWorkspaceOutput is a helper function to modify
 // the final output based on the options.
 func (wo workspaceOutputsCommand) displayWorkspaceOutput(raw, toJSON bool, outputName string,
-	outputs []sdktypes.StateVersionOutput) int {
-
+	outputs []sdktypes.StateVersionOutput,
+) int {
 	outputMap, err := wo.buildStateOutputValueMap(outputs)
 	if err != nil {
 		wo.meta.Logger.Error(output.FormatError("failed to build state version output value map", err))
@@ -295,5 +303,3 @@ Usage: %s [global options] workspace outputs [options] <full_path>
 Combining --raw and --json is not allowed.
 `, wo.meta.BinaryName, buildHelpText(wo.buildWorkspaceOutputsDefs()))
 }
-
-// The End.

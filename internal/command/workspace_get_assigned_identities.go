@@ -52,8 +52,8 @@ func (wam workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 }
 
 func (wam workspaceGetAssignedManagedIdentitiesCommand) doWorkspaceGetAssignedManagedIdentities(ctx context.Context,
-	client *tharsis.Client, opts []string) int {
-
+	client *tharsis.Client, opts []string,
+) int {
 	wam.meta.Logger.Debugf("will do workspace get-assigned-managed-identities, %d opts", len(opts))
 
 	defs := buildJSONOptionDefs(optparser.OptionDefinitions{})
@@ -73,7 +73,11 @@ func (wam workspaceGetAssignedManagedIdentitiesCommand) doWorkspaceGetAssignedMa
 	}
 
 	workspacePath := cmdArgs[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		wam.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(wam.meta, workspacePath) {
@@ -103,8 +107,10 @@ func (wam workspaceGetAssignedManagedIdentitiesCommand) doWorkspaceGetAssignedMa
 		tableInput := make([][]string, len(identities)+1)
 		tableInput[0] = []string{"name", "resourcePath", "description", "id"}
 		for ix, identity := range identities {
-			tableInput[ix+1] = []string{identity.Name, identity.ResourcePath,
-				identity.Description, identity.Metadata.ID}
+			tableInput[ix+1] = []string{
+				identity.Name, identity.ResourcePath,
+				identity.Description, identity.Metadata.ID,
+			}
 		}
 		wam.meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}

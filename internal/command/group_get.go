@@ -69,7 +69,11 @@ func (ggc groupGetCommand) doGroupGet(ctx context.Context, client *tharsis.Clien
 	}
 
 	path := cmdArgs[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		ggc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(ggc.meta, path) {
@@ -109,5 +113,3 @@ Usage: %s [global options] group get [options] <full_path>
 
 `, ggc.meta.BinaryName, buildHelpText(buildJSONOptionDefs(optparser.OptionDefinitions{})))
 }
-
-// The End.

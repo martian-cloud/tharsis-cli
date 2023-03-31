@@ -73,7 +73,11 @@ func (mlc moduleListAttestationsCommand) doModuleListAttestations(ctx context.Co
 
 	// Extract option values.
 	modulePath := cmdArgs[0]
-	toJSON := getOption("json", "", cmdOpts)[0] == "1"
+	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	if err != nil {
+		mlc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 	cursor := getOption("cursor", "", cmdOpts)[0]
 	limit, err := strconv.ParseInt(getOption("limit", "100", cmdOpts)[0], 10, 64) // 100 is the maximum allowed by GraphQL
 	if err != nil {
@@ -187,8 +191,10 @@ func (mlc moduleListAttestationsCommand) doModuleListAttestations(ctx context.Co
 		tableInput := make([][]string, len(attestationsOutput.ModuleAttestations)+1)
 		tableInput[0] = []string{"id", "module id", "description", "schema type", "predicate type"}
 		for ix, attestation := range attestationsOutput.ModuleAttestations {
-			tableInput[ix+1] = []string{attestation.Metadata.ID, attestation.ModuleID,
-				attestation.Description, attestation.SchemaType, attestation.PredicateType}
+			tableInput[ix+1] = []string{
+				attestation.Metadata.ID, attestation.ModuleID,
+				attestation.Description, attestation.SchemaType, attestation.PredicateType,
+			}
 		}
 		mlc.meta.UI.Output(tableformatter.FormatTable(tableInput))
 		// Must return the new cursor at the end of the list of module attestations.
@@ -261,5 +267,3 @@ Usage: %s [global options] module list-attestations [options] <module-path>
 		buildHelpText(mlc.buildModuleListAttestationsDefs()),
 	)
 }
-
-// The End.
