@@ -178,6 +178,13 @@ func realMain() int {
 		"workspace update":                          command.NewWorkspaceUpdateCommandFactory(meta),
 		"workspace delete":                          command.NewWorkspaceDeleteCommandFactory(meta),
 		"workspace outputs":                         command.NewWorkspaceOutputsCommandFactory(meta),
+		"runner-agent":                              command.NewRunnerAgentCommandFactory(meta),
+		"runner-agent get":                          command.NewRunnerAgentGetCommandFactory(meta),
+		"runner-agent create":                       command.NewRunnerAgentCreateCommandFactory(meta),
+		"runner-agent update":                       command.NewRunnerAgentUpdateCommandFactory(meta),
+		"runner-agent delete":                       command.NewRunnerAgentDeleteCommandFactory(meta),
+		"runner-agent assign-service-account":       command.NewRunnerAgentAssignServiceAccountCommandFactory(meta),
+		"runner-agent unassign-service-account":     command.NewRunnerAgentUnassignServiceAccountCommandFactory(meta),
 	}
 
 	// Set the profile name.
