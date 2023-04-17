@@ -20,33 +20,33 @@ func NewRunCommandFactory(meta *Metadata) func() (cli.Command, error) {
 	}
 }
 
-func (wc runCommand) Run(args []string) int {
-	wc.meta.Logger.Debugf("Starting the 'run' command with %d arguments:", len(args))
+func (rc runCommand) Run(args []string) int {
+	rc.meta.Logger.Debugf("Starting the 'run' command with %d arguments:", len(args))
 	for ix, arg := range args {
-		wc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+		rc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
 	// Show the help text.
-	wc.meta.UI.Output(wc.HelpRun(true))
+	rc.meta.UI.Output(rc.HelpRun(true))
 	return 1
 }
 
-func (wc runCommand) Synopsis() string {
+func (rc runCommand) Synopsis() string {
 	return "Do operations on runs."
 }
 
-func (wc runCommand) Help() string {
-	return wc.HelpRun(false)
+func (rc runCommand) Help() string {
+	return rc.HelpRun(false)
 }
 
 // HelpRun produces the help string for the 'run' command.
-func (wc runCommand) HelpRun(subCommands bool) string {
+func (rc runCommand) HelpRun(subCommands bool) string {
 	usage := fmt.Sprintf(`
 Usage: %s [global options] run ...
 
    The run commands do operations on runs. Currently, allows
    cancelling runs.
-`, wc.meta.BinaryName)
+`, rc.meta.BinaryName)
 	sc := `
 
 Subcommands:
