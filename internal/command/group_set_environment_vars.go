@@ -70,14 +70,16 @@ func (gsv groupSetEnvironmentVarsCommand) doGroupSetEnvironmentVars(ctx context.
 	}
 
 	namespacePath := cmdArgs[0]
-	envVarFile := getOption("env-var-file", "", cmdOpts)[0]
+	envVarFiles := getOptionSlice("env-var-file", cmdOpts)
 
 	// Error is already logged.
 	if !isNamespacePathValid(gsv.meta, namespacePath) {
 		return 1
 	}
 
-	variables, err := varparser.ProcessVariables(varparser.ProcessVariablesInput{EnvVarFilePath: envVarFile})
+	parser := varparser.NewVariableParser(nil, false)
+
+	variables, err := parser.ParseEnvironmentVariables(&varparser.ParseEnvironmentVariablesInput{EnvVarFilePaths: envVarFiles})
 	if err != nil {
 		gsv.meta.Logger.Error(output.FormatError("failed to process environment variables", err))
 		return 1
