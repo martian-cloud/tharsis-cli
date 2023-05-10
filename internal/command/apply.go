@@ -99,10 +99,10 @@ func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts
 	}
 	moduleSource := getOption("module-source", "", cmdOpts)[0]
 	moduleVersion := getOption("module-version", "", cmdOpts)[0]
-	tfVariables := getOption("tf-var", "", cmdOpts)
-	envVariables := getOption("env-var", "", cmdOpts)
-	tfVarFile := getOption("tf-var-file", "", cmdOpts)[0]
-	envVarFile := getOption("env-var-file", "", cmdOpts)[0]
+	tfVariables := getOptionSlice("tf-var", cmdOpts)
+	envVariables := getOptionSlice("env-var", cmdOpts)
+	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
+	envVarFiles := getOptionSlice("env-var-file", cmdOpts)
 	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
 
 	// Error is already logged.
@@ -114,8 +114,8 @@ func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts
 	createdRun, exitCode := createRun(ctx, client, ac.meta, &runInput{
 		workspacePath:    workspacePath,
 		directoryPath:    directoryPath,
-		tfVarFilePath:    tfVarFile,
-		envVarFilePath:   envVarFile,
+		tfVarFilePath:    tfVarFiles,
+		envVarFilePath:   envVarFiles,
 		moduleSource:     moduleSource,
 		moduleVersion:    moduleVersion,
 		terraformVersion: terraformVersion,
@@ -296,12 +296,28 @@ Usage: %s [global options] apply [options] <workspace>
    approving any changes to the infrastructure, running
    from remote module sources and more.
 
+   Terraform variables may be passed in via supported
+   options or from the environment with a 'TF_VAR_'
+   prefix.
+
+   Variable parsing precedence:
+     1. Terraform variables from the environment.
+     2. terraform.tfvars file from module's directory,
+        if present.
+     3. terraform.tfvars.json file from module's
+        directory, if present.
+     4. *.auto.tfvars, *.auto.tfvars.json files
+        from the module's directory, if present.
+     5. --tf-var-file option(s).
+     6. --tf-var option(s).
+
+   NOTE: If the same variable is assigned multiple
+   values, the last value found will be used. A
+   --tf-var option will override the values from a
+   *.tfvars file which will override values from
+   the environment.
+
 %s
-
-
-Combining --tf-var or --env-var and --tf-var-file or --env-var-file is not allowed.
 
 `, ac.meta.BinaryName, buildHelpText(defs))
 }
-
-// The End.

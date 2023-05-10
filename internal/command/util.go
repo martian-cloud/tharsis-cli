@@ -16,9 +16,6 @@ const (
 	// Useful for parsing paths, and lists. Used by several modules.
 	sep = "/"
 
-	// Add any opt names here when an empty slice needs to be returned.
-	emptySlice = "tf-var env-var managed-identity"
-
 	// For clearly marking required option in help text.
 	red   = "\033[31m"
 	reset = "\033[0m"
@@ -34,12 +31,19 @@ func getOption(optName string, defaultValue string, options map[string][]string)
 		return gotVal
 	}
 
-	// Handle case that would return a slice of length 1 when zero is expected.
-	if strings.Contains(emptySlice, optName) {
-		return []string{}
+	return []string{defaultValue}
+}
+
+// getOptionSlice returns the slice of values for an option that was passed
+// in multiple times to a subcommand. This correctly handles the behavior
+// where an empty slice is expected when option wasn't provided.
+func getOptionSlice(optName string, options map[string][]string) []string {
+	gotVal, ok := options[optName]
+	if ok {
+		return gotVal
 	}
 
-	return []string{defaultValue}
+	return []string{}
 }
 
 // getBoolOptionValue returns a boolean based on a string option argument.
