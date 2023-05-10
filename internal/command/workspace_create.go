@@ -79,7 +79,7 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 		return 1
 	}
 	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
-	identityPaths := getOption("managed-identity", "", cmdOpts)
+	identityPaths := getOptionSlice("managed-identity", cmdOpts)
 	maxJobDuration := getOption("max-job-duration", "", cmdOpts)[0]
 	preventDestroyPlan, err := getBoolOptionValue("prevent-destroy-plan", "false", cmdOpts)
 	if err != nil {

@@ -71,14 +71,16 @@ func (gsv groupSetTerraformVarsCommand) doGroupSetTerraformVars(ctx context.Cont
 	}
 
 	namespacePath := cmdArgs[0]
-	tfVarFile := getOption("tf-var-file", "", cmdOpts)[0]
+	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
 
 	// Error is already logged.
 	if !isNamespacePathValid(gsv.meta, namespacePath) {
 		return 1
 	}
 
-	variables, err := varparser.ProcessVariables(varparser.ProcessVariablesInput{TfVarFilePath: tfVarFile})
+	parser := varparser.NewVariableParser(nil, false)
+
+	variables, err := parser.ParseTerraformVariables(&varparser.ParseTerraformVariablesInput{TfVarFilePaths: tfVarFiles})
 	if err != nil {
 		gsv.meta.Logger.Error(output.FormatError("failed to process terraform variables", err))
 		return 1
