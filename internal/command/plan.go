@@ -29,8 +29,8 @@ const (
 type runInput struct {
 	workspacePath    string
 	directoryPath    string
-	tfVarFilePath    string
-	envVarFilePath   string
+	tfVarFilePath    []string
+	envVarFilePath   []string
 	moduleSource     string
 	moduleVersion    string
 	terraformVersion string
@@ -101,10 +101,10 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 
 	workspacePath := cmdArgs[0]
 	directoryPath := getOption("directory-path", "", cmdOpts)[0]
-	tfVariables := getOption("tf-var", "", cmdOpts)
-	envVariables := getOption("env-var", "", cmdOpts)
-	tfVarFile := getOption("tf-var-file", "", cmdOpts)[0]
-	envVarFile := getOption("env-var-file", "", cmdOpts)[0]
+	tfVariables := getOptionSlice("tf-var", cmdOpts)
+	envVariables := getOptionSlice("env-var", cmdOpts)
+	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
+	envVarFiles := getOptionSlice("env-var-file", cmdOpts)
 	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
 	destroy, err := getBoolOptionValue("destroy", "false", cmdOpts)
 	if err != nil {
@@ -121,8 +121,8 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 	_, exitCode := createRun(ctx, client, pc.meta, &runInput{
 		workspacePath:    workspacePath,
 		directoryPath:    directoryPath,
-		tfVarFilePath:    tfVarFile,
-		envVarFilePath:   envVarFile,
+		tfVarFilePath:    tfVarFiles,
+		envVarFilePath:   envVarFiles,
 		terraformVersion: terraformVersion,
 		tfVariables:      tfVariables,
 		envVariables:     envVariables,
@@ -150,29 +150,53 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 		return nil, 1
 	}
 
-	// Must not have both a file path and variable flags.
-	if (input.tfVarFilePath != "" || input.envVarFilePath != "") && (len(input.tfVariables) > 0 || len(input.envVariables) > 0) {
-		meta.Logger.Error(output.FormatError("either (-tf-var-file / -env-var-file) or (-tf-var / -env-var) may be used", nil))
-		return nil, 1
+	directoryPath := input.directoryPath
+
+	// If directory path was not specified, default it to cwd or ".".
+	if directoryPath == "" {
+		var wErr error
+		directoryPath, wErr = os.Getwd()
+		if wErr != nil {
+			directoryPath = "."
+		}
 	}
 
-	// Prepare input for variable parser.
-	processVariablesInput := varparser.ProcessVariablesInput{
+	processTFVariablesInput := &varparser.ParseTerraformVariablesInput{
 		TfVariables:    input.tfVariables,
-		EnvVariables:   input.envVariables,
-		TfVarFilePath:  input.tfVarFilePath,
-		EnvVarFilePath: input.envVarFilePath,
+		TfVarFilePaths: input.tfVarFilePath,
 	}
 
-	// Process variables string or files.
-	variables, err := varparser.ProcessVariables(processVariablesInput)
+	meta.Logger.Debugf("plan: ParseTerraformVariables input: %#v", processTFVariablesInput)
+
+	// We want terraform variables processed automatically from the environment.
+	parser := varparser.NewVariableParser(&directoryPath, true)
+
+	tfVars, err := parser.ParseTerraformVariables(processTFVariablesInput)
 	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to process variables", err))
+		meta.Logger.Error(output.FormatError("failed to parse terraform variables", err))
 		return nil, 1
 	}
+
+	processEnvVariablesInput := &varparser.ParseEnvironmentVariablesInput{
+		EnvVariables:    input.envVariables,
+		EnvVarFilePaths: input.envVarFilePath,
+	}
+
+	meta.Logger.Debugf("plan: ParseEnvironmentVariables input: %#v", processEnvVariablesInput)
+
+	envVars, err := parser.ParseEnvironmentVariables(processEnvVariablesInput)
+	if err != nil {
+		meta.Logger.Error(output.FormatError("failed to parse environment variables", err))
+		return nil, 1
+	}
+
+	// Join both terraform and environment variables into a single slice.
+	allVars := []varparser.Variable{}
+	allVars = append(allVars, tfVars...)
+	allVars = append(allVars, envVars...)
 
 	runVariables := []sdktypes.RunVariable{}
-	for _, v := range variables {
+	for _, v := range allVars {
 		vCopy := v
 		runVariables = append(runVariables, sdktypes.RunVariable{
 			Key:      vCopy.Key,
@@ -195,17 +219,6 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 	// If module source was not specified, check and maybe default the directory path.
 	var createdConfigurationVersionID *string
 	if input.moduleSource == "" {
-		directoryPath := input.directoryPath
-
-		// If directory path was not specified, default it to cwd or ".".
-		if directoryPath == "" {
-			var wErr error
-			directoryPath, wErr = os.Getwd()
-			if wErr != nil {
-				directoryPath = "."
-			}
-		}
-
 		// Check, and process the directory path.
 		pErr := processDirectoryPath(directoryPath, input.isDestroy)
 		if pErr != nil {
@@ -529,10 +542,28 @@ Usage: %s [global options] plan [options] <workspace>
    Terraform / environment variables and planning a
    destroy run.
 
+   Terraform variables may be passed in via supported
+   options or from the environment with a 'TF_VAR_'
+   prefix.
+
+   Variable parsing precedence:
+     1. Terraform variables from the environment.
+     2. terraform.tfvars file from module's directory,
+        if present.
+     3. terraform.tfvars.json file from module's
+        directory, if present.
+     4. *.auto.tfvars, *.auto.tfvars.json files
+        from the module's directory, if present.
+     5. --tf-var-file option(s).
+     6. --tf-var option(s).
+
+   NOTE: If the same variable is assigned multiple
+   values, the last value found will be used. A
+   --tf-var option will override the values from a
+   *.tfvars file which will override values from
+   the environment.
+
 %s
-
-
-Combining --tf-var or --env-var and --tf-var-file or --env-var-file is not allowed.
 
 `, pc.meta.BinaryName, buildHelpText(pc.buildPlanDefs()))
 }
