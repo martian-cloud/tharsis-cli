@@ -272,10 +272,12 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 
 	meta.Logger.Debugf("plan: createdRun: %#v", createdRun)
 
+	lastSeenLogSize := int32(0)
 	logsInput := &sdktypes.JobLogsSubscriptionInput{
-		JobID:         *createdRun.Plan.CurrentJobID,
-		RunID:         createdRun.Metadata.ID,
-		WorkspacePath: createdRun.WorkspacePath,
+		JobID:           *createdRun.Plan.CurrentJobID,
+		RunID:           createdRun.Metadata.ID,
+		WorkspacePath:   createdRun.WorkspacePath,
+		LastSeenLogSize: &lastSeenLogSize,
 	}
 
 	meta.Logger.Debugf("plan: job logs input: %#v", logsInput)
