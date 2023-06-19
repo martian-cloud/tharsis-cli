@@ -188,10 +188,12 @@ func startApplyStage(ctx context.Context, comment string, autoApprove, inputRequ
 		return 1
 	}
 
+	lastSeenLogSize := int32(0)
 	logsInput := &sdktypes.JobLogsSubscriptionInput{
-		JobID:         *appliedRun.Apply.CurrentJobID,
-		RunID:         appliedRun.Metadata.ID,
-		WorkspacePath: appliedRun.WorkspacePath,
+		JobID:           *appliedRun.Apply.CurrentJobID,
+		RunID:           appliedRun.Metadata.ID,
+		WorkspacePath:   appliedRun.WorkspacePath,
+		LastSeenLogSize: &lastSeenLogSize,
 	}
 
 	meta.Logger.Debugf("apply: job logs input: %#v", logsInput)
