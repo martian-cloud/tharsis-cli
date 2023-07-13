@@ -218,7 +218,7 @@ func (mlc moduleListAttestationsCommand) buildModuleListAttestationsDefs() optpa
 
 	defs["sort-by"] = &optparser.OptionDefinition{
 		Arguments: []string{"Sort_By"},
-		Synopsis:  "Sort by this field: PREDICATE or UPDATED.",
+		Synopsis:  "Sort by this field: PREDICATE or CREATED.",
 	}
 
 	defs["version"] = &optparser.OptionDefinition{
