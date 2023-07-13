@@ -26,7 +26,7 @@ workflow:
 
 variables:
   # Go project settings
-  GO_VERSION: "1.18.2"
+  GO_VERSION: "1.20"
   CGO_ENABLED: "0"
   GOPATH_RELATIVE_PATH: .go
   GOPATH: "$CI_PROJECT_DIR/$GOPATH_RELATIVE_PATH"
@@ -64,7 +64,7 @@ default:
 
 .on_tag_events:
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: "$CI_COMMIT_TAG"
 
 .on_default_branch_and_merge_train_with_golang_changes:
   rules:
@@ -91,12 +91,12 @@ tests:
     - go install github.com/boumenot/gocover-cobertura@latest
   script:
     - |
-        go mod download
-        go vet $(go list ./... | grep -v /vendor/)
-        go test -covermode=atomic -coverpkg  gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/... -v -coverprofile .coverage ./... 2>&1 | tee .test-results
-        go tool cover -func .coverage | tail
-        go-junit-report -set-exit-code < .test-results > .xunit-results.xml
-        gocover-cobertura < .coverage > coverage.xml
+      go mod download
+      go vet $(go list ./... | grep -v /vendor/)
+      go test -covermode=atomic -coverpkg  gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/... -v -coverprofile .coverage ./... 2>&1 | tee .test-results
+      go tool cover -func .coverage | tail
+      go-junit-report -set-exit-code < .test-results > .xunit-results.xml
+      gocover-cobertura < .coverage > coverage.xml
   artifacts:
     when: always
     reports:
@@ -153,13 +153,13 @@ Upload Tharsis CLI:
   image: curlimages/curl:latest
   script:
     - |
-        set -x
-        BINARIES="./bin/*"
-        for BINARY in $BINARIES
-        do
-          BINARY_NAME=$(basename $BINARY)
-          curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file $BINARY "${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${BINARY_NAME}"
-        done
+      set -x
+      BINARIES="./bin/*"
+      for BINARY in $BINARIES
+      do
+        BINARY_NAME=$(basename $BINARY)
+        curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file $BINARY "${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${BINARY_NAME}"
+      done
   rules:
     - !reference [.on_tag_events, rules]
 
@@ -233,7 +233,7 @@ license_scanning:
     - make build
     - lichen -j lichen.json $CI_PROJECT_DIR/tharsis
     - >
-        jq '{"version": "2.1","licenses": [ . | .Modules[] | .Licenses[] | {"id": .Name,"name": .Name, "url": ("https://opensource.org/licenses/" + .Name) } ] | unique,"dependencies":[ . | .Modules[] | {"name": .Path, "version": .Version, "package_manager": "go","path": "go.sum","licenses": [ .Licenses[] | .Name]}]}' lichen.json > gl-license-scanning-report.json
+      jq '{"version": "2.1","licenses": [ . | .Modules[] | .Licenses[] | {"id": .Name,"name": .Name, "url": ("https://opensource.org/licenses/" + .Name) } ] | unique,"dependencies":[ . | .Modules[] | {"name": .Path, "version": .Version, "package_manager": "go","path": "go.sum","licenses": [ .Licenses[] | .Name]}]}' lichen.json > gl-license-scanning-report.json
   cache:
     <<: *cache-template
   artifacts:
