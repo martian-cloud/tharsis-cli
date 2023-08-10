@@ -38,6 +38,8 @@ type runInput struct {
 	envVariables     []string
 	isDestroy        bool
 	isSpeculative    bool
+	targetAddresses  []string
+	refresh          bool
 }
 
 // planCommand is the top-level structure for the plan command.
@@ -108,7 +110,13 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
 	destroy, err := getBoolOptionValue("destroy", "false", cmdOpts)
 	if err != nil {
-		pc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		pc.meta.UI.Error(output.FormatError("failed to parse boolean value for -destroy option", err))
+		return 1
+	}
+	targetAddresses := getOptionSlice("target", cmdOpts)
+	refresh, err := getBoolOptionValue("refresh", "true", cmdOpts)
+	if err != nil {
+		pc.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh option", err))
 		return 1
 	}
 
@@ -128,13 +136,15 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 		envVariables:     envVariables,
 		isDestroy:        destroy,
 		isSpeculative:    true,
+		targetAddresses:  targetAddresses,
+		refresh:          refresh,
 	})
 
 	// If there was an error, the error message has already been logged.
 	return exitCode
 }
 
-// innerPlan does all the inner work of the plan command.
+// createRun does all the inner work of the plan, apply, and destroy commands.
 // If there is a problem, log an error and return non-zero.
 // The apply command can also use this function.
 func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, input *runInput) (*sdktypes.Run, int) {
@@ -257,6 +267,8 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 		ModuleSource:           moduleSourceP,
 		ModuleVersion:          moduleVersionP,
 		Variables:              runVariables,
+		TargetAddresses:        input.targetAddresses,
+		Refresh:                input.refresh,
 	}
 
 	if input.terraformVersion != "" {
@@ -510,6 +522,14 @@ func buildCommonRunOptionDefs() optparser.OptionDefinitions {
 		"terraform-version": {
 			Arguments: []string{"Terraform_Version"},
 			Synopsis:  "The Terraform CLI version to use for the run.",
+		},
+		"target": {
+			Arguments: []string{"Resource_Address"},
+			Synopsis:  "The Terraform address of the resources to be acted upon. (Use the option multiple times to specify multiple resources.)",
+		},
+		"refresh": {
+			Arguments: []string{"true|false"},
+			Synopsis:  "Whether to do the usual refresh step; default is true; use --refresh=false to disable the usual refresh step.",
 		},
 	}
 }

@@ -93,6 +93,12 @@ func (dc destroyCommand) doDestroy(ctx context.Context, client *tharsis.Client, 
 	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
 	envVarFiles := getOptionSlice("env-var-file", cmdOpts)
 	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
+	targetAddresses := getOptionSlice("target", cmdOpts)
+	refresh, err := getBoolOptionValue("refresh", "true", cmdOpts)
+	if err != nil {
+		dc.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh option", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(dc.meta, workspacePath) {
@@ -112,6 +118,8 @@ func (dc destroyCommand) doDestroy(ctx context.Context, client *tharsis.Client, 
 		envVariables:     envVariables,
 		isDestroy:        true,
 		isSpeculative:    false,
+		targetAddresses:  targetAddresses,
+		refresh:          refresh,
 	})
 	if exitCode != 0 {
 		// The error message has already been logged.
