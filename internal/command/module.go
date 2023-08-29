@@ -58,7 +58,6 @@ Subcommands:
     get-version                  Get a single module version.
     list                         List modules.
     list-attestations            List attestations for a module.
-    list-version-attestations    List attestations for a module version.
     list-versions                List module versions.
     update                       Update a module.
     update-attestation           Update a module attestation.

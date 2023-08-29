@@ -27,18 +27,18 @@ const (
 )
 
 type runInput struct {
-	workspacePath    string
-	directoryPath    string
-	tfVarFilePath    []string
-	envVarFilePath   []string
-	moduleSource     string
 	moduleVersion    string
+	directoryPath    string
 	terraformVersion string
+	workspacePath    string
+	moduleSource     string
+	envVarFilePath   []string
+	tfVarFilePath    []string
 	tfVariables      []string
 	envVariables     []string
+	targetAddresses  []string
 	isDestroy        bool
 	isSpeculative    bool
-	targetAddresses  []string
 	refresh          bool
 }
 
