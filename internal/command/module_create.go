@@ -82,10 +82,29 @@ func (mcc moduleCreateCommand) doModuleCreate(ctx context.Context, client *thars
 		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
+	ifNotExists, err := getBoolOptionValue("if-not-exists", "false", cmdOpts)
+	if err != nil {
+		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isResourcePathValid(mcc.meta, modulePath) {
 		return 1
+	}
+
+	if ifNotExists {
+		module, gErr := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{
+			Path: &modulePath,
+		})
+		if gErr != nil && !tharsis.IsNotFoundError(gErr) {
+			mcc.meta.Logger.Error(output.FormatError("failed to get module", gErr))
+			return 1
+		}
+
+		if module != nil {
+			return outputModule(mcc.meta, toJSON, module)
+		}
 	}
 
 	// Create module
@@ -144,6 +163,10 @@ func buildSharedModuleDefs() optparser.OptionDefinitions {
 			Arguments: []string{"Repository_URL"},
 			Synopsis:  "The repository URL for this module.",
 		},
+		"if-not-exists": {
+			Arguments: []string{},
+			Synopsis:  "Create a module if it does not already exist.",
+		},
 	}
 
 	return buildJSONOptionDefs(defs)
@@ -163,6 +186,7 @@ func (mcc moduleCreateCommand) HelpModuleCreate() string {
 Usage: %s [global options] module create [options] <module-path>
 
    The module create command creates a new module.
+   Idempotent when used with --if-not-exists option.
 
 %s
 
