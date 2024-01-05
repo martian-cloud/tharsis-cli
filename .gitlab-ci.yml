@@ -3,7 +3,6 @@ include:
   - template: Jobs/SAST.gitlab-ci.yml
   - template: Jobs/SAST-IaC.gitlab-ci.yml
   - template: Jobs/Secret-Detection.gitlab-ci.yml
-  - template: Code-Quality.gitlab-ci.yml
   # Commented out as we are using our own tool for license scanning
   # - template: Jobs/License-Scanning.gitlab-ci.yml
 
@@ -114,7 +113,7 @@ linting:
   before_script:
     - export PATH=$PATH:$GOPATH/bin
     - apk add git bash openssh ca-certificates
-    - go install github.com/mgechev/revive@latest
+    - go install github.com/mgechev/revive@$GO_LINTER_VERSION
   script:
     - go mod download
     - revive -set_exit_status $(go list ./... | grep -v /vendor/)
@@ -211,15 +210,6 @@ kics-iac-sast:
 secret_detection:
   rules:
     - !reference [.on_merge_request_and_merged_events, rules]
-
-code_quality:
-  tags:
-    - oss
-    - docker
-  artifacts:
-    paths: [gl-code-quality-report.json]
-  rules:
-    - !reference [.on_default_branch_and_merge_train_with_golang_changes, rules]
 
 license_scanning:
   stage: test
