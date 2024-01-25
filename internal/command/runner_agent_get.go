@@ -112,7 +112,7 @@ func outputRunnerAgent(meta *Metadata, toJSON bool, runnerAgent *sdktypes.Runner
 				runnerAgent.Name,
 				runnerAgent.Description,
 				runnerAgent.ResourcePath,
-				runnerAgent.Type,
+				string(runnerAgent.Type),
 			},
 		}
 		meta.UI.Output(tableformatter.FormatTable(tableInput))
