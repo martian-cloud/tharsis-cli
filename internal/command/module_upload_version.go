@@ -234,5 +234,3 @@ Usage: %s [global options] module upload-version [options] <module-path>
 
 `, muc.meta.BinaryName, buildHelpText(muc.buildModuleUploadVersionDefs()))
 }
-
-// The End.

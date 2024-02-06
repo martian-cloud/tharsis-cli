@@ -182,5 +182,3 @@ func convertToSetNamespaceVariablesInput(vars []varparser.Variable) []types.SetN
 	}
 	return response
 }
-
-// The End.

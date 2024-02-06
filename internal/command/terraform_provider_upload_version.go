@@ -428,5 +428,3 @@ Usage: %s [global options] terraform-provider upload-version [options] <full_pat
 
 `, tpuc.meta.BinaryName, buildHelpText(tpuc.buildTerraformProviderUploadVersionDefs()))
 }
-
-// The End.

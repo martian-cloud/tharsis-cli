@@ -130,5 +130,3 @@ Usage: %s [global options] workspace set-environment-vars [options] <workspace>
 
 `, wsv.meta.BinaryName, buildHelpText(buildEnvironmentDefs()))
 }
-
-// The End.
