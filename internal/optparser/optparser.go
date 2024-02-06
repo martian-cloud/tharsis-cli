@@ -123,5 +123,3 @@ func verifyRequiredOptions(definitions OptionDefinitions, options map[string][]s
 
 	return nil
 }
-
-// The End.

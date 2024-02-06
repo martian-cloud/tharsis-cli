@@ -104,5 +104,3 @@ Usage: %s [global options] module delete-version <id>
 
 `, mdc.meta.BinaryName)
 }
-
-// The End.

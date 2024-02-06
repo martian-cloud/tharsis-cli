@@ -116,5 +116,3 @@ Usage: %s [global options] module delete <module-path>
 
 `, mdc.meta.BinaryName)
 }
-
-// The End.

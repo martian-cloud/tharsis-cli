@@ -63,5 +63,3 @@ func (m *Metadata) ReadSettings() (*settings.Settings, error) {
 
 	return currentSettings, nil
 }
-
-// The End.

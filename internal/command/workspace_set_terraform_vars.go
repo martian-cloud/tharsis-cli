@@ -130,5 +130,3 @@ Usage: %s [global options] workspace set-terraform-vars [options] <workspace>
 
 `, wsv.meta.BinaryName, buildHelpText(buildTerraformDefs()))
 }
-
-// The End.
