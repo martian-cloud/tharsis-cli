@@ -196,5 +196,3 @@ If neither option is specified, the command prompts for values.
 If the URL value is "-", it deletes that profile.
 `, cc.meta.BinaryName, buildHelpText(buildConfigureDefs()))
 }
-
-// The End.

@@ -104,5 +104,3 @@ Usage: %s [global options] module delete-attestation <id>
 
 `, mdc.meta.BinaryName)
 }
-
-// The End.

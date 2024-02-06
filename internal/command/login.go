@@ -865,5 +865,3 @@ func (lc loginCommand) terminateWebServer(server *http.Server) error {
 
 	return nil
 }
-
-// The End.

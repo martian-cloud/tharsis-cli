@@ -141,5 +141,3 @@ Usage: %s [global options] group set-terraform-vars [options] <group>
 
 `, gsv.meta.BinaryName, buildHelpText(buildTerraformDefs()))
 }
-
-// The End.

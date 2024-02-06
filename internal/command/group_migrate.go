@@ -154,5 +154,3 @@ Usage: %s [global options] group migrate [options] <full_path>
 
 `, gmc.meta.BinaryName, buildHelpText(gmc.buildGroupMigrateOptionDefs()))
 }
-
-// The End.

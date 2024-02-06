@@ -140,5 +140,3 @@ Usage: %s [global options] group set-environment-vars [options] <group>
 
 `, gsv.meta.BinaryName, buildHelpText(buildEnvironmentDefs()))
 }
-
-// The End.
