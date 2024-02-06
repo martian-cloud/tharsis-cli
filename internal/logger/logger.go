@@ -92,5 +92,3 @@ func (l *logger) With(args ...interface{}) Logger {
 	}
 	return l
 }
-
-// The End.

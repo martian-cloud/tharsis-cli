@@ -77,5 +77,3 @@ Usage: %s configure list
 
 `, clc.meta.BinaryName)
 }
-
-// The End.

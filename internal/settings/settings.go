@@ -220,5 +220,3 @@ func getAuthProvider(profile *Profile) (sdkauth.TokenProvider, error) {
 
 	return provider, nil
 }
-
-// The End.

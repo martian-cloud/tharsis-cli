@@ -70,5 +70,3 @@ Subcommands:
 
 	return usage
 }
-
-// The End.

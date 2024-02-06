@@ -100,5 +100,3 @@ func sortGlobalOptionNames(options optparser.OptionDefinitions) ([]string, int) 
 
 	return sorted, longest
 }
-
-// The End.

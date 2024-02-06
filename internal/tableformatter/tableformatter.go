@@ -50,5 +50,3 @@ func forceUpper(input []string) []string {
 
 	return result
 }
-
-// The End.
