@@ -255,14 +255,6 @@ func startApplyStage(ctx context.Context, comment string, autoApprove, inputRequ
 // used by both apply and destroy commands.
 func buildCommonApplyOptionDefs(defs optparser.OptionDefinitions) optparser.OptionDefinitions {
 	commonDefs := optparser.OptionDefinitions{
-		"module-source": {
-			Arguments: []string{"Module_Source"},
-			Synopsis:  "Remote module source specification.",
-		},
-		"module-version": {
-			Arguments: []string{"Module_Version"},
-			Synopsis:  "Remote module version number--defaults to latest.",
-		},
 		"comment": {
 			Arguments: []string{"Comment"},
 			Synopsis:  "Comment for the action.",

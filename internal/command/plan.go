@@ -103,6 +103,8 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 
 	workspacePath := cmdArgs[0]
 	directoryPath := getOption("directory-path", "", cmdOpts)[0]
+	moduleSource := getOption("module-source", "", cmdOpts)[0]
+	moduleVersion := getOption("module-version", "", cmdOpts)[0]
 	tfVariables := getOptionSlice("tf-var", cmdOpts)
 	envVariables := getOptionSlice("env-var", cmdOpts)
 	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
@@ -129,6 +131,8 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 	_, exitCode := createRun(ctx, client, pc.meta, &runInput{
 		workspacePath:    workspacePath,
 		directoryPath:    directoryPath,
+		moduleSource:     moduleSource,
+		moduleVersion:    moduleVersion,
 		tfVarFilePath:    tfVarFiles,
 		envVarFilePath:   envVarFiles,
 		terraformVersion: terraformVersion,
@@ -269,6 +273,7 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 		Variables:              runVariables,
 		TargetAddresses:        input.targetAddresses,
 		Refresh:                input.refresh,
+		Speculative:            &input.isSpeculative,
 	}
 
 	if input.terraformVersion != "" {
@@ -502,6 +507,14 @@ func buildCommonRunOptionDefs() optparser.OptionDefinitions {
 		"directory-path": {
 			Arguments: []string{"Directory_Path"},
 			Synopsis:  "The path of the root module's directory.",
+		},
+		"module-source": {
+			Arguments: []string{"Module_Source"},
+			Synopsis:  "Remote module source specification.",
+		},
+		"module-version": {
+			Arguments: []string{"Module_Version"},
+			Synopsis:  "Remote module version number--defaults to latest.",
 		},
 		"tf-var-file": {
 			Arguments: []string{"Tf_Var_File"},
