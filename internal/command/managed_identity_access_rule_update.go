@@ -81,6 +81,16 @@ func (m managedIdentityAccessRuleUpdateCommand) doManagedIdentityAccessRuleUpdat
 	allowedServiceAccounts := getOptionSlice("allowed-service-account", cmdOpts)
 	allowedTeams := getOptionSlice("allowed-team", cmdOpts)
 
+	var verifyStateLineage *bool
+	if _, ok := cmdOpts["verify-state-lineage"]; ok {
+		v, vErr := getBoolOptionValue("verify-state-lineage", "false", cmdOpts)
+		if vErr != nil {
+			m.meta.Logger.Error(output.FormatError("failed to parse -verify-state-lineage option value", vErr))
+			return 1
+		}
+		verifyStateLineage = &v
+	}
+
 	// Get the original managed identity access rule from its path.
 	managedIdentityAccessRule, err := client.ManagedIdentity.GetManagedIdentityAccessRule(ctx, &sdktypes.GetManagedIdentityAccessRuleInput{
 		ID: managedIdentityAccessRuleID,
@@ -99,6 +109,7 @@ func (m managedIdentityAccessRuleUpdateCommand) doManagedIdentityAccessRuleUpdat
 		AllowedUsers:           allowedUsers,
 		AllowedServiceAccounts: allowedServiceAccounts,
 		AllowedTeams:           allowedTeams,
+		VerifyStateLineage:     verifyStateLineage,
 	}
 
 	// If no -module-attestation-policy option is specified, error out if it's a module attestation rule.

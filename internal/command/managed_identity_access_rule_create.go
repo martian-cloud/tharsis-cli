@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
@@ -96,6 +97,16 @@ func (m managedIdentityAccessRuleCreateCommand) doManagedIdentityAccessRuleCreat
 		return 1
 	}
 
+	var verifyStateLineage *bool
+	if _, ok := cmdOpts["verify-state-lineage"]; ok {
+		v, vErr := getBoolOptionValue("verify-state-lineage", "false", cmdOpts)
+		if vErr != nil {
+			m.meta.Logger.Error(output.FormatError("failed to parse -verify-state-lineage option value", vErr))
+			return 1
+		}
+		verifyStateLineage = &v
+	}
+
 	input := &sdktypes.CreateManagedIdentityAccessRuleInput{
 		Type:                      sdktypes.ManagedIdentityAccessRuleType(ruleType),
 		ModuleAttestationPolicies: policies,
@@ -104,6 +115,7 @@ func (m managedIdentityAccessRuleCreateCommand) doManagedIdentityAccessRuleCreat
 		AllowedUsers:              allowedUsers,
 		AllowedServiceAccounts:    allowedServiceAccounts,
 		AllowedTeams:              allowedTeams,
+		VerifyStateLineage:        verifyStateLineage,
 	}
 	m.meta.Logger.Debugf("managed-identity-access-rule create input: %#v", input)
 
@@ -158,7 +170,7 @@ func outputManagedIdentityAccessRulesTable(meta *Metadata,
 	managedIdentityAccessRules []sdktypes.ManagedIdentityAccessRule,
 ) int {
 	tableInput := [][]string{
-		{"id", "type", "run-stage"},
+		{"id", "type", "run-stage", "verify-state-lineage"},
 	}
 
 	for _, rule := range managedIdentityAccessRules {
@@ -166,6 +178,7 @@ func outputManagedIdentityAccessRulesTable(meta *Metadata,
 			rule.Metadata.ID,
 			string(rule.Type),
 			string(rule.RunStage),
+			strconv.FormatBool(rule.VerifyStateLineage),
 		})
 	}
 
@@ -193,6 +206,10 @@ func buildManagedIdentityAccessRuleSharedDefs() optparser.OptionDefinitions {
 		"allowed-team": {
 			Arguments: []string{"Allowed_Team"},
 			Synopsis:  "One allowed team name (repeatable).",
+		},
+		"verify-state-lineage": {
+			Arguments: []string{"Verify_State_Lineage"},
+			Synopsis:  "Whether to verify state lineage.",
 		},
 	}
 	return buildJSONOptionDefs(defs)
