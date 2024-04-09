@@ -26,9 +26,7 @@ func (gc groupCommand) Run(args []string) int {
 		gc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Show the help text.
-	gc.meta.UI.Output(gc.HelpGroup(true))
-	return 1
+	return cli.RunResultHelp
 }
 
 func (gc groupCommand) Synopsis() string {
@@ -36,12 +34,7 @@ func (gc groupCommand) Synopsis() string {
 }
 
 func (gc groupCommand) Help() string {
-	return gc.HelpGroup(false)
-}
-
-// HelpGroup produces the help string for the 'group' command.
-func (gc groupCommand) HelpGroup(subCommands bool) string {
-	usage := fmt.Sprintf(`
+	return fmt.Sprintf(`
 Usage: %s [global options] group ...
 
    The group commands do operations on groups. Subcommands
@@ -49,22 +42,4 @@ Usage: %s [global options] group ...
    Terraform / environment variables, listing all groups and
    more.
 `, gc.meta.BinaryName)
-	sc := `
-
-Subcommands:
-    create                  Create a new group.
-    delete                  Delete a group.
-    get                     Get a single group.
-    list                    List groups.
-    migrate                 Migrate a group.
-    set-environment-vars    Set environment variables for a group.
-    set-terraform-vars      Set terraform variables for a group.
-    update                  Update a group.`
-
-	// Avoid duplicate subcommands when -h is used.
-	if subCommands {
-		return usage + sc
-	}
-
-	return usage
 }
