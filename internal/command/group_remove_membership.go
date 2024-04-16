@@ -88,7 +88,7 @@ func (ggc groupRemoveMembershipCommand) doGroupRemoveMembership(ctx context.Cont
 		return 1
 	}
 
-	return outputNamespaceMemberships(ggc.meta, toJSON, []sdktypes.NamespaceMembership{*removedMembership})
+	return outputNamespaceMembership(ggc.meta, toJSON, removedMembership)
 }
 
 // buildGroupRemoveMembershipOptionDefs returns the defs used by

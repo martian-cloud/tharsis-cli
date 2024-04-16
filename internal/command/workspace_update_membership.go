@@ -90,7 +90,7 @@ func (ggc workspaceUpdateMembershipCommand) doWorkspaceUpdateMembership(ctx cont
 		return 1
 	}
 
-	return outputNamespaceMemberships(ggc.meta, toJSON, []sdktypes.NamespaceMembership{*updatedMembership})
+	return outputNamespaceMembership(ggc.meta, toJSON, updatedMembership)
 }
 
 // buildWorkspaceUpdateMembershipOptionDefs returns the defs used by
