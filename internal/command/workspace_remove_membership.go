@@ -88,7 +88,7 @@ func (ggc workspaceRemoveMembershipCommand) doWorkspaceRemoveMembership(ctx cont
 		return 1
 	}
 
-	return outputNamespaceMemberships(ggc.meta, toJSON, []sdktypes.NamespaceMembership{*removedMembership})
+	return outputNamespaceMembership(ggc.meta, toJSON, removedMembership)
 }
 
 // buildWorkspaceRemoveMembershipOptionDefs returns the defs used by
