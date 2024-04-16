@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/smithy-go/ptr"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
@@ -117,7 +116,7 @@ func (ggc groupAddMembershipCommand) doGroupAddMembership(ctx context.Context, c
 		return 1
 	}
 
-	return outputNamespaceMemberships(ggc.meta, toJSON, []sdktypes.NamespaceMembership{*addedMembership})
+	return outputNamespaceMembership(ggc.meta, toJSON, addedMembership)
 }
 
 // buildGroupAddMembershipOptionDefs returns the defs used by
@@ -146,7 +145,28 @@ func (ggc groupAddMembershipCommand) buildGroupAddMembershipOptionDefs() optpars
 	return buildJSONOptionDefs(defs)
 }
 
-// outputNamespaceMemberships is the final output for most namespace membership operations.
+// outputNamespaceMembership is the final output for the namespace membership operations what want singular output.
+func outputNamespaceMembership(meta *Metadata, toJSON bool, membership *sdktypes.NamespaceMembership) int {
+	if toJSON {
+		buf, err := objectToJSON(membership)
+		if err != nil {
+			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+			return 1
+		}
+		meta.UI.Output(string(buf))
+	} else {
+		memberType, memberID := combineMemberIDs(membership.UserID, membership.ServiceAccountID, membership.TeamID)
+		tableInput := [][]string{
+			{"id", "role", "member type", "member id"},
+			{membership.Metadata.ID, membership.Role, memberType, memberID},
+		}
+		meta.UI.Output(tableformatter.FormatTable(tableInput))
+	}
+
+	return 0
+}
+
+// outputNamespaceMemberships is the final output for the namespace membership operations what want list output.
 func outputNamespaceMemberships(meta *Metadata, toJSON bool, memberships []sdktypes.NamespaceMembership) int {
 	if toJSON {
 		buf, err := objectToJSON(memberships)
@@ -157,21 +177,36 @@ func outputNamespaceMemberships(meta *Metadata, toJSON bool, memberships []sdkty
 		meta.UI.Output(string(buf))
 	} else {
 		tableInput := [][]string{
-			{"id", "user id", "service account id", "team id", "role"},
+			{"id", "role", "member type", "member id"},
 		}
 		for _, m := range memberships {
+			memberType, memberID := combineMemberIDs(m.UserID, m.ServiceAccountID, m.TeamID)
 			tableInput = append(tableInput,
-				[]string{m.Metadata.ID,
-					ptr.ToString(m.UserID),
-					ptr.ToString(m.ServiceAccountID),
-					ptr.ToString(m.TeamID), m.Role,
-				},
+				[]string{m.Metadata.ID, m.Role, memberType, memberID},
 			)
 		}
 		meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}
 
 	return 0
+}
+
+// convertMemberIDs converts three member IDs to a member-type string and a single combined member ID string.
+func combineMemberIDs(userID, serviceAccountID, teamID *string) (string, string) {
+	var memberType, combinedID string
+	switch {
+	case userID != nil:
+		combinedID = *userID
+		memberType = "user"
+	case serviceAccountID != nil:
+		combinedID = *serviceAccountID
+		memberType = "service-account"
+	case teamID != nil:
+		combinedID = *teamID
+		memberType = "team"
+	}
+
+	return memberType, combinedID
 }
 
 func (ggc groupAddMembershipCommand) Synopsis() string {

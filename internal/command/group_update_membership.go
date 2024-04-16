@@ -90,7 +90,7 @@ func (ggc groupUpdateMembershipCommand) doGroupUpdateMembership(ctx context.Cont
 		return 1
 	}
 
-	return outputNamespaceMemberships(ggc.meta, toJSON, []sdktypes.NamespaceMembership{*updatedMembership})
+	return outputNamespaceMembership(ggc.meta, toJSON, updatedMembership)
 }
 
 // buildGroupUpdateMembershipOptionDefs returns the defs used by
