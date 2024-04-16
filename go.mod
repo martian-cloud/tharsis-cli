@@ -17,7 +17,7 @@ require (
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/stretchr/testify v1.8.4
 	github.com/zclconf/go-cty v1.14.1
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.38.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.39.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/oauth2 v0.15.0
 )

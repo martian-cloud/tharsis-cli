@@ -114,7 +114,7 @@ func (ggc workspaceAddMembershipCommand) doWorkspaceAddMembership(ctx context.Co
 		return 1
 	}
 
-	return outputNamespaceMemberships(ggc.meta, toJSON, []sdktypes.NamespaceMembership{*addedMembership})
+	return outputNamespaceMembership(ggc.meta, toJSON, addedMembership)
 }
 
 // buildWorkspaceAddMembershipOptionDefs returns the defs used by
