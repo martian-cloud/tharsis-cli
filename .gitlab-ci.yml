@@ -196,8 +196,7 @@ Release Tharsis CLI:
 
       # FIXME: Add SBOM report to ASSETS:
       #
-      # OUTPUT_FILE="gl-sbom-go-go.$(echo $[[ inputs.main ]]:$[[ inputs.go_os ]]:$[[ inputs.go_arch ]]:$[[ inputs.cgo_en
-abled ]] | tr '/ ' '_').cdx.json"
+      # OUTPUT_FILE="gl-sbom-go-go.DOLLAR(echo DOLLAR[[ inputs.main ]]:DOLLAR[[ inputs.go_os ]]:DOLLAR[[ inputs.go_arch ]]:DOLLAR[[ inputs.cgo_enabled ]] | tr '/ ' '_').cdx.json"
       #
       #  artifacts:
       #    paths:
