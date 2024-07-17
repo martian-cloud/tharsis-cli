@@ -194,22 +194,14 @@ Release Tharsis CLI:
       set -x
       echo "Tharsis CLI Release"
 
-      # FIXME: Add SBOM report to ASSETS:
-      #
-      # OUTPUT_FILE="gl-sbom-go-go.DOLLAR(echo DOLLAR[[ inputs.main ]]:DOLLAR[[ inputs.go_os ]]:DOLLAR[[ inputs.go_arch ]]:DOLLAR[[ inputs.cgo_enabled ]] | tr '/ ' '_').cdx.json"
-      #
-      #  artifacts:
-      #    paths:
-      #      - "**/gl-sbom-*.cdx.json"
-      #    reports:
-      #      cyclonedx: "**/gl-sbom-*.cdx.json"
-      echo 'These are the SBOM report files:'
-      find . -iname 'gl-sbom-*.cdx.json'
-      echo 'The above were the SBOM report files.'
-      ####
-
       ASSETS=""
       BINARIES="./bin/*"
+      REPORTS="./gl-sbom-*.cdx.json"
+      for REPORT in REPORTS
+      do
+        REPORT_NAME=$(basename $REPORT)
+        ASSETS="$ASSETS --assets-link {\"name\":\"${REPORT_NAME}\",\"url\":\"${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${REPORT_NAME}\"}"
+      done
       for BINARY in $BINARIES
       do
         BINARY_NAME=$(basename $BINARY)
