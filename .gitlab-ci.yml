@@ -29,7 +29,7 @@ include:
       # go_flags: ""
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@1.0.0
     inputs:
-      stage: test
+      stage: post-test
       # input_format: ["..."]
       # output_format: ["..."]
       hierarchical: true
@@ -38,11 +38,10 @@ include:
       version: $CI_COMMIT_TAG
       # supplier_name: "Infor LLC"
       # author_name: "Infor LLC"
-    needs:
-        - "generate-sbom-go"
 
 stages:
   - test
+  - post-test
   - build
   - upload
   - release
