@@ -5,6 +5,39 @@ include:
   - template: Jobs/Secret-Detection.gitlab-ci.yml
   # Commented out as we are using our own tool for license scanning
   # - template: Jobs/License-Scanning.gitlab-ci.yml
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      # files: false
+      # json: true
+      # licenses: true
+      main: cmd/tharsis
+      # no_serial: false
+      # output_version: 1.5
+      # packages: false
+      # paths: false
+      # serial: ""
+      std: true
+      # verbose: false
+      # supplier_name: "Infor LLC"
+      # author_name: "Infor LLC"
+      go_arch: amd64
+      go_os: linux
+      cgo_enabled: "0"
+      # go_flags: ""
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@1.0.0
+    inputs:
+      stage: test
+      # input_format: ["..."]
+      # output_format: ["..."]
+      hierarchical: true
+      # group: ""
+      name: tharsis-cli
+      version: $CI_COMMIT_TAG
+      # supplier_name: "Infor LLC"
+      # author_name: "Infor LLC"
 
 stages:
   - test
