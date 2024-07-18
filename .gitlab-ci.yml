@@ -197,7 +197,7 @@ Release Tharsis CLI:
       ASSETS=""
       BINARIES="./bin/*"
       REPORTS="./gl-sbom-*.cdx.json"
-      for REPORT in REPORTS
+      for REPORT in $REPORTS
       do
         REPORT_NAME=$(basename $REPORT)
         ASSETS="$ASSETS --assets-link {\"name\":\"${REPORT_NAME}\",\"url\":\"${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${REPORT_NAME}\"}"
