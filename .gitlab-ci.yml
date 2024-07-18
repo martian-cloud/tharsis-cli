@@ -24,7 +24,7 @@ include:
       assert_licenses: true
       main: cmd/tharsis
       std: true
-      go_arch: 386
+      go_arch: "386"
       go_os: linux
       go_flags: "-mod=vendor"
       cgo_enabled: "0"
@@ -57,7 +57,7 @@ include:
       assert_licenses: true
       main: cmd/tharsis
       std: true
-      go_arch: 386
+      go_arch: "386"
       go_os: windows
       go_flags: "-mod=vendor"
       cgo_enabled: "0"
@@ -102,7 +102,7 @@ include:
       assert_licenses: true
       main: cmd/tharsis
       std: true
-      go_arch: 386
+      go_arch: "386"
       go_os: freebsd
       go_flags: "-mod=vendor"
       cgo_enabled: "0"
@@ -135,7 +135,7 @@ include:
       assert_licenses: true
       main: cmd/tharsis
       std: true
-      go_arch: 386
+      go_arch: "386"
       go_os: openbsd
       go_flags: "-mod=vendor"
       cgo_enabled: "0"
