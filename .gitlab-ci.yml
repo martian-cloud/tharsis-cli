@@ -196,15 +196,6 @@ Release Tharsis CLI:
 
       ASSETS=""
       BINARIES="./bin/*"
-      REPORTS="./gl-sbom-*.cdx.json"
-      for REPORT in $REPORTS
-      do
-        REPORT_NAME=$(basename $REPORT)
-        # Evidently the release-cli requires the assets files be in ./bin
-        cp -ip ${REPORT_NAME} ./bin/.
-        MODIFIED_NAME=$(echo $REPORT_NAME | tr ':' '_')
-        ASSETS="$ASSETS --assets-link {\"name\":\"${REPORT_NAME}\",\"url\":\"${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${MODIFIED_NAME}\"}"
-      done
       for BINARY in $BINARIES
       do
         BINARY_NAME=$(basename $BINARY)
