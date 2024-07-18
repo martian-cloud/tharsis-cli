@@ -12,11 +12,11 @@ include:
       assert_licenses: true
       main: cmd/tharsis
       std: true
-      #### FIXME: Uncomment this after solving problem with cmd/tharsis not loading:
+      #### FIXME: This was set in the example repo.
+      #### However, it causes cyclonedx-gomod to fail: failed to load package: command `/usr/local/go/bin/go list -json -e ./cmd/tharsis
       #### go_flags: "-mod=vendor"
       cgo_enabled: "0"
-      #### FIXME: Uncomment this after solving problem with cmd/tharsis not loading:
-      #### verbose: true
+      verbose: true
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@9bb45627746b2282790a0356b776f1403e3f42fb
     inputs:
       stage: build
