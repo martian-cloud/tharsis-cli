@@ -10,23 +10,166 @@ include:
       stage: test
       module_path: .
       assert_licenses: true
-      # files: false
-      # json: true
-      # licenses: true
       main: cmd/tharsis
-      # no_serial: false
-      # output_version: 1.5
-      # packages: false
-      # paths: false
-      # serial: ""
       std: true
-      # verbose: false
-      # supplier_name: "Infor LLC"
-      # author_name: "Infor LLC"
       go_arch: amd64
       go_os: linux
+      go_flags: "-mod=vendor"
       cgo_enabled: "0"
-      # go_flags: ""
+      verbose: true
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: 386
+      go_os: linux
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: arm
+      go_os: linux
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: arm64
+      go_os: linux
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: 386
+      go_os: windows
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: amd64
+      go_os: windows
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: amd64
+      go_os: darwin
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: arm64
+      go_os: darwin
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+      verbose: true
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: 386
+      go_os: freebsd
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: amd64
+      go_os: freebsd
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: arm
+      go_os: freebsd
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: 386
+      go_os: openbsd
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: amd64
+      go_os: openbsd
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.0.0
+    inputs:
+      stage: test
+      module_path: .
+      assert_licenses: true
+      main: cmd/tharsis
+      std: true
+      go_arch: amd64
+      go_os: solaris
+      go_flags: "-mod=vendor"
+      cgo_enabled: "0"
+      verbose: true
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@1.0.0
+    inputs:
+      stage: build
+      hierarchical: true
+      name: tharsis-cli
+      version: $CI_COMMIT_TAG
+    rules:
+      - if: $CI_COMMIT_TAG
 
 stages:
   - test
