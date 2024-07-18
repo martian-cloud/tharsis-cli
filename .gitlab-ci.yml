@@ -5,7 +5,7 @@ include:
   - template: Jobs/Secret-Detection.gitlab-ci.yml
   # Commented out as we are using our own tool for license scanning
   # - template: Jobs/License-Scanning.gitlab-ci.yml
-  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@d1bc1ff05b1ded456e66b8c92d170b1fe31a297a
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@9bb45627746b2282790a0356b776f1403e3f42fb
     inputs:
       stage: test
       module_path: .
@@ -15,7 +15,7 @@ include:
       go_flags: "-mod=vendor"
       cgo_enabled: "0"
       #### verbose: true
-  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@d1bc1ff05b1ded456e66b8c92d170b1fe31a297a
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@9bb45627746b2282790a0356b776f1403e3f42fb
     inputs:
       stage: build
       hierarchical: true
