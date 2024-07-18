@@ -14,7 +14,7 @@ include:
       std: true
       go_flags: "-mod=vendor"
       cgo_enabled: "0"
-      verbose: true
+      #### verbose: true
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@d1bc1ff05b1ded456e66b8c92d170b1fe31a297a
     inputs:
       stage: build
