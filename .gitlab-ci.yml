@@ -5,16 +5,25 @@ include:
   - template: Jobs/Secret-Detection.gitlab-ci.yml
   # Commented out as we are using our own tool for license scanning
   # - template: Jobs/License-Scanning.gitlab-ci.yml
-  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@9bb45627746b2282790a0356b776f1403e3f42fb
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@b6f2b75fb0144c12c21f1bfdc650ff87f6cee016
     inputs:
       stage: test
       module_path: .
       assert_licenses: true
       main: cmd/tharsis
       std: true
+      go_arch_os:
+        - GO_ARCH: "386"
+          GO_OS: [freebsd, linux, openbsd, windows]
+        - GO_ARCH: amd64
+          GO_OS: [darwin, freebsd, linux, openbsd, solaris, windows]
+        - GO_ARCH: arm
+          GO_OS: [freebsd, linux]
+        - GO_ARCH: arm64
+          GO_OS: [darwin, linux]
       cgo_enabled: "0"
       verbose: true
-  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@9bb45627746b2282790a0356b776f1403e3f42fb
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@b6f2b75fb0144c12c21f1bfdc650ff87f6cee016
     inputs:
       stage: build
       hierarchical: true
