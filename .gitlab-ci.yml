@@ -40,7 +40,7 @@ include:
       main: "cmd/tharsis"
       assert_licenses: true
       std: true
-      go_arch: arm64
+      go_arch: arm
       go_os: linux
       go_flags: "-mod=vendor"
       cgo_enabled: "0"
