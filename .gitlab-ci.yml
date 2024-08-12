@@ -271,4 +271,31 @@ semgrep-sast:
 
 kics-iac-sast:
   rules:
-    - !reference [.
+    - !reference [.on_merge_request_and_merged_events, rules]
+
+secret_detection:
+  rules:
+    - !reference [.on_merge_request_and_merged_events, rules]
+
+license_scanning:
+  stage: test
+  image: golang:${GO_VERSION}-alpine
+  allow_failure: true
+  before_script:
+    - export PATH=$PATH:$GOPATH/bin
+    - apk add git bash openssh ca-certificates make jq
+    - go install github.com/uw-labs/lichen@latest
+  script:
+    - make build
+    - lichen -j lichen.json $CI_PROJECT_DIR/tharsis
+    - >
+      jq '{"version": "2.1","licenses": [ . | .Modules[] | .Licenses[] | {"id": .Name,"name": .Name, "url": ("https://opensource.org/licenses/" + .Name) } ] | unique,"dependencies":[ . | .Modules[] | {"name": .Path, "version": .Version, "package_manager": "go","path": "go.sum","licenses": [ .Licenses[] | .Name]}]}' lichen.json > gl-license-scanning-report.json
+  cache:
+    <<: *cache-template
+  artifacts:
+    reports:
+      license_scanning: gl-license-scanning-report.json
+    paths: [gl-license-scanning-report.json]
+  dependencies: []
+  rules:
+    - !reference [.on_default_branch_and_merge_train_with_golang_changes, rules]
