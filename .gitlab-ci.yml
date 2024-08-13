@@ -5,63 +5,54 @@ include:
   - template: Jobs/Secret-Detection.gitlab-ci.yml
   # Commented out as we are using our own tool for license scanning
   # - template: Jobs/License-Scanning.gitlab-ci.yml
-
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
     inputs:
       module_path: "."
-      main: "cmd/tharsis"
+      main: cmd/tharsis
       assert_licenses: true
       std: true
       go_arch: amd64
       go_os: linux
-      go_flags: "-mod=vendor"
       cgo_enabled: "0"
       verbose: true
     rules:
       - if: $CI_COMMIT_TAG
-
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
     inputs:
       module_path: "."
-      main: "cmd/tharsis"
+      main: cmd/tharsis
       assert_licenses: true
       std: true
       go_arch: "386"
       go_os: linux
-      go_flags: "-mod=vendor"
       cgo_enabled: "0"
       verbose: true
     rules:
       - if: $CI_COMMIT_TAG
-
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
     inputs:
       module_path: "."
-      main: "cmd/tharsis"
+      main: cmd/tharsis
       assert_licenses: true
       std: true
       go_arch: arm
       go_os: linux
-      go_flags: "-mod=vendor"
       cgo_enabled: "0"
       verbose: true
     rules:
       - if: $CI_COMMIT_TAG
-
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
     inputs:
       module_path: "."
-      main: "cmd/tharsis"
+      main: cmd/tharsis
       assert_licenses: true
       std: true
       go_arch: arm64
       go_os: linux
-      go_flags: "-mod=vendor"
       cgo_enabled: "0"
       verbose: true
     rules:
       - if: $CI_COMMIT_TAG
-
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@1.1.2
     inputs:
       stage: merge-sboms
