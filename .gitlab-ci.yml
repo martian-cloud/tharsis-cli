@@ -15,6 +15,9 @@ include:
       go_os: windows
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -27,6 +30,9 @@ include:
       go_os: windows
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -39,6 +45,9 @@ include:
       go_os: solaris
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -51,6 +60,9 @@ include:
       go_os: openbsd
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -63,6 +75,9 @@ include:
       go_os: openbsd
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -75,6 +90,9 @@ include:
       go_os: linux
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -87,6 +105,9 @@ include:
       go_os: linux
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -99,6 +120,9 @@ include:
       go_os: linux
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -111,6 +135,9 @@ include:
       go_os: linux
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -123,6 +150,9 @@ include:
       go_os: freebsd
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -135,6 +165,9 @@ include:
       go_os: freebsd
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -147,6 +180,9 @@ include:
       go_os: freebsd
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -159,6 +195,9 @@ include:
       go_os: darwin
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.1.2
@@ -171,6 +210,9 @@ include:
       go_os: darwin
       cgo_enabled: "0"
       verbose: true
+      remote_sbom_component_mapping_file_namespace_path: infor-cloud/martian-cloud/sbom-component-mapping
+      remote_sbom_component_mapping_file_branch: initial
+      remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
   - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@1.1.2
