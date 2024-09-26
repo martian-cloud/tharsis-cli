@@ -5,7 +5,7 @@ include:
   - template: Jobs/Secret-Detection.gitlab-ci.yml
   # Commented out as we are using our own tool for license scanning
   # - template: Jobs/License-Scanning.gitlab-ci.yml
-  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@1.2.0
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/generate-sbom-go@$SBOM_COMPONENT_VERSION
     inputs:
       module_path: "."
       main: cmd/tharsis
@@ -27,19 +27,15 @@ include:
       remote_sbom_component_mapping_file_path: mapping-go.json
     rules:
       - if: $CI_COMMIT_TAG
-  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@1.2.0
+  - component: gitlab.com/infor-cloud/gitlab-components/software-bill-of-materials/merge-sboms@$SBOM_COMPONENT_VERSION
     inputs:
-      stage: merge-sboms
       hierarchical: true
       name: tharsis-cli
       version: $CI_COMMIT_TAG
-    rules:
-      - if: $CI_COMMIT_TAG
 
 stages:
   - test
   - build
-  - merge-sboms
   - upload
   - release
 
@@ -264,3 +260,10 @@ license_scanning:
   dependencies: []
   rules:
     - !reference [.on_default_branch_and_merge_train_with_golang_changes, rules]
+
+merge-cyclonedx-sboms:
+  rules:
+    - !reference [.on_tag_events, rules]
+  needs:
+    - job: "go-sbom (cmd/tharsis,0)"
+      optional: true
