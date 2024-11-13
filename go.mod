@@ -17,7 +17,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/stretchr/testify v1.9.0
 	github.com/zclconf/go-cty v1.14.4
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.39.1
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.41.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/oauth2 v0.19.0
 )
@@ -42,6 +42,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
+	github.com/hashicorp/terraform-json v0.22.1 // indirect
 	github.com/hasura/go-graphql-client v0.9.1 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
