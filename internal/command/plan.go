@@ -40,6 +40,7 @@ type runInput struct {
 	isDestroy        bool
 	isSpeculative    bool
 	refresh          bool
+	refreshOnly      bool
 }
 
 // planCommand is the top-level structure for the plan command.
@@ -121,6 +122,11 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 		pc.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh option", err))
 		return 1
 	}
+	refreshOnly, err := getBoolOptionValue("refresh-only", "false", cmdOpts)
+	if err != nil {
+		pc.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh-only option", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(pc.meta, workspacePath) {
@@ -142,6 +148,7 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 		isSpeculative:    true,
 		targetAddresses:  targetAddresses,
 		refresh:          refresh,
+		refreshOnly:      refreshOnly,
 	})
 
 	// If there was an error, the error message has already been logged.
@@ -273,6 +280,7 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 		Variables:              runVariables,
 		TargetAddresses:        input.targetAddresses,
 		Refresh:                input.refresh,
+		RefreshOnly:            input.refreshOnly,
 		Speculative:            &input.isSpeculative,
 	}
 
@@ -543,6 +551,10 @@ func buildCommonRunOptionDefs() optparser.OptionDefinitions {
 		"refresh": {
 			Arguments: []string{"true|false"},
 			Synopsis:  "Whether to do the usual refresh step; default is true; use --refresh=false to disable the usual refresh step.",
+		},
+		"refresh-only": {
+			Arguments: []string{"true|false"},
+			Synopsis:  "Whether to do ONLY a refresh operation; default is false; use --refresh-only=true to do only a refresh step to update the TF state.",
 		},
 	}
 }
