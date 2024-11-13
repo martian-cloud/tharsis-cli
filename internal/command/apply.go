@@ -110,6 +110,11 @@ func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts
 		ac.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh option", err))
 		return 1
 	}
+	refreshOnly, err := getBoolOptionValue("refresh-only", "false", cmdOpts)
+	if err != nil {
+		ac.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh-only option", err))
+		return 1
+	}
 
 	// Error is already logged.
 	if !isNamespacePathValid(ac.meta, workspacePath) {
@@ -131,6 +136,7 @@ func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts
 		isSpeculative:    false,
 		targetAddresses:  targetAddresses,
 		refresh:          refresh,
+		refreshOnly:      refreshOnly,
 	})
 	if exitCode != 0 {
 		// The error message has already been logged.
