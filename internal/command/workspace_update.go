@@ -98,7 +98,6 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 	}
 	jobDuration = &duration
 
-	// Prepare the inputs.
 	input := &sdktypes.UpdateWorkspaceInput{
 		WorkspacePath:      &path,
 		Description:        description,

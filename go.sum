@@ -82,8 +82,8 @@ github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+l
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/hashicorp/go-retryablehttp v0.7.7 h1:C8hUCYzor8PIfXHa4UrZkU4VvK8o9ISHxT2Q8+VepXU=
 github.com/hashicorp/go-retryablehttp v0.7.7/go.mod h1:pkQpWZeYWskR+D1tR2O5OcBFOxfA7DoAO6xtkuQnHTk=
-github.com/hashicorp/go-slug v0.15.0 h1:AhMnE6JIyW0KoDJlmRDwv4xd52a5ZK3VdioQ7SMmZhI=
-github.com/hashicorp/go-slug v0.15.0/go.mod h1:THWVTAXwJEinbsp4/bBRcmbaO5EYNLTqxbG4tZ3gCYQ=
+github.com/hashicorp/go-slug v0.16.3 h1:pe0PMwz2UWN1168QksdW/d7u057itB2gY568iF0E2Ns=
+github.com/hashicorp/go-slug v0.16.3/go.mod h1:THWVTAXwJEinbsp4/bBRcmbaO5EYNLTqxbG4tZ3gCYQ=
 github.com/hashicorp/go-uuid v1.0.3 h1:2gKiV6YVmrJ1i2CKKa9obLvRieoRGviZFL26PcT/Co8=
 github.com/hashicorp/go-uuid v1.0.3/go.mod h1:6SBZvOh/SIDV7/2o3Jml5SYk/TvGqwFJ/bN7x4byOro=
 github.com/hashicorp/go-version v1.6.0 h1:feTTfFNnjP967rlCxM/I9g701jU+RN74YKx2mOkIeek=
@@ -185,8 +185,8 @@ github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5t
 github.com/zclconf/go-cty v1.14.4 h1:uXXczd9QDGsgu0i/QFR/hzI5NYCHLf6NQw/atrbnhq8=
 github.com/zclconf/go-cty v1.14.4/go.mod h1:VvMs5i0vgZdhYawQNq5kePSpLAoz8u1xvZgrPIxfnZE=
 github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b h1:FosyBZYxY34Wul7O/MSKey3txpPYyCqVO5ZyceuQJEI=
-gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.41.0 h1:j9rgjGSunTHT5JqvWMoxG4MTD3T7UmAFJXHiiVngDZg=
-gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.41.0/go.mod h1:zgttjFAWaNyCHTaWKP/fG/CsysrbbZgiUkwQCO1r5JQ=
+gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.42.0 h1:9aAXDZj5v/WRcq4H8Nc2/k3X2mHIqHyJ4b8120aR87c=
+gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.42.0/go.mod h1:zgttjFAWaNyCHTaWKP/fG/CsysrbbZgiUkwQCO1r5JQ=
 go.opentelemetry.io/otel v1.6.3/go.mod h1:7BgNga5fNlF/iZjG06hM3yofffp0ofKCDwSXx1GC4dI=
 go.opentelemetry.io/otel/trace v1.6.3/go.mod h1:GNJQusJlUgZl9/TQBPKU/Y/ty+0iVB5fjhKeJGZPGFs=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=

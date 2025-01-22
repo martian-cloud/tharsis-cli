@@ -81,7 +81,6 @@ func (guc groupUpdateCommand) doGroupUpdate(ctx context.Context, client *tharsis
 		return 1
 	}
 
-	// Prepare the inputs.
 	input := &sdktypes.UpdateGroupInput{
 		GroupPath:   &path,
 		Description: description,
