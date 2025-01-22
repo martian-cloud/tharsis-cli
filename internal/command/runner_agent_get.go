@@ -3,6 +3,8 @@ package command
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
@@ -106,6 +108,8 @@ func outputRunnerAgent(meta *Metadata, toJSON bool, runnerAgent *sdktypes.Runner
 				"description",
 				"resource path",
 				"type",
+				"run untagged jobs",
+				"tags",
 			},
 			{
 				runnerAgent.Metadata.ID,
@@ -113,6 +117,8 @@ func outputRunnerAgent(meta *Metadata, toJSON bool, runnerAgent *sdktypes.Runner
 				runnerAgent.Description,
 				runnerAgent.ResourcePath,
 				string(runnerAgent.Type),
+				strconv.FormatBool(runnerAgent.RunUntaggedJobs),
+				strings.Join(runnerAgent.Tags, ", "),
 			},
 		}
 		meta.UI.Output(tableformatter.FormatTable(tableInput))

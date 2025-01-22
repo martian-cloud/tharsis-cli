@@ -73,11 +73,19 @@ func (ruc runnerAgentUpdateCommand) doRunnerAgentUpdate(ctx context.Context, cli
 		ruc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
+	runUntaggedJobs, err := getBoolOptionValue("run-untagged-jobs", "false", cmdOpts)
+	if err != nil {
+		ruc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
+	tags := getOptionSlice("tag", cmdOpts)
 
 	// Prepare the inputs.
 	input := &sdktypes.UpdateRunnerInput{
-		ID:          cmdArgs[0],
-		Description: description,
+		ID:              cmdArgs[0],
+		Description:     description,
+		RunUntaggedJobs: &runUntaggedJobs,
+		Tags:            &tags,
 	}
 
 	ruc.meta.Logger.Debugf("runner-agent update input: %#v", input)
@@ -96,6 +104,14 @@ func (ruc runnerAgentUpdateCommand) buildRunnerAgentUpdateDefs() optparser.Optio
 		"description": {
 			Arguments: []string{"Description"},
 			Synopsis:  "New description for the runner agent.",
+		},
+		"run-untagged-jobs": {
+			Arguments: []string{},
+			Synopsis:  "Run untagged jobs.",
+		},
+		"tag": {
+			Arguments: []string{"Runner_Tag"},
+			Synopsis:  "Runner tag to assign to the runner agent. (This flag may be repeated).",
 		},
 	}
 

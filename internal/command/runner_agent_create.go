@@ -71,15 +71,23 @@ func (rcc runnerAgentCreateCommand) doRunnerAgentCreate(ctx context.Context, cli
 		rcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
+	runUntaggedJobs, err := getBoolOptionValue("run-untagged-jobs", "false", cmdOpts)
+	if err != nil {
+		rcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		return 1
+	}
+	tags := getOptionSlice("tag", cmdOpts)
 
 	if !isNamespacePathValid(rcc.meta, groupPath) {
 		return 1
 	}
 
 	input := &sdktypes.CreateRunnerInput{
-		Name:        runnerAgentName,
-		GroupPath:   groupPath,
-		Description: description,
+		Name:            runnerAgentName,
+		GroupPath:       groupPath,
+		Description:     description,
+		RunUntaggedJobs: runUntaggedJobs,
+		Tags:            tags,
 	}
 
 	rcc.meta.Logger.Debugf("runner-agent create input: %#v", input)
@@ -109,6 +117,14 @@ func (rcc runnerAgentCreateCommand) buildRunnerAgentCreateDefs() optparser.Optio
 			Arguments: []string{"Runner_Name"},
 			Synopsis:  "Name of the new runner agent.",
 			Required:  true,
+		},
+		"run-untagged-jobs": {
+			Arguments: []string{},
+			Synopsis:  "Run untagged jobs.",
+		},
+		"tag": {
+			Arguments: []string{"Runner_Tag"},
+			Synopsis:  "Runner tag to assign to the runner agent. (This flag may be repeated).",
 		},
 	}
 
