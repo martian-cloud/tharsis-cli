@@ -77,6 +77,14 @@ func (wsv workspaceSetTerraformVarsCommand) doWorkspaceSetTerraformVars(ctx cont
 		return 1
 	}
 
+	// Ensure namespace is a workspace.
+	if _, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{
+		Path: &namespacePath,
+	}); err != nil {
+		wsv.meta.Logger.Error(output.FormatError("failed to get workspace", err))
+		return 1
+	}
+
 	parser := varparser.NewVariableParser(nil, false)
 
 	variables, err := parser.ParseTerraformVariables(&varparser.ParseTerraformVariablesInput{TfVarFilePaths: tfVarFiles})

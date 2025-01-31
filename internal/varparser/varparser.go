@@ -47,7 +47,6 @@ type Variable struct {
 	Value    string
 	Key      string
 	Category sdktypes.VariableCategory
-	HCL      bool
 }
 
 // VariableParser implements functionalities needed to parse variables.
@@ -171,7 +170,6 @@ func (v *VariableParser) processStringVariables(variables []string, category sdk
 		v.variableMap[key] = Variable{
 			Key:      key,
 			Value:    val,
-			HCL:      false, // Set HCL to false for variable passed in via an argument.
 			Category: category,
 		}
 	}
@@ -232,7 +230,6 @@ func (v *VariableParser) processTfVarsFile(filePaths []string) error {
 			v.variableMap[key] = Variable{
 				Key:      key,
 				Category: sdktypes.TerraformVariableCategory,
-				HCL:      !value.Type().Equals(cty.String), // Set HCL if value is not a string type (complex variable).
 				Value:    val,
 			}
 		}
