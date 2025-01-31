@@ -77,6 +77,14 @@ func (gsv groupSetEnvironmentVarsCommand) doGroupSetEnvironmentVars(ctx context.
 		return 1
 	}
 
+	// Ensure namespace is a group.
+	if _, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{
+		Path: &namespacePath,
+	}); err != nil {
+		gsv.meta.Logger.Error(output.FormatError("failed to get group", err))
+		return 1
+	}
+
 	parser := varparser.NewVariableParser(nil, false)
 
 	variables, err := parser.ParseEnvironmentVariables(&varparser.ParseEnvironmentVariablesInput{EnvVarFilePaths: envVarFiles})
