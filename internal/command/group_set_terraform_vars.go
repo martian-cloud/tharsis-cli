@@ -78,6 +78,14 @@ func (gsv groupSetTerraformVarsCommand) doGroupSetTerraformVars(ctx context.Cont
 		return 1
 	}
 
+	// Ensure namespace is a group.
+	if _, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{
+		Path: &namespacePath,
+	}); err != nil {
+		gsv.meta.Logger.Error(output.FormatError("failed to get group", err))
+		return 1
+	}
+
 	parser := varparser.NewVariableParser(nil, false)
 
 	variables, err := parser.ParseTerraformVariables(&varparser.ParseTerraformVariablesInput{TfVarFilePaths: tfVarFiles})

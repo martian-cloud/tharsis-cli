@@ -177,7 +177,6 @@ func convertToSetNamespaceVariablesInput(vars []varparser.Variable) []types.SetN
 		response = append(response, types.SetNamespaceVariablesVariable{
 			Key:   v.Key,
 			Value: v.Value,
-			HCL:   v.HCL,
 		})
 	}
 	return response
