@@ -223,7 +223,6 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 			Key:      vCopy.Key,
 			Value:    &vCopy.Value,
 			Category: vCopy.Category,
-			HCL:      vCopy.HCL,
 		})
 	}
 
