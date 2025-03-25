@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -495,16 +496,16 @@ func hasConfigFile(dirPath string) (bool, error) {
 }
 
 // Return a single error that contains potentially multiple errors.
-func combineErrors(errors []error) error {
+func combineErrors(errs []error) error {
 	pool := []string{}
 
 	// Convert each error to a string.
-	for _, err := range errors {
+	for _, err := range errs {
 		pool = append(pool, fmt.Sprintf("%s", err))
 	}
 
 	// Now, combine the strings and convert back to error.
-	return fmt.Errorf(strings.Join(pool, "; "))
+	return errors.New(strings.Join(pool, "; "))
 }
 
 // buildCommonRunOptionDefs returns the common option definitions
