@@ -402,9 +402,24 @@ const (
 	// Header reading timeout for temporary web server.
 	readHeaderTimeout = 30 * time.Second
 
+	// originHeader is added to the request during the token exchange.
+	originHeader = "http://localhost"
+
 	// Path for "well-known" URL.
 	wellKnownURLPath = "/.well-known/terraform.json"
 )
+
+// customHeaderTransport is used to set custom header on the
+// token exchange requests with the IDP.
+type customHeaderTransport struct {
+	rt http.RoundTripper
+}
+
+// RoundTrip adds a custom 'Origin' header to the request for PKCE flow.
+func (t *customHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Origin", originHeader)
+	return t.rt.RoundTrip(req)
+}
 
 // loginCommand is the top-level structure for the login command.
 type loginCommand struct {
@@ -809,7 +824,10 @@ func (lc loginCommand) captureToken(oauthCfg *oauth2.Config, proofKey string,
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 	httpClient := http.Client{
-		Transport: &transport,
+		// Use a custom transport to add 'Origin' header to each request.
+		Transport: &customHeaderTransport{
+			rt: &transport,
+		},
 	}
 
 	// Do the magic to generate a token.
