@@ -816,7 +816,7 @@ func (lc loginCommand) captureToken(oauthCfg *oauth2.Config, proofKey string,
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, httpClient)
 	token, err := oauthCfg.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", proofKey))
 	if err != nil {
-		return nil, fmt.Errorf("failed to obtain an authentication token")
+		return nil, fmt.Errorf("failed to obtain an authentication token: %w", err)
 	}
 
 	return token, err
