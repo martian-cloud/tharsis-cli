@@ -382,6 +382,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"strings"
 	"time"
 
 	uuid "github.com/hashicorp/go-uuid"
@@ -412,12 +413,15 @@ const (
 // customHeaderTransport is used to set custom header on the
 // token exchange requests with the IDP.
 type customHeaderTransport struct {
-	rt http.RoundTripper
+	rt                  http.RoundTripper
+	includeOriginHeader bool
 }
 
 // RoundTrip adds a custom 'Origin' header to the request for PKCE flow.
 func (t *customHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("Origin", originHeader)
+	if t.includeOriginHeader {
+		req.Header.Set("Origin", originHeader)
+	}
 	return t.rt.RoundTrip(req)
 }
 
@@ -806,6 +810,17 @@ func (lc loginCommand) captureToken(oauthCfg *oauth2.Config, proofKey string,
 		return nil, err
 	}
 
+	token, err := lc.exchangeAuthCodeForToken(oauthCfg, code, proofKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain an authentication token: %w", err)
+	}
+
+	return token, nil
+}
+
+func (lc loginCommand) exchangeAuthCodeForToken(oauthCfg *oauth2.Config, code string, proofKey string) (*oauth2.Token, error) {
+	var token *oauth2.Token
+	var err error
 	// Create an HTTP client to do the exchanging.
 	// Some of these parameters might not be essential, but this is what Terraform uses.
 	dialer := &net.Dialer{
@@ -813,28 +828,36 @@ func (lc loginCommand) captureToken(oauthCfg *oauth2.Config, proofKey string,
 		KeepAlive: 30 * time.Second,
 		DualStack: true,
 	}
-	transport := http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
-	}
-	httpClient := http.Client{
-		// Use a custom transport to add 'Origin' header to each request.
-		Transport: &customHeaderTransport{
-			rt: &transport,
+
+	customTransport := &customHeaderTransport{
+		rt: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           dialer.DialContext,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 		},
+		includeOriginHeader: true,
 	}
 
-	// Do the magic to generate a token.
+	httpClient := &http.Client{
+		// Use a custom transport to add 'Origin' header to each request.
+		Transport: customTransport,
+	}
+
+	// Add custom http client to context
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, httpClient)
-	token, err := oauthCfg.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", proofKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to obtain an authentication token: %w", err)
+
+	token, err = oauthCfg.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", proofKey))
+
+	// Depending on how the app registration is configured, Azure IDP will return the following error code if the origin header
+	// is included; therefore, we'll retry the request without the origin header
+	if err != nil && strings.Contains(err.Error(), "AADSTS9002326") {
+		customTransport.includeOriginHeader = false
+		token, err = oauthCfg.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", proofKey))
 	}
 
 	return token, err
