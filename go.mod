@@ -7,7 +7,7 @@ require (
 	github.com/aws/smithy-go v1.20.2
 	github.com/caarlos0/log v0.4.4
 	github.com/hashicorp/go-cleanhttp v0.5.2
-	github.com/hashicorp/go-slug v0.16.3
+	github.com/hashicorp/go-slug v0.16.4
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/hashicorp/hcl/v2 v2.20.1
 	github.com/hashicorp/terraform-registry-address v0.2.3
@@ -17,7 +17,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/stretchr/testify v1.9.0
 	github.com/zclconf/go-cty v1.14.4
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.43.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.47.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/oauth2 v0.19.0
 )
