@@ -181,3 +181,9 @@ func convertToSetNamespaceVariablesInput(vars []varparser.Variable) []types.SetN
 	}
 	return response
 }
+
+// newResourceTRN returns a new TRN string for the given resource and
+// arguments. This is a helper function for creating TRNs.
+func newResourceTRN(resource string, a ...string) string {
+	return fmt.Sprintf("trn:%s:%s", resource, strings.Join(a, "/"))
+}
