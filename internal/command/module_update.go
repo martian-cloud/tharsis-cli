@@ -31,14 +31,7 @@ func (muc moduleUpdateCommand) Run(args []string) int {
 		muc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := muc.meta.ReadSettings()
-	if err != nil {
-		muc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := muc.meta.GetSDKClient()
 	if err != nil {
 		muc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

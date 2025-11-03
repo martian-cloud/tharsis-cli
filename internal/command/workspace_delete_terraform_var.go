@@ -31,14 +31,7 @@ func (wdv workspaceDeleteTerraformVarCommand) Run(args []string) int {
 		wdv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wdv.meta.ReadSettings()
-	if err != nil {
-		wdv.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wdv.meta.GetSDKClient()
 	if err != nil {
 		wdv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

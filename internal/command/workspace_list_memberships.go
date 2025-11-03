@@ -31,14 +31,7 @@ func (wlm workspaceListMembershipsCommand) Run(args []string) int {
 		wlm.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wlm.meta.ReadSettings()
-	if err != nil {
-		wlm.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wlm.meta.GetSDKClient()
 	if err != nil {
 		wlm.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

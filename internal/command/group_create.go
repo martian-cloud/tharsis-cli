@@ -33,14 +33,7 @@ func (gcc groupCreateCommand) Run(args []string) int {
 		gcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := gcc.meta.ReadSettings()
-	if err != nil {
-		gcc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := gcc.meta.GetSDKClient()
 	if err != nil {
 		gcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

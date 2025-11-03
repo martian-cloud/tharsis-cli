@@ -12,6 +12,7 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/useragent"
 )
 
 const (
@@ -108,11 +109,15 @@ func realMain() int {
 	log.Debugf("global options: %#v", globalOptions)
 	log.Debugf("   commandArgs: %#v", commandArgs)
 
+	// Build user agent once
+	userAgent := useragent.BuildUserAgent(Version)
+
 	// Prepare the command metadata struct.
 	meta := &command.Metadata{
 		BinaryName:   binaryName,
 		DisplayTitle: displayTitle,
 		Version:      Version,
+		UserAgent:    userAgent,
 		Logger:       log,
 		UI: &output.UI{
 			BasicUI: &cli.BasicUi{
