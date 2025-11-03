@@ -53,14 +53,7 @@ func (tpuc terraformProviderUploadVersionCommand) Run(args []string) int {
 		tpuc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := tpuc.meta.ReadSettings()
-	if err != nil {
-		tpuc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := tpuc.meta.GetSDKClient()
 	if err != nil {
 		tpuc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

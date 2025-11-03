@@ -31,14 +31,7 @@ func (ggc workspaceUpdateMembershipCommand) Run(args []string) int {
 		ggc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := ggc.meta.ReadSettings()
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := ggc.meta.GetSDKClient()
 	if err != nil {
 		ggc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

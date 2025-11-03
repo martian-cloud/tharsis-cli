@@ -34,14 +34,7 @@ func (rgc runnerAgentGetCommand) Run(args []string) int {
 		rgc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := rgc.meta.ReadSettings()
-	if err != nil {
-		rgc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := rgc.meta.GetSDKClient()
 	if err != nil {
 		rgc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

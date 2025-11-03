@@ -42,14 +42,7 @@ func (m managedIdentityCreateCommand) Run(args []string) int {
 		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := m.meta.ReadSettings()
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := m.meta.GetSDKClient()
 	if err != nil {
 		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

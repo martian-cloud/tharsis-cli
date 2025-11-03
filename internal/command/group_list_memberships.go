@@ -31,14 +31,7 @@ func (glm groupListMembershipsCommand) Run(args []string) int {
 		glm.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := glm.meta.ReadSettings()
-	if err != nil {
-		glm.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := glm.meta.GetSDKClient()
 	if err != nil {
 		glm.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

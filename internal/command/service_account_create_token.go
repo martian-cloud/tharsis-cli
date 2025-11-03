@@ -31,14 +31,7 @@ func (sal serviceAccountCreateTokenCommand) Run(args []string) int {
 		sal.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := sal.meta.ReadSettings()
-	if err != nil {
-		sal.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := sal.meta.GetSDKClient()
 	if err != nil {
 		sal.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

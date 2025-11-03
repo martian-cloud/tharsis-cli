@@ -30,14 +30,7 @@ func (dc destroyCommand) Run(args []string) int {
 		dc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := dc.meta.ReadSettings()
-	if err != nil {
-		dc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := dc.meta.GetSDKClient()
 	if err != nil {
 		dc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

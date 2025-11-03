@@ -6,6 +6,7 @@ import (
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/logger"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
+	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 )
 
 // Metadata communicates information from the 'main' tharsis module to
@@ -23,6 +24,7 @@ type Metadata struct {
 	BinaryName         string
 	DisplayTitle       string
 	Version            string
+	UserAgent          string
 	Logger             logger.Logger
 	UI                 cli.Ui
 	CurrentProfileName string
@@ -62,4 +64,13 @@ func (m *Metadata) ReadSettings() (*settings.Settings, error) {
 	m.Logger.Debugf("settings: %#v", currentSettings)
 
 	return currentSettings, nil
+}
+
+// GetSDKClient returns a Tharsis SDK client with user agent configured
+func (m *Metadata) GetSDKClient() (*tharsis.Client, error) {
+	settings, err := m.ReadSettings()
+	if err != nil {
+		return nil, err
+	}
+	return settings.CurrentProfile.GetSDKClient(m.UserAgent)
 }

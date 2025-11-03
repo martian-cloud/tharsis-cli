@@ -47,14 +47,7 @@ func (wo workspaceOutputsCommand) Run(args []string) int {
 		wo.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wo.meta.ReadSettings()
-	if err != nil {
-		wo.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wo.meta.GetSDKClient()
 	if err != nil {
 		wo.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

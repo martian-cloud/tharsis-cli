@@ -31,14 +31,7 @@ func (mdc moduleDeleteCommand) Run(args []string) int {
 		mdc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := mdc.meta.ReadSettings()
-	if err != nil {
-		mdc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := mdc.meta.GetSDKClient()
 	if err != nil {
 		mdc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

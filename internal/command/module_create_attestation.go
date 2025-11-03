@@ -32,14 +32,7 @@ func (mcc moduleCreateAttestationCommand) Run(args []string) int {
 		mcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := mcc.meta.ReadSettings()
-	if err != nil {
-		mcc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := mcc.meta.GetSDKClient()
 	if err != nil {
 		mcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

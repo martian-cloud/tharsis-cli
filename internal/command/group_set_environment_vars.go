@@ -32,14 +32,7 @@ func (gsv groupSetEnvironmentVarsCommand) Run(args []string) int {
 		gsv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := gsv.meta.ReadSettings()
-	if err != nil {
-		gsv.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := gsv.meta.GetSDKClient()
 	if err != nil {
 		gsv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1
