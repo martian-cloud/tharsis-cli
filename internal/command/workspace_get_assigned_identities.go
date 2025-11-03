@@ -33,14 +33,7 @@ func (wam workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 		wam.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wam.meta.ReadSettings()
-	if err != nil {
-		wam.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wam.meta.GetSDKClient()
 	if err != nil {
 		wam.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

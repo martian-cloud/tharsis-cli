@@ -464,7 +464,6 @@ func (lc loginCommand) Run(args []string) int {
 			lc.meta.Logger.Error(output.FormatError("Failed to read settings file", err))
 			return 1
 		}
-
 		// Build settings when they don't exist.
 		profile := settings.Profile{TharsisURL: lc.meta.DefaultEndpointURL}
 		profiles := map[string]settings.Profile{"default": profile}

@@ -31,14 +31,7 @@ func (gmc groupMigrateCommand) Run(args []string) int {
 		gmc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := gmc.meta.ReadSettings()
-	if err != nil {
-		gmc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := gmc.meta.GetSDKClient()
 	if err != nil {
 		gmc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

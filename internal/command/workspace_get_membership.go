@@ -33,14 +33,7 @@ func (wgm workspaceGetMembershipCommand) Run(args []string) int {
 		wgm.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wgm.meta.ReadSettings()
-	if err != nil {
-		wgm.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wgm.meta.GetSDKClient()
 	if err != nil {
 		wgm.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

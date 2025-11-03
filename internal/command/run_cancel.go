@@ -31,14 +31,7 @@ func (rc runCancelCommand) Run(args []string) int {
 		rc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := rc.meta.ReadSettings()
-	if err != nil {
-		rc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := rc.meta.GetSDKClient()
 	if err != nil {
 		rc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

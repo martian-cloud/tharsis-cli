@@ -31,14 +31,7 @@ func (wdc workspaceDeleteCommand) Run(args []string) int {
 		wdc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wdc.meta.ReadSettings()
-	if err != nil {
-		wdc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wdc.meta.GetSDKClient()
 	if err != nil {
 		wdc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

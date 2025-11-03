@@ -34,14 +34,7 @@ func (mlc moduleListAttestationsCommand) Run(args []string) int {
 		mlc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := mlc.meta.ReadSettings()
-	if err != nil {
-		mlc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := mlc.meta.GetSDKClient()
 	if err != nil {
 		mlc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

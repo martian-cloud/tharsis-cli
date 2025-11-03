@@ -64,14 +64,7 @@ func (pc planCommand) Run(args []string) int {
 		pc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := pc.meta.ReadSettings()
-	if err != nil {
-		pc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := pc.meta.GetSDKClient()
 	if err != nil {
 		pc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

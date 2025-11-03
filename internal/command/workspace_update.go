@@ -31,14 +31,7 @@ func (wuc workspaceUpdateCommand) Run(args []string) int {
 		wuc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wuc.meta.ReadSettings()
-	if err != nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wuc.meta.GetSDKClient()
 	if err != nil {
 		wuc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

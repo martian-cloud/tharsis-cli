@@ -34,14 +34,7 @@ func (glc groupListCommand) Run(args []string) int {
 		glc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := glc.meta.ReadSettings()
-	if err != nil {
-		glc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := glc.meta.GetSDKClient()
 	if err != nil {
 		glc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

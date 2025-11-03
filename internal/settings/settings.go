@@ -180,27 +180,6 @@ func defaultSettingsDirectory() (string, error) {
 	return filepath.Join(homedir, SettingsDirectoryName), nil
 }
 
-// GetSDKClient returns a Tharsis SDK client based on the specified profile.
-func (p *Profile) GetSDKClient() (*tharsis.Client, error) {
-	provider, err := getAuthProvider(p)
-	if err != nil {
-		return nil, err
-	}
-
-	sdkConfig, err := sdkconfig.Load(
-		sdkconfig.WithTokenProvider(provider),
-		sdkconfig.WithEndpoint(p.TharsisURL))
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := tharsis.NewClient(sdkConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	return client, nil
-}
 
 // getAuthProvider attempts to return an SDK authentication provider.
 // If not successful but no error happened while reading the file, it returns nil.
@@ -219,4 +198,34 @@ func getAuthProvider(profile *Profile) (sdkauth.TokenProvider, error) {
 	}
 
 	return provider, nil
+}
+
+// GetSDKClient returns a Tharsis SDK client with user agent configured
+func (p *Profile) GetSDKClient(userAgent string) (*tharsis.Client, error) {
+	provider, err := getAuthProvider(p)
+	if err != nil {
+		return nil, err
+	}
+
+	configOptions := []func(*sdkconfig.LoadOptions) error{
+		sdkconfig.WithTokenProvider(provider),
+		sdkconfig.WithEndpoint(p.TharsisURL),
+	}
+	
+	// Add user agent if provided
+	if userAgent != "" {
+		configOptions = append(configOptions, sdkconfig.WithUserAgent(userAgent))
+	}
+
+	sdkConfig, err := sdkconfig.Load(configOptions...)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := tharsis.NewClient(sdkConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }

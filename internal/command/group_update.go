@@ -31,14 +31,7 @@ func (guc groupUpdateCommand) Run(args []string) int {
 		guc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := guc.meta.ReadSettings()
-	if err != nil {
-		guc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := guc.meta.GetSDKClient()
 	if err != nil {
 		guc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1
