@@ -31,14 +31,7 @@ func (gdv groupDeleteTerraformVarCommand) Run(args []string) int {
 		gdv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := gdv.meta.ReadSettings()
-	if err != nil {
-		gdv.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := gdv.meta.GetSDKClient()
 	if err != nil {
 		gdv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

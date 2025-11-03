@@ -45,14 +45,7 @@ func (ac applyCommand) Run(args []string) int {
 		ac.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := ac.meta.ReadSettings()
-	if err != nil {
-		ac.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := ac.meta.GetSDKClient()
 	if err != nil {
 		ac.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

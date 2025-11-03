@@ -34,14 +34,7 @@ func (wlc workspaceListCommand) Run(args []string) int {
 		wlc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wlc.meta.ReadSettings()
-	if err != nil {
-		wlc.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wlc.meta.GetSDKClient()
 	if err != nil {
 		wlc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

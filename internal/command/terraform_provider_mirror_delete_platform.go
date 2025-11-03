@@ -30,14 +30,7 @@ func (c terraformProviderMirrorDeletePlatformCommand) Run(args []string) int {
 		c.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := c.meta.ReadSettings()
-	if err != nil {
-		c.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := c.meta.GetSDKClient()
 	if err != nil {
 		c.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

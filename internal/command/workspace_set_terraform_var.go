@@ -31,14 +31,7 @@ func (wsv workspaceSetTerraformVarCommand) Run(args []string) int {
 		wsv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := wsv.meta.ReadSettings()
-	if err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := wsv.meta.GetSDKClient()
 	if err != nil {
 		wsv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1

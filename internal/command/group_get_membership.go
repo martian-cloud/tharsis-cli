@@ -38,14 +38,7 @@ func (ggm groupGetMembershipCommand) Run(args []string) int {
 		ggm.meta.Logger.Debugf("    argument %d: %s", ix, arg)
 	}
 
-	// Cannot delay reading settings past this point.
-	settings, err := ggm.meta.ReadSettings()
-	if err != nil {
-		ggm.meta.Logger.Error(output.FormatError("failed to read settings file", err))
-		return 1
-	}
-
-	client, err := settings.CurrentProfile.GetSDKClient()
+	client, err := ggm.meta.GetSDKClient()
 	if err != nil {
 		ggm.meta.UI.Error(output.FormatError("failed to get SDK client", err))
 		return 1
