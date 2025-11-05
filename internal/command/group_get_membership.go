@@ -3,9 +3,11 @@ package command
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -79,13 +81,24 @@ func (ggm groupGetMembershipCommand) doGroupGetMembership(ctx context.Context, c
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(ggm.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(ggm.meta, actualPath) {
 		return 1
 	}
 
 	// Query for the group to make sure it exists and is a group.
-	_, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{Path: &path})
+	// Use the path/TRN directly - SDK handles both formats
+	var getGroupInput *sdktypes.GetGroupInput
+	if strings.HasPrefix(path, "trn:") {
+		// It's already a TRN, use ID field
+		getGroupInput = &sdktypes.GetGroupInput{ID: &path}
+	} else {
+		// It's a path, use Path field
+		getGroupInput = &sdktypes.GetGroupInput{Path: &path}
+	}
+	
+	_, err = client.Group.GetGroup(ctx, getGroupInput)
 	if err != nil {
 		ggm.meta.UI.Error(output.FormatError("failed to find group", err))
 		return 1
@@ -229,8 +242,11 @@ func getNamespaceMembership(
 	}
 
 	// Prepare the inputs.
+	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
+	actualPath := trn.ToPath(namespacePath)
+	
 	input := &sdktypes.GetNamespaceMembershipsInput{
-		NamespacePath: namespacePath,
+		NamespacePath: actualPath,
 	}
 	meta.Logger.Debugf("group list-memberships input: %#v", input)
 

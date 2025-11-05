@@ -13,6 +13,7 @@ import (
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/external"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -91,7 +92,8 @@ func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client
 	outputName := getOption("output-name", "", cmdOpts)[0]
 
 	// Validate the workspace path.
-	if !isNamespacePathValid(wo.meta, workspacePath) {
+	actualPath := trn.ToPath(workspacePath)
+	if !isNamespacePathValid(wo.meta, actualPath) {
 		return 1
 	}
 
@@ -107,7 +109,8 @@ func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client
 		return 1
 	}
 
-	input := &sdktypes.GetWorkspaceInput{Path: &workspacePath}
+	trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
+	input := &sdktypes.GetWorkspaceInput{ID: &trnID}
 	wo.meta.Logger.Debugf("workspace outputs input: %#v", input)
 
 	workspace, err := client.Workspaces.GetWorkspace(ctx, input)

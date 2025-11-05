@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-svchost/disco"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/providermirror"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -74,8 +75,9 @@ func (c terraformProviderMirrorSyncCommand) doTerraformProviderMirrorSync(ctx co
 	allPlatforms := len(platforms) == 0 // If no platform specified, default to all supported platforms.
 	useLatestVersion := version == ""   // If no version specified, use latest version.
 
-	// Error is already logged.
-	if !isNamespacePathValid(c.meta, groupPath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(groupPath)
+	if !isNamespacePathValid(c.meta, actualPath) {
 		return 1
 	}
 

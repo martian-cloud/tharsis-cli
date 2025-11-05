@@ -8,6 +8,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -70,14 +71,15 @@ func (m managedIdentityUpdateCommand) doManagedIdentityUpdate(ctx context.Contex
 		return 1
 	}
 
-	if !isResourcePathValid(m.meta, managedIdentityPath) {
+	actualPath := trn.ToPath(managedIdentityPath)
+	if !isResourcePathValid(m.meta, actualPath) {
 		return 1
 	}
 
 	// Get the managed identity so, we can find it's ID.
-	managedIdentity, err := client.ManagedIdentity.GetManagedIdentity(ctx, &sdktypes.GetManagedIdentityInput{
-		Path: &managedIdentityPath,
-	})
+	trnID := trn.ToTRN(managedIdentityPath, trn.ResourceTypeManagedIdentity)
+	getManagedIdentityInput := &sdktypes.GetManagedIdentityInput{ID: &trnID}
+	managedIdentity, err := client.ManagedIdentity.GetManagedIdentity(ctx, getManagedIdentityInput)
 	if err != nil {
 		m.meta.Logger.Error(output.FormatError("failed to get managed identity", err))
 		return 1

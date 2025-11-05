@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -69,21 +70,26 @@ func (glm groupListMembershipsCommand) doGroupListMemberships(ctx context.Contex
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(glm.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(glm.meta, actualPath) {
 		return 1
 	}
 
 	// Query for the group to make sure it exists and is a group.
-	_, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{Path: &path})
+	trnID := trn.ToTRN(path, trn.ResourceTypeGroup)
+	_, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{ID: &trnID})
 	if err != nil {
 		glm.meta.UI.Error(output.FormatError("failed to find group", err))
 		return 1
 	}
 
 	// Prepare the inputs.
+	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
+	actualPath = trn.ToPath(path)
+	
 	input := &sdktypes.GetNamespaceMembershipsInput{
-		NamespacePath: path,
+		NamespacePath: actualPath,
 	}
 	glm.meta.Logger.Debugf("group list-memberships input: %#v", input)
 

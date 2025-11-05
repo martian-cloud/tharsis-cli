@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -74,21 +75,27 @@ func (ggc groupAddMembershipCommand) doGroupAddMembership(ctx context.Context, c
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(ggc.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(ggc.meta, actualPath) {
 		return 1
 	}
 
 	// Query for the group to make sure it exists and is a group.
-	_, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{Path: &path})
+	trnID := trn.ToTRN(path, trn.ResourceTypeGroup)
+	getGroupInput := &sdktypes.GetGroupInput{ID: &trnID}
+	_, err = client.Group.GetGroup(ctx, getGroupInput)
 	if err != nil {
 		ggc.meta.UI.Error(output.FormatError("failed to find group", err))
 		return 1
 	}
 
 	// Prepare the inputs.
+	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
+	actualPath = trn.ToPath(path)
+	
 	input := &sdktypes.CreateNamespaceMembershipInput{
-		NamespacePath: path,
+		NamespacePath: actualPath,
 		Role:          role,
 	}
 	if username != "" {
