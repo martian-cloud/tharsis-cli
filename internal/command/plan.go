@@ -12,6 +12,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -122,8 +123,9 @@ func (pc planCommand) doPlan(ctx context.Context, client *tharsis.Client, opts [
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(pc.meta, workspacePath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(workspacePath)
+	if !isNamespacePathValid(pc.meta, actualPath) {
 		return 1
 	}
 
@@ -221,8 +223,9 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 	}
 
 	// Verify the workspace path exists.
-	foundWorkspace, err := client.Workspaces.GetWorkspace(ctx,
-		&sdktypes.GetWorkspaceInput{Path: &input.workspacePath})
+	trnID := trn.ToTRN(input.workspacePath, trn.ResourceTypeWorkspace)
+	getWorkspaceInput := &sdktypes.GetWorkspaceInput{ID: &trnID}
+	foundWorkspace, err := client.Workspaces.GetWorkspace(ctx, getWorkspaceInput)
 	if err != nil {
 		meta.Logger.Error(output.FormatError("failed to get a workspace", err))
 		return nil, 1
@@ -264,8 +267,11 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 	// Inform the user that we're making progress...
 	meta.UI.Output("Waiting on run to start")
 
+	// Extract path from TRN if needed - WorkspacePath field expects paths, not TRNs
+	actualWorkspacePath := trn.ToPath(input.workspacePath)
+	
 	createRunInput := &sdktypes.CreateRunInput{
-		WorkspacePath:          input.workspacePath,
+		WorkspacePath:          actualWorkspacePath,
 		ConfigurationVersionID: createdConfigurationVersionID,
 		IsDestroy:              input.isDestroy,
 		ModuleSource:           moduleSourceP,
@@ -380,9 +386,12 @@ func createUploadConfigVersion(ctx context.Context, client *tharsis.Client, meta
 	workspacePath, directoryPath string, isSpeculative bool,
 ) (string, error) {
 	// Call CreateConfigurationVersion
+	// Extract path from TRN if needed - WorkspacePath field expects paths, not TRNs
+	actualWorkspacePath := trn.ToPath(workspacePath)
+	
 	createdConfigurationVersion, err := client.ConfigurationVersion.CreateConfigurationVersion(ctx,
 		&sdktypes.CreateConfigurationVersionInput{
-			WorkspacePath: workspacePath,
+			WorkspacePath: actualWorkspacePath,
 			Speculative:   &isSpeculative,
 		})
 	if err != nil {
@@ -396,7 +405,7 @@ func createUploadConfigVersion(ctx context.Context, client *tharsis.Client, meta
 	// Call UploadConfigurationVersion
 	err = client.ConfigurationVersion.UploadConfigurationVersion(ctx,
 		&sdktypes.UploadConfigurationVersionInput{
-			WorkspacePath:          workspacePath,
+			WorkspacePath:          actualWorkspacePath,
 			ConfigurationVersionID: createdConfigurationVersion.Metadata.ID,
 			DirectoryPath:          directoryPath,
 		})

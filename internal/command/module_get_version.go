@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -70,12 +71,13 @@ func (mgc moduleGetVersionCommand) doModuleGetVersion(ctx context.Context, clien
 		return 1
 	}
 
-	if !isResourcePathValid(mgc.meta, modulePath) {
+	actualPath := trn.ToPath(modulePath)
+	if !isResourcePathValid(mgc.meta, actualPath) {
 		return 1
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.GetTerraformModuleVersionInput{ModulePath: &modulePath}
+	input := &sdktypes.GetTerraformModuleVersionInput{ModulePath: &actualPath}  // Use extracted path
 
 	if versionTag != "" {
 		input.Version = &versionTag

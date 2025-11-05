@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -68,13 +69,15 @@ func (wdc workspaceDeleteCommand) doWorkspaceDelete(ctx context.Context, client 
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(wdc.meta, workspacePath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(workspacePath)
+	if !isNamespacePathValid(wdc.meta, actualPath) {
 		return 1
 	}
 
-	// Prepare the inputs.
-	input := &sdktypes.DeleteWorkspaceInput{WorkspacePath: &workspacePath, Force: &force}
+	// Prepare the inputs - convert path to TRN and use ID field
+	trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
+	input := &sdktypes.DeleteWorkspaceInput{ID: &trnID, Force: &force}
 	wdc.meta.Logger.Debugf("workspace delete input: %#v", input)
 
 	// Delete the workspace.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -69,21 +70,26 @@ func (wlm workspaceListMembershipsCommand) doWorkspaceListMemberships(ctx contex
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(wlm.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(wlm.meta, actualPath) {
 		return 1
 	}
 
 	// Query for the workspace to make sure it exists and is a workspace.
-	_, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{Path: &path})
+	trnID := trn.ToTRN(path, trn.ResourceTypeWorkspace)
+	_, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &trnID})
 	if err != nil {
 		wlm.meta.UI.Error(output.FormatError("failed to find workspace", err))
 		return 1
 	}
 
 	// Prepare the inputs.
+	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
+	actualPath = trn.ToPath(path)
+	
 	input := &sdktypes.GetNamespaceMembershipsInput{
-		NamespacePath: path,
+		NamespacePath: actualPath,
 	}
 	wlm.meta.Logger.Debugf("workspace list-memberships input: %#v", input)
 

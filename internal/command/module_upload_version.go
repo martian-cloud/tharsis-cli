@@ -10,6 +10,7 @@ import (
 	"github.com/caarlos0/log"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -70,8 +71,9 @@ func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context,
 	directoryPath := getOption("directory-path", ".", cmdOpts)[0] // default to "." (should work in *x and Windows)
 	version := getOption("version", "", cmdOpts)[0]
 
-	// Error is already logged.
-	if !isResourcePathValid(muc.meta, modulePath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(modulePath)
+	if !isResourcePathValid(muc.meta, actualPath) {
 		return 1
 	}
 

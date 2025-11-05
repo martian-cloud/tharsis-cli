@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -62,7 +63,8 @@ func (rac runnerAgentAssignServiceAccountCommand) doRunnerAgentAssignServiceAcco
 
 	// Validate both resource paths.
 	for _, path := range cmdArgs {
-		if !isResourcePathValid(rac.meta, path) {
+		actualPath := trn.ToPath(path)
+	if !isResourcePathValid(rac.meta, actualPath) {
 			return 1
 		}
 	}

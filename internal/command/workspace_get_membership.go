@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -74,13 +75,16 @@ func (wgm workspaceGetMembershipCommand) doWorkspaceGetMembership(ctx context.Co
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(wgm.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(wgm.meta, actualPath) {
 		return 1
 	}
 
 	// Query for the workspace to make sure it exists and is a workspace.
-	_, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{Path: &path})
+	trnID := trn.ToTRN(path, trn.ResourceTypeWorkspace)
+	getWorkspaceInput := &sdktypes.GetWorkspaceInput{ID: &trnID}
+	_, err = client.Workspaces.GetWorkspace(ctx, getWorkspaceInput)
 	if err != nil {
 		wgm.meta.UI.Error(output.FormatError("failed to find workspace", err))
 		return 1

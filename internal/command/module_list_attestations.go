@@ -8,6 +8,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -84,12 +85,13 @@ func (mlc moduleListAttestationsCommand) doModuleListAttestations(ctx context.Co
 	sortByOption := strings.ToLower(getOption("sort-by", "", cmdOpts)[0])
 	sortOrderOption := strings.ToLower(getOption("sort-order", "", cmdOpts)[0])
 
-	if !isResourcePathValid(mlc.meta, modulePath) {
+	actualPath := trn.ToPath(modulePath)
+	if !isResourcePathValid(mlc.meta, actualPath) {
 		return 1
 	}
 
 	// Get the module so, we can find it's ID.
-	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &modulePath})
+	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &actualPath})  // Use extracted path
 	if err != nil {
 		mlc.meta.Logger.Error(output.FormatError("failed to get module", err))
 		return 1
@@ -98,7 +100,7 @@ func (mlc moduleListAttestationsCommand) doModuleListAttestations(ctx context.Co
 	var versionID *string
 	if version != "" {
 		version, vErr := client.TerraformModuleVersion.GetModuleVersion(ctx, &sdktypes.GetTerraformModuleVersionInput{
-			ModulePath: &modulePath,
+			ModulePath: &actualPath,  // Use extracted path
 			Version:    &version,
 		})
 		if vErr != nil {

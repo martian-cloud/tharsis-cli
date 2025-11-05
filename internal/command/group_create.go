@@ -7,6 +7,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -77,8 +78,9 @@ func (gcc groupCreateCommand) doGroupCreate(ctx context.Context, client *tharsis
 	}
 	var name, parentPath string
 
-	// Error is already logged.
-	if !isNamespacePathValid(gcc.meta, groupPath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(groupPath)
+	if !isNamespacePathValid(gcc.meta, actualPath) {
 		return 1
 	}
 
@@ -91,7 +93,9 @@ func (gcc groupCreateCommand) doGroupCreate(ctx context.Context, client *tharsis
 
 	// Check if group already exists.
 	if ifNotExists {
-		group, gErr := client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{Path: &groupPath})
+		trnID := trn.ToTRN(groupPath, trn.ResourceTypeGroup)
+		getGroupInput := &sdktypes.GetGroupInput{ID: &trnID}
+		group, gErr := client.Group.GetGroup(ctx, getGroupInput)
 		if (gErr != nil) && !tharsis.IsNotFoundError(gErr) {
 			gcc.meta.Logger.Error(output.FormatError("failed to check group", gErr))
 			return 1

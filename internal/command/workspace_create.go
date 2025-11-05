@@ -8,6 +8,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -85,14 +86,16 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(wcc.meta, workspacePath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(workspacePath)
+	if !isNamespacePathValid(wcc.meta, actualPath) {
 		return 1
 	}
 
 	// Validate managed identity paths.
 	for _, identity := range identityPaths {
-		if !isResourcePathValid(wcc.meta, identity) {
+		actualPath = trn.ToPath(identity)
+		if !isResourcePathValid(wcc.meta, actualPath) {
 			return 1
 		}
 	}
@@ -110,7 +113,8 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 
 	// Check if workspace already exists.
 	if ifNotExists {
-		ws, wErr := client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{Path: &workspacePath})
+		trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
+		ws, wErr := client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &trnID})
 		if (wErr != nil) && !tharsis.IsNotFoundError(wErr) {
 			wcc.meta.Logger.Error(output.FormatError("failed to check workspace", wErr))
 			return 1

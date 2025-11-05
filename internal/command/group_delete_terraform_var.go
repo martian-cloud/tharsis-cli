@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -70,19 +71,20 @@ func (gdv groupDeleteTerraformVarCommand) doGroupDeleteTerraformVar(ctx context.
 		return 1
 	}
 
-	if !isNamespacePathValid(gdv.meta, namespacePath) {
+	actualPath := trn.ToPath(namespacePath)
+	if !isNamespacePathValid(gdv.meta, actualPath) {
 		return 1
 	}
 
 	if _, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{
-		Path: &namespacePath,
+		Path: &actualPath,  // Use extracted path, not original namespacePath
 	}); err != nil {
 		gdv.meta.Logger.Error(output.FormatError("failed to get group", err))
 		return 1
 	}
 
 	input := &sdktypes.DeleteNamespaceVariableInput{
-		ID: newResourceTRN("variable", namespacePath, string(sdktypes.TerraformVariableCategory), key),
+		ID: trn.NewResourceTRN(trn.ResourceTypeVariable, actualPath, string(sdktypes.TerraformVariableCategory), key),  // Use extracted path
 	}
 
 	gdv.meta.Logger.Debugf("group delete-terraform-var input: %#v", input)

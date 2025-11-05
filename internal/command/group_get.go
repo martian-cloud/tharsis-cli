@@ -7,6 +7,7 @@ import (
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -68,13 +69,15 @@ func (ggc groupGetCommand) doGroupGet(ctx context.Context, client *tharsis.Clien
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(ggc.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(ggc.meta, actualPath) {
 		return 1
 	}
 
-	// Prepare the inputs.
-	input := &sdktypes.GetGroupInput{Path: &path}
+	// Convert path to TRN and use ID field - API handles TRN detection automatically
+	trnID := trn.ToTRN(path, trn.ResourceTypeGroup)
+	input := &sdktypes.GetGroupInput{ID: &trnID}
 	ggc.meta.Logger.Debugf("group get input: %#v", input)
 
 	// Get the group.
