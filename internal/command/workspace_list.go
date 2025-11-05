@@ -77,7 +77,7 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 	limit32 := int32(limit)
 	filterPath := getOption("group-path", "", cmdOpts)[0]
 
-	// Error is already logged.
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
 	if filterPath != "" && !isNamespacePathValid(wlc.meta, filterPath) {
 		return 1
 	}

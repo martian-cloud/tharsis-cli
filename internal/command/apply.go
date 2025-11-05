@@ -11,6 +11,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -109,8 +110,9 @@ func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(ac.meta, workspacePath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(workspacePath)
+	if !isNamespacePathValid(ac.meta, actualPath) {
 		return 1
 	}
 

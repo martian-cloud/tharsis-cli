@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -70,17 +71,19 @@ func (wam workspaceUnassignManagedIdentityCommand) doWorkspaceUnassignManagedIde
 	}
 
 	// Do some basic validation on paths.
-	if !isNamespacePathValid(wam.meta, workspacePath) {
+	actualPath := trn.ToPath(workspacePath)
+	if !isNamespacePathValid(wam.meta, actualPath) {
 		return 1
 	}
 
 	// Validate identity path.
-	if !isResourcePathValid(wam.meta, identityPath) {
+	actualPath = trn.ToPath(identityPath)
+	if !isResourcePathValid(wam.meta, actualPath) {
 		return 1
 	}
 
 	input := &sdktypes.AssignManagedIdentityInput{
-		ManagedIdentityPath: &identityPath,
+		ManagedIdentityPath: &actualPath,  // Use extracted path for identity
 		WorkspacePath:       workspacePath,
 	}
 

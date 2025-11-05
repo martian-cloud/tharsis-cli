@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -74,8 +75,9 @@ func (gmc groupMigrateCommand) doGroupMigrate(ctx context.Context, client *thars
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(gmc.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(gmc.meta, actualPath) {
 		return 1
 	}
 
@@ -90,12 +92,17 @@ func (gmc groupMigrateCommand) doGroupMigrate(ctx context.Context, client *thars
 	}
 
 	// Prepare the inputs.
+	// Extract path from TRN if needed - GroupPath field expects paths, not TRNs
+	actualPath = trn.ToPath(path)
+	
 	var newParentPath *string
 	if newParent != "" {
-		newParentPath = &newParent
+		// Also extract path from TRN for new parent if needed
+		actualNewParent := trn.ToPath(newParent)
+		newParentPath = &actualNewParent
 	}
 	input := &sdktypes.MigrateGroupInput{
-		GroupPath:     path,
+		GroupPath:     actualPath,
 		NewParentPath: newParentPath,
 	}
 	gmc.meta.Logger.Debugf("group migrate input: %#v", input)

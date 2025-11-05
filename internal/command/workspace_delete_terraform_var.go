@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -70,19 +71,20 @@ func (wdv workspaceDeleteTerraformVarCommand) doWorkspaceDeleteTerraformVar(ctx 
 		return 1
 	}
 
-	if !isNamespacePathValid(wdv.meta, namespacePath) {
+	actualPath := trn.ToPath(namespacePath)
+	if !isNamespacePathValid(wdv.meta, actualPath) {
 		return 1
 	}
 
 	if _, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{
-		Path: &namespacePath,
+		Path: &actualPath,  // Use extracted path, not original namespacePath
 	}); err != nil {
 		wdv.meta.Logger.Error(output.FormatError("failed to get workspace", err))
 		return 1
 	}
 
 	input := &sdktypes.DeleteNamespaceVariableInput{
-		ID: newResourceTRN("variable", namespacePath, string(sdktypes.TerraformVariableCategory), key),
+		ID: trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, string(sdktypes.TerraformVariableCategory), key),
 	}
 
 	wdv.meta.Logger.Debugf("workspace delete-terraform-var input: %#v", input)

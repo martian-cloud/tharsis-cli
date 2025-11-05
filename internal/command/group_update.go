@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -69,13 +70,17 @@ func (guc groupUpdateCommand) doGroupUpdate(ctx context.Context, client *tharsis
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(guc.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(guc.meta, actualPath) {
 		return 1
 	}
 
+	// Extract path from TRN if needed - GroupPath field expects paths, not TRNs
+	actualPath = trn.ToPath(path)
+	
 	input := &sdktypes.UpdateGroupInput{
-		GroupPath:   &path,
+		GroupPath:   &actualPath,
 		Description: description,
 	}
 	guc.meta.Logger.Debugf("group update input: %#v", input)

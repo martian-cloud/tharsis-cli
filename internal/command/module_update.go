@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -74,12 +75,13 @@ func (muc moduleUpdateCommand) doModuleUpdate(ctx context.Context, client *thars
 		return 1
 	}
 
-	if !isResourcePathValid(muc.meta, modulePath) {
+	actualPath := trn.ToPath(modulePath)
+	if !isResourcePathValid(muc.meta, actualPath) {
 		return 1
 	}
 
 	// Get the module so, we can find it's ID.
-	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &modulePath})
+	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &actualPath})  // Use extracted path
 	if err != nil {
 		muc.meta.Logger.Error(output.FormatError("failed to get module", err))
 		return 1

@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -75,7 +76,8 @@ func (sal serviceAccountCreateTokenCommand) doServiceAccountCreateToken(ctx cont
 	}
 
 	// Make sure the service account path has a slash and get the parent group path.
-	if !isResourcePathValid(sal.meta, serviceAccountPath) {
+	actualPath := trn.ToPath(serviceAccountPath)
+	if !isResourcePathValid(sal.meta, actualPath) {
 		return 1
 	}
 

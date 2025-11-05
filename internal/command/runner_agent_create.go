@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -71,7 +72,8 @@ func (rcc runnerAgentCreateCommand) doRunnerAgentCreate(ctx context.Context, cli
 	}
 	tags := getOptionSlice("tag", cmdOpts)
 
-	if !isNamespacePathValid(rcc.meta, groupPath) {
+	actualPath := trn.ToPath(groupPath)
+	if !isNamespacePathValid(rcc.meta, actualPath) {
 		return 1
 	}
 
