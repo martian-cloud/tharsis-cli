@@ -9,6 +9,7 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -81,7 +82,8 @@ func (c terraformProviderMirrorListVersionsCommand) doTerraformProviderMirrorLis
 	limit32 := int32(limit)
 	sortOrderOption := strings.ToLower(getOption("sort-order", "", cmdOpts)[0])
 
-	if !isNamespacePathValid(c.meta, groupPath) {
+	actualPath := trn.ToPath(groupPath)
+	if !isNamespacePathValid(c.meta, actualPath) {
 		return 1
 	}
 

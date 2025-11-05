@@ -10,6 +10,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -89,8 +90,9 @@ func (tpuc terraformProviderUploadVersionCommand) doTerraformProviderUploadVersi
 	tfProviderPath := cmdArgs[0]
 	directoryPath := getOption("directory-path", ".", cmdOpts)[0] // default to "." (should work in *x and Windows)
 
-	// Error is already logged.
-	if !isResourcePathValid(tpuc.meta, tfProviderPath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(tfProviderPath)
+	if !isResourcePathValid(tpuc.meta, actualPath) {
 		return 1
 	}
 

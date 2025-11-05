@@ -63,14 +63,16 @@ func getBoolOptionValue(optName string, defaultValue string, options map[string]
 	}
 }
 
-// isNamespacePathValid determines if a path is invalid (starts or ends with a '/').
+// isNamespacePathValid determines if a path is valid.
 // Logs an error using the Metadata passed in.
-func isNamespacePathValid(meta *Metadata, namespacePath string) bool {
-	if namespacePath == "" {
-		meta.Logger.Error(output.FormatError("namespace path cannot be empty", nil))
+func isNamespacePathValid(meta *Metadata, path string) bool {
+	if path == "" {
+		meta.Logger.Error(output.FormatError("path cannot be empty", nil))
 		return false
 	}
-	if strings.HasPrefix(namespacePath, sep) || strings.HasSuffix(namespacePath, sep) {
+
+	// Validate as path
+	if strings.HasPrefix(path, sep) || strings.HasSuffix(path, sep) {
 		meta.Logger.Error(output.FormatError("namespace path must not begin or end with a forward slash", nil))
 		return false
 	}
@@ -78,14 +80,20 @@ func isNamespacePathValid(meta *Metadata, namespacePath string) bool {
 	return true
 }
 
-// arePathsValid is a helper function to validate resource paths
+// isResourcePathValid is a helper function to validate resource paths
 // that include a parent like managed identity path.
-func isResourcePathValid(meta *Metadata, resourcePath string) bool {
-	if strings.LastIndex(resourcePath, sep) == -1 {
+// Logs an error using the Metadata passed in.
+func isResourcePathValid(meta *Metadata, path string) bool {
+	// Validate as resource path (must contain at least one slash)
+	if path == "" {
+		meta.Logger.Error(output.FormatError("path cannot be empty", nil))
+		return false
+	}
+	if strings.LastIndex(path, sep) == -1 {
 		meta.Logger.Error(output.FormatError("resource path is not valid", nil))
 		return false
 	}
-	if strings.HasPrefix(resourcePath, sep) || strings.HasSuffix(resourcePath, sep) {
+	if strings.HasPrefix(path, sep) || strings.HasSuffix(path, sep) {
 		meta.Logger.Error(output.FormatError("resource path must not begin or end with a forward slash", nil))
 		return false
 	}
@@ -180,10 +188,4 @@ func convertToSetNamespaceVariablesInput(vars []varparser.Variable) []types.SetN
 		})
 	}
 	return response
-}
-
-// newResourceTRN returns a new TRN string for the given resource and
-// arguments. This is a helper function for creating TRNs.
-func newResourceTRN(resource string, a ...string) string {
-	return fmt.Sprintf("trn:%s:%s", resource, strings.Join(a, "/"))
 }

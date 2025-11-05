@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -66,14 +67,15 @@ func (gsv groupSetTerraformVarsCommand) doGroupSetTerraformVars(ctx context.Cont
 	namespacePath := cmdArgs[0]
 	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
 
-	// Error is already logged.
-	if !isNamespacePathValid(gsv.meta, namespacePath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(namespacePath)
+	if !isNamespacePathValid(gsv.meta, actualPath) {
 		return 1
 	}
 
 	// Ensure namespace is a group.
 	if _, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{
-		Path: &namespacePath,
+		Path: &actualPath,  // Use extracted path, not original namespacePath
 	}); err != nil {
 		gsv.meta.Logger.Error(output.FormatError("failed to get group", err))
 		return 1
@@ -88,8 +90,11 @@ func (gsv groupSetTerraformVarsCommand) doGroupSetTerraformVars(ctx context.Cont
 	}
 
 	// Prepare the inputs.
+	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
+	actualPath = trn.ToPath(namespacePath)
+	
 	input := &sdktypes.SetNamespaceVariablesInput{
-		NamespacePath: namespacePath,
+		NamespacePath: actualPath,
 		Category:      sdktypes.TerraformVariableCategory,
 		Variables:     convertToSetNamespaceVariablesInput(variables),
 	}

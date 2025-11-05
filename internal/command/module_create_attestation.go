@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
@@ -71,8 +72,9 @@ func (mcc moduleCreateAttestationCommand) doModuleCreateAttestation(ctx context.
 		return 1
 	}
 
-	// Error is already logged.
-	if !isResourcePathValid(mcc.meta, modulePath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(modulePath)
+	if !isResourcePathValid(mcc.meta, actualPath) {
 		return 1
 	}
 

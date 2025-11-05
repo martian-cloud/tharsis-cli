@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -69,14 +70,18 @@ func (gdc groupDeleteCommand) doGroupDelete(ctx context.Context, client *tharsis
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(gdc.meta, groupPath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(groupPath)
+	if !isNamespacePathValid(gdc.meta, actualPath) {
 		return 1
 	}
 
 	// Prepare the inputs.
+	// Extract path from TRN if needed - GroupPath field expects paths, not TRNs
+	actualPath = trn.ToPath(groupPath)
+	
 	input := &sdktypes.DeleteGroupInput{
-		GroupPath: &groupPath,
+		GroupPath: &actualPath,
 		Force:     &force,
 	}
 	gdc.meta.Logger.Debugf("group delete input: %#v", input)

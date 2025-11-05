@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -63,11 +64,12 @@ func (mdc moduleDeleteCommand) doModuleDelete(ctx context.Context, client *thars
 
 	modulePath := cmdArgs[0]
 
-	if !isResourcePathValid(mdc.meta, modulePath) {
+	actualPath := trn.ToPath(modulePath)
+	if !isResourcePathValid(mdc.meta, actualPath) {
 		return 1
 	}
 
-	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &modulePath})
+	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &actualPath})  // Use extracted path
 	if err != nil {
 		mdc.meta.Logger.Error(output.FormatError("failed to get module", err))
 		return 1

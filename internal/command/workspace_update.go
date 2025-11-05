@@ -6,6 +6,7 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -77,8 +78,9 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(wuc.meta, path) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(path)
+	if !isNamespacePathValid(wuc.meta, actualPath) {
 		return 1
 	}
 
@@ -92,11 +94,14 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 	jobDuration = &duration
 
 	input := &sdktypes.UpdateWorkspaceInput{
-		WorkspacePath:      &path,
 		Description:        description,
 		MaxJobDuration:     jobDuration,
 		PreventDestroyPlan: &preventDestroyPlan,
 	}
+
+	// Convert path to TRN and use ID field
+	trnID := trn.ToTRN(path, trn.ResourceTypeWorkspace)
+	input.ID = &trnID
 
 	if terraformVersion != "" {
 		input.TerraformVersion = &terraformVersion

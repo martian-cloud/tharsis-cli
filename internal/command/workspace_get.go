@@ -7,6 +7,7 @@ import (
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -69,13 +70,15 @@ func (wgc workspaceGetCommand) doWorkspaceGet(ctx context.Context, client *thars
 		return 1
 	}
 
-	// Error is already logged.
-	if !isNamespacePathValid(wgc.meta, workspacePath) {
+	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
+	actualPath := trn.ToPath(workspacePath)
+	if !isNamespacePathValid(wgc.meta, actualPath) {
 		return 1
 	}
 
-	// Prepare the inputs.
-	input := &sdktypes.GetWorkspaceInput{Path: &workspacePath}
+	// Prepare the inputs - convert path to TRN and use ID field
+	trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
+	input := &sdktypes.GetWorkspaceInput{ID: &trnID}
 	wgc.meta.Logger.Debugf("workspace get input: %#v", input)
 
 	// Get the workspace.
