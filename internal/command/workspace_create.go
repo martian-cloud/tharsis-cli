@@ -8,9 +8,9 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -85,6 +85,11 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 		wcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
+	labels, err := parseLabels(cmdOpts)
+	if err != nil {
+		wcc.meta.Logger.Error(output.FormatError("failed to parse labels", err))
+		return 1
+	}
 
 	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
 	actualPath := trn.ToPath(workspacePath)
@@ -138,6 +143,7 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 		Description:        description,
 		MaxJobDuration:     jobDuration,
 		PreventDestroyPlan: &preventDestroyPlan,
+		Labels:             labels,
 	}
 
 	if terraformVersion != "" {
@@ -162,6 +168,26 @@ func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client 
 	}
 
 	return outputWorkspace(wcc.meta, toJSON, createdWorkspace)
+}
+
+func parseLabels(cmdOpts map[string][]string) ([]sdktypes.WorkspaceLabelInput, error) {
+	var labels []sdktypes.WorkspaceLabelInput
+	for _, label := range getOptionSlice("label", cmdOpts) {
+		parts := strings.Split(label, "=")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return labels, fmt.Errorf("label key and value cannot be empty")
+		}
+
+		if labels == nil {
+			labels = make([]sdktypes.WorkspaceLabelInput, 0)
+		}
+
+		labels = append(labels, sdktypes.WorkspaceLabelInput{
+			Key:   parts[0],
+			Value: parts[1],
+		})
+	}
+	return labels, nil
 }
 
 // outputWorkspace is the final output for most workspace operations.
@@ -239,6 +265,11 @@ func (wcc workspaceCreateCommand) buildWorkspaceCreateDefs() optparser.OptionDef
 		Synopsis:  "The full resource path to a managed identity.",
 	}
 	defs["managed-identity"] = &identityDef
+
+	defs["label"] = &optparser.OptionDefinition{
+		Arguments: []string{"Label"},
+		Synopsis:  "Labels for the new workspace (key=value).",
+	}
 
 	// Get common defs used by multiple workspace commands.
 	buildCommonWorkspaceDefs(defs)
