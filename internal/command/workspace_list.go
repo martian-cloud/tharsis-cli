@@ -108,6 +108,24 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 		}
 	}
 
+	var labelsFilter []sdktypes.WorkspaceLabelFilter
+	for _, label := range getOptionSlice("label", cmdOpts) {
+		parts := strings.Split(label, "=")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			wlc.meta.Logger.Error(output.FormatError("label key and value cannot be empty", nil))
+			return 1
+		}
+
+		if labelsFilter == nil {
+			labelsFilter = []sdktypes.WorkspaceLabelFilter{}
+		}
+
+		labelsFilter = append(labelsFilter, sdktypes.WorkspaceLabelFilter{
+			Key:   parts[0],
+			Value: parts[1],
+		})
+	}
+
 	// Prepare the inputs.
 	input := &sdktypes.GetWorkspacesInput{
 		Sort: &sortable,
@@ -117,6 +135,7 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 		},
 		Filter: &sdktypes.WorkspaceFilter{
 			GroupPath: &filterPath,
+			Labels:    labelsFilter,
 		},
 	}
 	if cursor == "" {
@@ -124,7 +143,7 @@ func (wlc workspaceListCommand) doWorkspaceList(ctx context.Context, client *tha
 	}
 	if filterPath == "" {
 		// If not filtering, must send nil.
-		input.Filter = nil
+		input.Filter.GroupPath = nil
 	}
 	wlc.meta.Logger.Debugf("workspace list input: %#v", input)
 
@@ -179,6 +198,11 @@ func (wlc workspaceListCommand) buildWorkspaceListDefs() optparser.OptionDefinit
 	defs["sort-by"] = &optparser.OptionDefinition{
 		Arguments: []string{"Sort_By"},
 		Synopsis:  "Sort by this field: PATH or UPDATED.",
+	}
+
+	defs["label"] = &optparser.OptionDefinition{
+		Arguments: []string{"Label"},
+		Synopsis:  "Filter by labels (key=value).",
 	}
 
 	return buildJSONOptionDefs(defs)
