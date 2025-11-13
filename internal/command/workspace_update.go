@@ -6,8 +6,8 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -77,6 +77,11 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 		wuc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
 		return 1
 	}
+	labels, err := parseLabels(cmdOpts)
+	if err != nil {
+		wuc.meta.Logger.Error(output.FormatError("failed to parse labels", err))
+		return 1
+	}
 
 	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
 	actualPath := trn.ToPath(path)
@@ -97,6 +102,7 @@ func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client 
 		Description:        description,
 		MaxJobDuration:     jobDuration,
 		PreventDestroyPlan: &preventDestroyPlan,
+		Labels:             labels,
 	}
 
 	// Convert path to TRN and use ID field
@@ -143,6 +149,11 @@ func buildCommonWorkspaceDefs(defs optparser.OptionDefinitions) {
 	}
 
 	defs["max-job-duration"] = &maxJobDef
+
+	defs["label"] = &optparser.OptionDefinition{
+		Arguments: []string{"Label"},
+		Synopsis:  "Labels for the new workspace (key=value).",
+	}
 
 	// The --prevent-destroy-plan option should be available only for workspace create and update.
 	preventDestroyPlanDef := optparser.OptionDefinition{

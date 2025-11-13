@@ -50,7 +50,6 @@ func main() {
 // Facilitate testing the main function by wrapping it.
 // Now, a test can call realMain without having the os.Exit call getting in the way.
 func realMain() int {
-
 	// Binary name and raw arguments.
 	binaryName = filepath.Base(os.Args[0])
 	displayTitle = capitalizeFirst(binaryName)
@@ -209,6 +208,7 @@ func realMain() int {
 		"workspace set-terraform-var":               command.NewWorkspaceSetTerraformVarCommandFactory(meta),
 		"workspace delete-terraform-var":            command.NewWorkspaceDeleteTerraformVarCommandFactory(meta),
 		"workspace set-environment-vars":            command.NewWorkspaceSetEnvironmentVarsCommandFactory(meta),
+		"workspace label":                           command.NewWorkspaceLabelCommandFactory(meta),
 		"workspace list":                            command.NewWorkspaceListCommandFactory(meta),
 		"workspace get":                             command.NewWorkspaceGetCommandFactory(meta),
 		"workspace create":                          command.NewWorkspaceCreateCommandFactory(meta),
@@ -268,7 +268,6 @@ func capitalizeFirst(arg string) string {
 
 // Manual fix-up to put -h and -v options back into command arguments so the CLI library can handle them.
 func fixUpHelpVersionOptions(commandArgs []string, globalOptions map[string][]string) []string {
-
 	// First, capture the -h and -v options to the result slice.
 	hasDashH := false
 	hasDashV := false
