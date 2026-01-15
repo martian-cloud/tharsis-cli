@@ -3,9 +3,11 @@
 package logger
 
 import (
+	"log/slog"
 	"os"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/exp/zapslog"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -36,6 +38,9 @@ type Logger interface {
 	Infow(msg string, keysAndValues ...interface{})
 	// Errorw logs a message with some additional context
 	Errorw(msg string, keysAndValues ...interface{})
+
+	// Slog returns an *slog.Logger for integration with other logging systems.
+	Slog() *slog.Logger
 }
 
 type logger struct {
@@ -67,7 +72,7 @@ func NewAtLevel(wantLevel string) Logger {
 	encoder := zapcore.NewConsoleEncoder(encoderCfg)
 
 	// Finally, create the logger.
-	zapLogger := zap.New(zapcore.NewCore(encoder, zapcore.Lock(os.Stdout), atom))
+	zapLogger := zap.New(zapcore.NewCore(encoder, zapcore.Lock(os.Stderr), atom))
 	return NewWithZap(zapLogger)
 }
 
@@ -91,4 +96,8 @@ func (l *logger) With(args ...interface{}) Logger {
 		return &logger{l.SugaredLogger.With(args...)}
 	}
 	return l
+}
+
+func (l *logger) Slog() *slog.Logger {
+	return slog.New(zapslog.NewHandler(l.SugaredLogger.Desugar().Core()))
 }

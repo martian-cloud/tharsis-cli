@@ -9,14 +9,13 @@ import (
 	"strings"
 
 	logger "github.com/caarlos0/log" // Allows disabling noise from disco package.
-	"github.com/hashicorp/go-cleanhttp"
 	tfaddr "github.com/hashicorp/terraform-registry-address"
 	"github.com/hashicorp/terraform-svchost/disco"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/providermirror"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -111,7 +110,7 @@ func (c terraformProviderMirrorSyncCommand) doTerraformProviderMirrorSync(ctx co
 	}
 
 	// Create an instance of the provider package resolver.
-	resolver := providermirror.NewTerraformProviderPackageResolver(c.meta.Logger, serviceURL, cleanhttp.DefaultClient())
+	resolver := providermirror.NewTerraformProviderPackageResolver(c.meta.Logger, serviceURL, c.meta.HTTPClient)
 
 	availableVersions, err := resolver.ListAvailableProviderVersions(ctx, provider.Namespace, provider.Type)
 	if err != nil {

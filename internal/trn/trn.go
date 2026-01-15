@@ -18,22 +18,46 @@ const (
 	ResourceTypeManagedIdentity ResourceType = "managed_identity"
 	// ResourceTypeVariable is the resource type constant for variable TRNs.
 	ResourceTypeVariable ResourceType = "variable"
+	// ResourceTypeRun is the resource type constant for run TRNs.
+	ResourceTypeRun ResourceType = "run"
+	// ResourceTypeConfigurationVersion is the resource type constant for configuration version TRNs.
+	ResourceTypeConfigurationVersion ResourceType = "configuration_version"
+	// ResourceTypeTerraformModule is the resource type constant for Terraform module TRNs.
+	ResourceTypeTerraformModule ResourceType = "terraform_module"
+	// ResourceTypeTerraformModuleVersion is the resource type constant for Terraform module version TRNs.
+	ResourceTypeTerraformModuleVersion ResourceType = "terraform_module_version"
+	// ResourceTypeTerraformProvider is the resource type constant for Terraform provider TRNs.
+	ResourceTypeTerraformProvider ResourceType = "terraform_provider"
+	// ResourceTypeTerraformProviderPlatform is the resource type constant for Terraform provider platform TRNs.
+	ResourceTypeTerraformProviderPlatform ResourceType = "terraform_provider_platform"
 )
 
 // ToPath extracts the path portion from a TRN.
 // If the input is not a TRN, returns it unchanged.
 func ToPath(identifier string) string {
-	if !strings.HasPrefix(identifier, "trn:") {
+	if !IsTRN(identifier) {
 		return identifier
 	}
-	
+
 	// Extract path from TRN format: trn:type:path
 	parts := strings.Split(identifier, ":")
 	if len(parts) >= 3 {
 		return parts[2]
 	}
-	
+
 	return identifier
+}
+
+// ToPathParts extracts the path portion from a TRN and splits it into parts.
+// If the input is not a TRN, splits it as-is.
+func ToPathParts(identifier string) []string {
+	path := ToPath(identifier)
+	return strings.Split(path, "/")
+}
+
+// IsTRN returns true if the identifier is a valid TRN format.
+func IsTRN(identifier string) bool {
+	return strings.HasPrefix(identifier, "trn:")
 }
 
 // ToTRN converts a path or TRN to a TRN format.
