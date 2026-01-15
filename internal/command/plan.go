@@ -12,8 +12,8 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
@@ -269,7 +269,7 @@ func createRun(ctx context.Context, client *tharsis.Client, meta *Metadata, inpu
 
 	// Extract path from TRN if needed - WorkspacePath field expects paths, not TRNs
 	actualWorkspacePath := trn.ToPath(input.workspacePath)
-	
+
 	createRunInput := &sdktypes.CreateRunInput{
 		WorkspacePath:          actualWorkspacePath,
 		ConfigurationVersionID: createdConfigurationVersionID,
@@ -388,7 +388,7 @@ func createUploadConfigVersion(ctx context.Context, client *tharsis.Client, meta
 	// Call CreateConfigurationVersion
 	// Extract path from TRN if needed - WorkspacePath field expects paths, not TRNs
 	actualWorkspacePath := trn.ToPath(workspacePath)
-	
+
 	createdConfigurationVersion, err := client.ConfigurationVersion.CreateConfigurationVersion(ctx,
 		&sdktypes.CreateConfigurationVersionInput{
 			WorkspacePath: actualWorkspacePath,

@@ -6,9 +6,9 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -80,7 +80,7 @@ func (wam workspaceGetAssignedManagedIdentitiesCommand) doWorkspaceGetAssignedMa
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.GetAssignedManagedIdentitiesInput{Path: &actualPath}  // Use extracted path
+	input := &sdktypes.GetAssignedManagedIdentitiesInput{Path: &actualPath} // Use extracted path
 	wam.meta.Logger.Debugf("workspace get-assigned-managed-identities input: %#v", input)
 
 	// Get the managed identities.

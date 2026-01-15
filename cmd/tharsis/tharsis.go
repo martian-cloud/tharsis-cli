@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/command"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/logger"
@@ -25,6 +28,9 @@ const (
 	// Short versions of help and version options
 	helpOptionShort    = "h"
 	versionOptionShort = "v"
+
+	// httpClientTimeout is the timeout for HTTP requests
+	httpClientTimeout = 60 * time.Second
 )
 
 var (
@@ -125,6 +131,10 @@ func realMain() int {
 				ErrorWriter: os.Stderr,
 			},
 		},
+		HTTPClient: &http.Client{
+			Transport: cleanhttp.DefaultPooledTransport(),
+			Timeout:   httpClientTimeout,
+		},
 		// CurrentProfileName will be set later in this module.
 		// Settings will be set in individual command modules.
 		DefaultEndpointURL: DefaultEndpointURL,
@@ -154,6 +164,7 @@ func realMain() int {
 		"group update-membership":                   command.NewGroupUpdateMembershipCommandFactory(meta),
 		"plan":                                      command.NewPlanCommandFactory(meta),
 		"destroy":                                   command.NewDestroyCommandFactory(meta),
+		"mcp":                                       command.NewMCPCommandFactory(meta),
 		"managed-identity":                          command.NewManagedIdentityCommandFactory(meta),
 		"managed-identity create":                   command.NewManagedIdentityCreateCommandFactory(meta),
 		"managed-identity delete":                   command.NewManagedIdentityDeleteCommandFactory(meta),

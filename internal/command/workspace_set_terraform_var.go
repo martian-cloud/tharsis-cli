@@ -6,8 +6,8 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -88,7 +88,7 @@ func (wsv workspaceSetTerraformVarCommand) doWorkspaceSetTerraformVar(ctx contex
 	}
 
 	if _, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{
-		Path: &actualPath,  // Use extracted path, not original namespacePath
+		Path: &actualPath, // Use extracted path, not original namespacePath
 	}); err != nil {
 		wsv.meta.Logger.Error(output.FormatError("failed to get workspace", err))
 		return 1
@@ -127,7 +127,7 @@ func (wsv workspaceSetTerraformVarCommand) doWorkspaceSetTerraformVar(ctx contex
 	} else {
 		// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
 		actualPath = trn.ToPath(namespacePath)
-		
+
 		createInput := &sdktypes.CreateNamespaceVariableInput{
 			Key:           key,
 			Value:         value,

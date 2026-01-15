@@ -6,8 +6,8 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -75,7 +75,7 @@ func (mgc moduleGetCommand) doModuleGet(ctx context.Context, client *tharsis.Cli
 	}
 
 	// Prepare the inputs.
-	input := &sdktypes.GetTerraformModuleInput{Path: &actualPath}  // Use extracted path
+	input := &sdktypes.GetTerraformModuleInput{Path: &actualPath} // Use extracted path
 	mgc.meta.Logger.Debugf("module get input: %#v", input)
 
 	// Get the Terraform module.

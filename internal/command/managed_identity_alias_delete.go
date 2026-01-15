@@ -6,8 +6,8 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -69,7 +69,7 @@ func (m managedIdentityAliasDeleteCommand) doManagedIdentityAliasDelete(ctx cont
 	}
 
 	managedIdentityAlias, err := client.ManagedIdentity.GetManagedIdentity(ctx, &sdktypes.GetManagedIdentityInput{
-		Path: &actualPath,  // Use extracted path, not original managedIdentityAliasPath
+		Path: &actualPath, // Use extracted path, not original managedIdentityAliasPath
 	})
 	if err != nil {
 		m.meta.Logger.Error(output.FormatError("failed to get managed identity alias", err))
