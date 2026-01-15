@@ -180,7 +180,6 @@ func defaultSettingsDirectory() (string, error) {
 	return filepath.Join(homedir, SettingsDirectoryName), nil
 }
 
-
 // getAuthProvider attempts to return an SDK authentication provider.
 // If not successful but no error happened while reading the file, it returns nil.
 func getAuthProvider(profile *Profile) (sdkauth.TokenProvider, error) {
@@ -211,7 +210,7 @@ func (p *Profile) GetSDKClient(userAgent string) (*tharsis.Client, error) {
 		sdkconfig.WithTokenProvider(provider),
 		sdkconfig.WithEndpoint(p.TharsisURL),
 	}
-	
+
 	// Add user agent if provided
 	if userAgent != "" {
 		configOptions = append(configOptions, sdkconfig.WithUserAgent(userAgent))

@@ -7,8 +7,8 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -97,7 +97,7 @@ func (ggm groupGetMembershipCommand) doGroupGetMembership(ctx context.Context, c
 		// It's a path, use Path field
 		getGroupInput = &sdktypes.GetGroupInput{Path: &path}
 	}
-	
+
 	_, err = client.Group.GetGroup(ctx, getGroupInput)
 	if err != nil {
 		ggm.meta.UI.Error(output.FormatError("failed to find group", err))
@@ -244,7 +244,7 @@ func getNamespaceMembership(
 	// Prepare the inputs.
 	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
 	actualPath := trn.ToPath(namespacePath)
-	
+
 	input := &sdktypes.GetNamespaceMembershipsInput{
 		NamespacePath: actualPath,
 	}

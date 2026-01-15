@@ -29,7 +29,7 @@ testdata/*
 .xunit-results.xml
 
 # Binary built by Makefile
-tharsis
+/tharsis
 !cmd/*
 
 

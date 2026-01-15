@@ -1,6 +1,7 @@
 package command
 
 import (
+	"net/http"
 	"os"
 
 	"github.com/mitchellh/cli"
@@ -28,6 +29,7 @@ type Metadata struct {
 	Logger             logger.Logger
 	UI                 cli.Ui
 	CurrentProfileName string
+	HTTPClient         *http.Client
 	//
 	// In order to have the Makefile set the default endpoint URL through the
 	// main package at build time and the configure command use the value,
@@ -73,4 +75,9 @@ func (m *Metadata) GetSDKClient() (*tharsis.Client, error) {
 		return nil, err
 	}
 	return settings.CurrentProfile.GetSDKClient(m.UserAgent)
+}
+
+// GetBinaryName returns the binary name
+func (m *Metadata) GetBinaryName() string {
+	return m.BinaryName
 }

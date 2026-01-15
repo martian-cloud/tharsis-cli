@@ -15,7 +15,13 @@ build:  ## build the Tharsis CLI binary
 
 .PHONY: lint
 lint: ## run golint on all Go package
-	@revive $(PACKAGES)
+	@revive -set_exit_status $(PACKAGES)
+	@UNFORMATTED=$$(gofmt -l . 2>/dev/null | grep -v vendor | grep -v '/pkg/mod/'); \
+	if [ -n "$$UNFORMATTED" ]; then \
+		echo "Files not formatted:"; \
+		echo "$$UNFORMATTED"; \
+		exit 1; \
+	fi
 
 .PHONY: vet
 vet: ## run golint on all Go package
@@ -28,6 +34,10 @@ fmt: ## run "go fmt" on all Go packages
 .PHONY: test
 test: ## run unit tests
 	go test -v ./...
+
+.PHONY: generate
+generate: ## generate mocks
+	go generate -v ./...
 
 release:
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build ${GCFLAGS} ${LDFLAGS} -a -o ./bin/${BINARY}_${VERSION}_darwin_amd64  $(BUILD_PATH)

@@ -6,8 +6,8 @@ import (
 
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
 	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
@@ -88,7 +88,7 @@ func (gsv groupSetTerraformVarCommand) doGroupSetTerraformVar(ctx context.Contex
 	}
 
 	if _, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{
-		Path: &actualPath,  // Use extracted path, not original namespacePath
+		Path: &actualPath, // Use extracted path, not original namespacePath
 	}); err != nil {
 		gsv.meta.Logger.Error(output.FormatError("failed to get group", err))
 		return 1
@@ -127,7 +127,7 @@ func (gsv groupSetTerraformVarCommand) doGroupSetTerraformVar(ctx context.Contex
 	} else {
 		// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
 		actualPath = trn.ToPath(namespacePath)
-		
+
 		createInput := &sdktypes.CreateNamespaceVariableInput{
 			Key:           key,
 			Value:         value,
