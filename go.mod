@@ -8,7 +8,7 @@ require (
 	github.com/apparentlymart/go-versions v1.0.2
 	github.com/aws/smithy-go v1.22.2
 	github.com/caarlos0/log v0.4.4
-	github.com/hashicorp/go-cleanhttp v0.5.2
+	github.com/dustin/go-humanize v1.0.1
 	github.com/hashicorp/go-slug v0.16.4
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/hashicorp/hcl/v2 v2.20.1
@@ -21,9 +21,10 @@ require (
 	github.com/qiangxue/go-env v1.0.1
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/stretchr/testify v1.11.1
+	github.com/vbauerster/mpb/v8 v8.11.3
 	github.com/zclconf/go-cty v1.15.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.72.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.54.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.77.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.56.0
 	go.uber.org/zap v1.27.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/oauth2 v0.30.0
@@ -34,8 +35,11 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
+	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/PuerkitoBio/goquery v1.11.0 // indirect
 	github.com/RoaringBitmap/roaring/v2 v2.4.5 // indirect
+	github.com/VividCortex/ewma v1.2.0 // indirect
+	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
@@ -64,6 +68,9 @@ require (
 	github.com/blevesearch/zapx/v16 v16.2.8 // indirect
 	github.com/charmbracelet/lipgloss v0.10.0 // indirect
 	github.com/chigopher/pathlib v0.19.1 // indirect
+	github.com/clipperhouse/stringish v0.1.1 // indirect
+	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
+	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/coder/websocket v1.8.13 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/elliotchance/orderedmap/v2 v2.2.0 // indirect
@@ -74,6 +81,7 @@ require (
 	github.com/google/jsonschema-go v0.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
@@ -90,7 +98,7 @@ require (
 	github.com/magiconair/properties v1.8.9 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.15 // indirect
+	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
@@ -127,11 +135,11 @@ require (
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
-	google.golang.org/protobuf v1.36.8 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
