@@ -30,6 +30,8 @@ const (
 	ResourceTypeTerraformProvider ResourceType = "terraform_provider"
 	// ResourceTypeTerraformProviderPlatform is the resource type constant for Terraform provider platform TRNs.
 	ResourceTypeTerraformProviderPlatform ResourceType = "terraform_provider_platform"
+	// ResourceTypeFederatedRegistry is the resource type constant for federated registry TRNs.
+	ResourceTypeFederatedRegistry ResourceType = "federated_registry"
 )
 
 // ToPath extracts the path portion from a TRN.
