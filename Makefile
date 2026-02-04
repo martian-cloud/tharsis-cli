@@ -15,7 +15,11 @@ build:  ## build the Tharsis CLI binary
 
 .PHONY: lint
 lint: ## run golint on all Go package
+	@echo "Checking go.mod..."
+	@go mod tidy -diff > /dev/null
+	@echo "Running revive..."
 	@revive -set_exit_status $(PACKAGES)
+	@echo "Checking formatting..."
 	@UNFORMATTED=$$(gofmt -l . 2>/dev/null | grep -v vendor | grep -v '/pkg/mod/'); \
 	if [ -n "$$UNFORMATTED" ]; then \
 		echo "Files not formatted:"; \

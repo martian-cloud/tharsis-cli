@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-cleanhttp"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/command"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/logger"
@@ -28,9 +28,6 @@ const (
 	// Short versions of help and version options
 	helpOptionShort    = "h"
 	versionOptionShort = "v"
-
-	// httpClientTimeout is the timeout for HTTP requests
-	httpClientTimeout = 60 * time.Second
 )
 
 var (
@@ -132,8 +129,18 @@ func realMain() int {
 			},
 		},
 		HTTPClient: &http.Client{
-			Transport: cleanhttp.DefaultPooledTransport(),
-			Timeout:   httpClientTimeout,
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment, // Respect HTTP_PROXY, HTTPS_PROXY, NO_PROXY env vars.
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second, // Connection timeout.
+					KeepAlive: 30 * time.Second, // Keep-alive probe interval.
+				}).DialContext,
+				TLSHandshakeTimeout:   10 * time.Second, // TLS handshake timeout.
+				ResponseHeaderTimeout: 30 * time.Second, // Time to wait for response headers.
+				IdleConnTimeout:       90 * time.Second, // Idle connection cleanup.
+				ForceAttemptHTTP2:     true,             // Enable HTTP/2.
+			},
+			Timeout: 5 * time.Minute, // Overall request timeout for large downloads.
 		},
 		// CurrentProfileName will be set later in this module.
 		// Settings will be set in individual command modules.
