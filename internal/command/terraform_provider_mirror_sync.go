@@ -181,6 +181,15 @@ func (c terraformProviderMirrorSyncCommand) doTerraformProviderMirrorSync(ctx co
 			c.meta.UI.Output(output.FormatError("failed to find latest provider version", err))
 			return 1
 		}
+	} else {
+		// Normalize partial versions (e.g., 6.31 -> 6.31.0).
+		parsed, err := versions.ParseVersion(version)
+		if err != nil {
+			c.meta.UI.Output(output.FormatError("invalid version format", err))
+			return 1
+		}
+
+		version = parsed.String()
 	}
 
 	logger.WithField("version", version).Info("using terraform provider version")
