@@ -313,8 +313,8 @@ github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b h1:FosyBZYxY3
 github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b/go.mod h1:ZRKQfBXbGkpdV6QMzT3rU1kSTAnfu1dO8dPKjYprgj8=
 gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.77.0 h1:+RZ6/BuwuIgEWoGkvpc1tkZDo8rZ9/kKiyl4mss2X7k=
 gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.77.0/go.mod h1:8qooa2caYYhw6VPkzVvyCLxVFIOvAHA3H+MnMq5Zr90=
-gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.56.0 h1:5zs1TPSrsxnaXVY8JDDDJQ0SwpPYs1StruTotIKYfuQ=
-gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.56.0/go.mod h1:2z2nmfGVhe9LAiOk1rZxFcyxZ6l/jWo5nGH8+0l2lhE=
+gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.56.1 h1:6Oen8QesnXiUiLJ117ZNKgZCzavFQPFTV2sXx9jqTWg=
+gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.56.1/go.mod h1:2z2nmfGVhe9LAiOk1rZxFcyxZ6l/jWo5nGH8+0l2lhE=
 go.etcd.io/bbolt v1.4.0 h1:TU77id3TnN/zKr7CO/uk+fBCwF2jGcMuw2B/FMAzYIk=
 go.etcd.io/bbolt v1.4.0/go.mod h1:AsD+OCi/qPN1giOX1aiLAha3o1U8rAz65bvN4j0sRuk=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
