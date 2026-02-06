@@ -24,7 +24,7 @@ require (
 	github.com/vbauerster/mpb/v8 v8.11.3
 	github.com/zclconf/go-cty v1.15.0
 	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.77.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.56.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.56.1
 	go.uber.org/zap v1.27.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/oauth2 v0.30.0
