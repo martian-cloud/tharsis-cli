@@ -93,6 +93,66 @@ func (_m *Variable) GetVariable(ctx context.Context, input *types.GetNamespaceVa
 	return r0, r1
 }
 
+// GetVariableVersion provides a mock function with given fields: ctx, input
+func (_m *Variable) GetVariableVersion(ctx context.Context, input *types.GetVariableVersionInput) (*types.VariableVersion, error) {
+	ret := _m.Called(ctx, input)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetVariableVersion")
+	}
+
+	var r0 *types.VariableVersion
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *types.GetVariableVersionInput) (*types.VariableVersion, error)); ok {
+		return rf(ctx, input)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *types.GetVariableVersionInput) *types.VariableVersion); ok {
+		r0 = rf(ctx, input)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.VariableVersion)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *types.GetVariableVersionInput) error); ok {
+		r1 = rf(ctx, input)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetVariables provides a mock function with given fields: ctx, input
+func (_m *Variable) GetVariables(ctx context.Context, input *types.GetNamespaceVariablesInput) ([]types.NamespaceVariable, error) {
+	ret := _m.Called(ctx, input)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetVariables")
+	}
+
+	var r0 []types.NamespaceVariable
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *types.GetNamespaceVariablesInput) ([]types.NamespaceVariable, error)); ok {
+		return rf(ctx, input)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *types.GetNamespaceVariablesInput) []types.NamespaceVariable); ok {
+		r0 = rf(ctx, input)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.NamespaceVariable)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *types.GetNamespaceVariablesInput) error); ok {
+		r1 = rf(ctx, input)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // SetVariables provides a mock function with given fields: ctx, input
 func (_m *Variable) SetVariables(ctx context.Context, input *types.SetNamespaceVariablesInput) error {
 	ret := _m.Called(ctx, input)
