@@ -1,113 +1,115 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// managedIdentityAccessRuleListCommand is the top-level structure for the managed-identity-access-rule list command.
 type managedIdentityAccessRuleListCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	toJSON bool
 }
 
 // NewManagedIdentityAccessRuleListCommandFactory returns a managedIdentityAccessRuleListCommand struct.
-func NewManagedIdentityAccessRuleListCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return managedIdentityAccessRuleListCommand{
-			meta: meta,
+func NewManagedIdentityAccessRuleListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &managedIdentityAccessRuleListCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (m managedIdentityAccessRuleListCommand) Run(args []string) int {
-	m.meta.Logger.Debugf("Starting the 'managed-identity-access-rule list' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *managedIdentityAccessRuleListCommand) validate() error {
+	const message = "managed-identity-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
+}
+
+func (c *managedIdentityAccessRuleListCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("managed-identity-access-rule list"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := m.meta.GetSDKClient()
+	input := &pb.GetManagedIdentityAccessRulesRequest{
+		ManagedIdentityId: c.arguments[0],
+	}
+
+	c.Logger.Debug("managed-identity-access-rule list input", "input", input)
+
+	result, err := c.client.ManagedIdentitiesClient.GetManagedIdentityAccessRules(c.Context, input)
 	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to get a list of managed identity access rules")
 		return 1
 	}
 
-	ctx := context.Background()
+	if c.toJSON {
+		if err := c.UI.JSON(result); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+	} else {
+		t := terminal.NewTable("id", "type", "run_stage", "verify_state_lineage")
 
-	return m.doManagedIdentityAccessRuleList(ctx, client, args)
+		for _, rule := range result.AccessRules {
+			t.Rich([]string{
+				rule.Metadata.Id,
+				rule.Type,
+				rule.RunStage,
+				fmt.Sprintf("%t", rule.VerifyStateLineage),
+			}, nil)
+		}
+
+		c.UI.Table(t)
+	}
+
+	return 0
 }
 
-func (m managedIdentityAccessRuleListCommand) doManagedIdentityAccessRuleList(ctx context.Context,
-	client *tharsis.Client, opts []string,
-) int {
-	m.meta.Logger.Debugf("will do managed-identity-access-rule list, %d opts", len(opts))
-
-	defs := buildManagedIdentityAccessRuleListDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(m.meta.BinaryName+" managed-identity-access-rule list", defs, opts)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse managed-identity-access-rule list options", err))
-		return 1
-	}
-	if len(cmdArgs) > 0 {
-		msg := fmt.Sprintf("excessive managed-identity-access-rule list arguments: %s", cmdArgs)
-		m.meta.Logger.Error(output.FormatError(msg, nil), m.HelpManagedIdentityAccessRuleList())
-		return 1
-	}
-
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	managedIdentityPath := getOption("managed-identity-path", "", cmdOpts)[0]
-
-	// Get the managed identity from its path.
-	input := &sdktypes.GetManagedIdentityInput{
-		Path: &managedIdentityPath,
-	}
-
-	m.meta.Logger.Debugf("managed-identity-access-rule list input: %#v", input)
-
-	managedIdentityAccessRules, err := client.ManagedIdentity.GetManagedIdentityAccessRules(ctx, input)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to list managed identity access rules", err))
-		return 1
-	}
-
-	return outputManagedIdentityAccessRules(m.meta, toJSON, managedIdentityAccessRules)
+func (*managedIdentityAccessRuleListCommand) Synopsis() string {
+	return "Retrieve a list of managed identity access rules."
 }
 
-// buildManagedIdentityAccessRuleListDefs returns defs used by managed-identity-access-rule list command.
-func buildManagedIdentityAccessRuleListDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"managed-identity-path": {
-			Arguments: []string{"Managed_Identity_Path"},
-			Synopsis:  "Resource path to the managed identity.",
-			Required:  true,
-		},
-	}
-	return buildJSONOptionDefs(defs)
+func (*managedIdentityAccessRuleListCommand) Description() string {
+	return `
+   The managed-identity-access-rule list command prints information about
+   access rules for a specific managed identity.
+`
 }
 
-func (m managedIdentityAccessRuleListCommand) Synopsis() string {
-	return "List managed identity access rules for a specified managed identity."
+func (*managedIdentityAccessRuleListCommand) Usage() string {
+	return "tharsis [global options] managed-identity-access-rule list [options] <managed-identity-id>"
 }
 
-func (m managedIdentityAccessRuleListCommand) Help() string {
-	return m.HelpManagedIdentityAccessRuleList()
+func (*managedIdentityAccessRuleListCommand) Example() string {
+	return `
+tharsis managed-identity-access-rule list \
+  trn:managed_identity:ops/my-identity
+`
 }
 
-// HelpManagedIdentityAccessRuleList produces the help string for the 'managed-identity-access-rule list' command.
-func (m managedIdentityAccessRuleListCommand) HelpManagedIdentityAccessRuleList() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] managed-identity-access-rule list [options]
+func (c *managedIdentityAccessRuleListCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
 
-%s
-
-`, m.meta.BinaryName, buildHelpText(buildManagedIdentityAccessRuleListDefs()))
+	return f
 }

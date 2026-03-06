@@ -1,22 +1,18 @@
 package command
 
 import (
-	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"sort"
 
-	"github.com/mitchellh/cli"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/external"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 // stateOutputValue represents a state version output value
@@ -28,274 +24,207 @@ type stateOutputValue struct {
 	Sensitive bool            `json:"sensitive"`
 }
 
-// workspaceOutputsCommand is the top-level structure for the workspace outputs command.
 type workspaceOutputsCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	outputName string
+	raw        bool
+	toJSON     bool
 }
 
 // NewWorkspaceOutputsCommandFactory returns a workspaceOutputsCommand struct.
-func NewWorkspaceOutputsCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceOutputsCommand{
-			meta: meta,
+func NewWorkspaceOutputsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceOutputsCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wo workspaceOutputsCommand) Run(args []string) int {
-	wo.meta.Logger.Debugf("Starting the 'workspace outputs' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wo.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := wo.meta.GetSDKClient()
-	if err != nil {
-		wo.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return wo.doWorkspaceOutputs(ctx, client, args)
+func (c *workspaceOutputsCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.raw,
+			validation.When(c.toJSON, validation.Empty.Error("must not supply both -raw and -json")),
+			validation.When(c.outputName == "", validation.Empty.Error("must specify -output-name if specifying -raw")),
+		),
+	)
 }
 
-func (wo workspaceOutputsCommand) doWorkspaceOutputs(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wo.meta.Logger.Debugf("will do workspace outputs, %d opts", len(opts))
+func (c *workspaceOutputsCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace outputs"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := wo.buildWorkspaceOutputsDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wo.meta.BinaryName+" workspace outputs", defs, opts)
+	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: c.arguments[0],
+	})
 	if err != nil {
-		wo.meta.Logger.Error(output.FormatError("failed to parse workspace outputs options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wo.meta.Logger.Error(output.FormatError("missing workspace outputs full path", nil), wo.HelpWorkspaceOutputs())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace outputs arguments: %s", cmdArgs)
-		wo.meta.Logger.Error(output.FormatError(msg, nil), wo.HelpWorkspaceOutputs())
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
-	workspacePath := cmdArgs[0]
-	raw, err := getBoolOptionValue("raw", "false", cmdOpts)
+	if workspace.CurrentStateVersionId == "" {
+		c.UI.Output("workspace does not have a current state version")
+		return 1
+	}
+
+	result, err := c.client.StateVersionsClient.GetStateVersionOutputs(c.Context, &pb.GetStateVersionOutputsRequest{
+		StateVersionId: workspace.CurrentStateVersionId,
+	})
 	if err != nil {
-		wo.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		wo.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	outputName := getOption("output-name", "", cmdOpts)[0]
-
-	// Validate the workspace path.
-	actualPath := trn.ToPath(workspacePath)
-	if !isNamespacePathValid(wo.meta, actualPath) {
+		c.UI.ErrorWithSummary(err, "failed to get state version outputs")
 		return 1
 	}
 
-	// Cannot show both raw and json formats simultaneously.
-	if raw && toJSON {
-		wo.meta.Logger.Error(output.FormatError("must not supply both -raw and -json", nil))
+	if len(result.StateVersionOutputs) == 0 {
+		c.UI.Output("workspace does not have any state version outputs")
 		return 1
 	}
 
-	// Must supply outputName when using raw option. Optional otherwise.
-	if raw && outputName == "" {
-		wo.meta.Logger.Error(output.FormatError("must specify -output-name if specifying -raw", nil))
-		return 1
-	}
-
-	trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
-	input := &sdktypes.GetWorkspaceInput{ID: &trnID}
-	wo.meta.Logger.Debugf("workspace outputs input: %#v", input)
-
-	workspace, err := client.Workspaces.GetWorkspace(ctx, input)
-	if err != nil {
-		wo.meta.Logger.Error(output.FormatError("failed to get a workspace", err))
-		return 1
-	}
-
-	wo.meta.Logger.Debugf("workspace outputs found workspace: %s", workspace.FullPath)
-
-	// Check if the workspace has a current state version.
-	if workspace.CurrentStateVersion == nil {
-		wo.meta.Logger.Error(output.FormatError("workspace does not have a current state version", nil))
-		return 1
-	}
-
-	outputs := workspace.CurrentStateVersion.Outputs
-
-	// Check if there are any outputs.
-	if len(outputs) == 0 {
-		wo.meta.Logger.Error(output.FormatError("workspace does not have any state version outputs", nil))
-		return 1
-	}
-
-	return wo.displayWorkspaceOutput(raw, toJSON, outputName, outputs)
+	return c.displayWorkspaceOutput(result.StateVersionOutputs)
 }
 
-// displayWorkspaceOutput is a helper function to modify
-// the final output based on the options.
-func (wo workspaceOutputsCommand) displayWorkspaceOutput(raw, toJSON bool, outputName string,
-	outputs []sdktypes.StateVersionOutput,
-) int {
-	outputMap, err := wo.buildStateOutputValueMap(outputs)
-	if err != nil {
-		wo.meta.Logger.Error(output.FormatError("failed to build state version output value map", err))
-		return 1
+func (c *workspaceOutputsCommand) displayWorkspaceOutput(outputs []*pb.StateVersionOutput) int {
+	valueMap := make(map[string]*stateOutputValue, len(outputs))
+
+	for _, output := range outputs {
+		valueMap[output.Name] = &stateOutputValue{
+			Value:     output.Value,
+			Type:      output.Type,
+			Sensitive: output.Sensitive,
+		}
 	}
 
-	// Used for the JSON display.
 	var (
-		val interface{} = outputMap
+		val any = valueMap
 		ok  bool
 	)
 
-	// Check if the output name exists in the state version output.
-	if outputName != "" {
-		val, ok = outputMap[outputName]
+	if c.outputName != "" {
+		val, ok = valueMap[c.outputName]
 		if !ok {
-			msg := fmt.Sprintf("%s does not exist in state version output. Name is case sensitive.", outputName)
-			wo.meta.Logger.Error(output.FormatError(msg, nil))
+			c.UI.Errorf("%s does not exist in state version output. Name is case sensitive.", c.outputName)
 			return 1
 		}
 	}
 
-	if toJSON {
-		buf, err := objectToJSON(val)
+	if c.toJSON {
+		if err := c.UI.JSON(val); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to output JSON")
+			return 1
+		}
+		return 0
+	}
+
+	sort.SliceStable(outputs, func(i, j int) bool {
+		return outputs[i].Name < outputs[j].Name
+	})
+
+	for _, v := range outputs {
+		ctyType, err := ctyjson.UnmarshalType(v.Type)
 		if err != nil {
-			wo.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+			c.UI.ErrorWithSummary(err, "failed to unmarshal type")
 			return 1
 		}
 
-		// Show the output.
-		wo.meta.UI.Output(string(buf))
-	} else {
-		// Sort the slice to give an alphabetized output.
-		sort.SliceStable(outputs, func(i, j int) bool {
-			return outputs[i].Name < outputs[j].Name
-		})
+		ctyValue, err := ctyjson.Unmarshal(v.Value, ctyType)
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to unmarshal value")
+			return 1
+		}
 
-		// Must use original slice as FormatValue requires cty.Value.
-		for _, v := range outputs {
-			valueFormatted := external.FormatValue(v.Value, 0)
+		valueFormatted := external.FormatValue(ctyValue, 0)
 
-			// Regular output.
-			if outputName == "" {
-				if v.Sensitive {
-					valueFormatted = "<sensitive>" // Obfuscate output if the value is marked as sensitive.
-				}
-
-				wo.meta.UI.Output(fmt.Sprintf("%s = %s", v.Name, valueFormatted))
-			} else if raw {
-				// Keep going until the right output name is found.
-				if v.Name != outputName {
-					continue
-				}
-
-				// Check if raw is being called on a supported type.
-				valueString, err := convert.Convert(v.Value, cty.String)
-				if err != nil {
-					err := fmt.Errorf("%s is of type '%s'. Use -json flag for more complex types", outputName, v.Type.FriendlyName())
-					wo.meta.Logger.Error(output.FormatError("-raw is only supported on string, number and boolean types", err))
-					return 1
-				}
-
-				if valueString.IsNull() {
-					err := fmt.Errorf("value for %s is null", outputName)
-					wo.meta.Logger.Error(output.FormatError("Unsupported value type", err))
-					return 1
-				}
-
-				// This will print without a newline.
-				fmt.Fprint(os.Stdout, valueString.AsString())
-			} else if v.Name == outputName {
-				wo.meta.UI.Output(valueFormatted)
+		if c.outputName == "" {
+			if v.Sensitive {
+				valueFormatted = "<sensitive>"
+			}
+			c.UI.Output(fmt.Sprintf("%s = %s", v.Name, valueFormatted))
+		} else if c.raw {
+			if v.Name != c.outputName {
+				continue
 			}
 
+			valueString, err := convert.Convert(ctyValue, cty.String)
+			if err != nil {
+				c.UI.Errorf("-raw is only supported on string, number and boolean types: %s is of type '%s'. Use -json flag for more complex types", c.outputName, ctyType.FriendlyName())
+				return 1
+			}
+
+			if valueString.IsNull() {
+				c.UI.Errorf("Unsupported value type: value for %s is null", c.outputName)
+				return 1
+			}
+
+			fmt.Fprint(os.Stdout, valueString.AsString())
+		} else if v.Name == c.outputName {
+			c.UI.Output(valueFormatted)
 		}
 	}
 
 	return 0
 }
 
-// buildStateOutputValueMap build a map of the outputs name
-// to it's value and its attributes. Used for displaying a
-// subset of the returned StateVersionOutput values and for
-// marshalling the cty.Values into their appropriate types.
-func (wo workspaceOutputsCommand) buildStateOutputValueMap(outputs []sdktypes.StateVersionOutput) (map[string]*stateOutputValue, error) {
-	valueMap := make(map[string]*stateOutputValue, len(outputs))
-
-	// Build a map of output name --> stateOutputValue.
-	for _, output := range outputs {
-		value, err := ctyjson.Marshal(output.Value, output.Type)
-		if err != nil {
-			return nil, err
-		}
-
-		valueType, err := ctyjson.MarshalType(output.Type)
-		if err != nil {
-			return nil, err
-		}
-
-		// Assign to the map.
-		valueMap[output.Name] = &stateOutputValue{
-			Value:     value,
-			Type:      valueType,
-			Sensitive: output.Sensitive,
-		}
-	}
-
-	return valueMap, nil
-}
-
-// buildWorkspaceOutputsDefs returns defs used by workspace outputs command.
-func (wo workspaceOutputsCommand) buildWorkspaceOutputsDefs() optparser.OptionDefinitions {
-	rawDefs := optparser.OptionDefinitions{
-		"output-name": {
-			Arguments: []string{"Output_Name"},
-			Synopsis:  "The name of the output variable to use as a filter. Required for -raw option.",
-		},
-		"raw": {
-			Arguments: []string{},
-			Synopsis:  "For any value that can be converted to a string, output just the raw value.",
-		},
-	}
-
-	return buildJSONOptionDefs(rawDefs)
-}
-
-func (wo workspaceOutputsCommand) Synopsis() string {
+func (*workspaceOutputsCommand) Synopsis() string {
 	return "Get the state version outputs for a workspace."
 }
 
-func (wo workspaceOutputsCommand) Help() string {
-	return wo.HelpWorkspaceOutputs()
-}
-
-// HelpWorkspaceOutputs produces the help string for the 'workspace outputs' command.
-func (wo workspaceOutputsCommand) HelpWorkspaceOutputs() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace outputs [options] <full_path>
-
-   The workspace outputs command retrieves the state version
-   outputs for a workspace.
+func (*workspaceOutputsCommand) Description() string {
+	return `
+   The workspace outputs command retrieves the state version outputs for a workspace.
 
    Supported output types:
       - Decorated (shows if map, list, etc. default).
       - JSON.
       - Raw (just the value. limited).
 
-   In addition, it supports filtering the output for each
-   of the supported types above with --output-name option.
+   In addition, it supports filtering the output for each of the supported types above with --output-name option.
 
-%s
+   Combining --raw and --json is not allowed.
+`
+}
 
+func (*workspaceOutputsCommand) Usage() string {
+	return "tharsis [global options] workspace outputs [options] <workspace-id>"
+}
 
-Combining --raw and --json is not allowed.
-`, wo.meta.BinaryName, buildHelpText(wo.buildWorkspaceOutputsDefs()))
+func (*workspaceOutputsCommand) Example() string {
+	return `
+tharsis workspace outputs trn:workspace:ops/my-workspace
+`
+}
+
+func (c *workspaceOutputsCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.outputName,
+		"output-name",
+		"",
+		"The name of the output variable to use as a filter. Required for -raw option.",
+	)
+	f.BoolVar(
+		&c.raw,
+		"raw",
+		false,
+		"For any value that can be converted to a string, output just the raw value.",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
+
+	return f
 }

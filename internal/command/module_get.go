@@ -1,109 +1,119 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 // moduleGetCommand is the top-level structure for the module get command.
 type moduleGetCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	toJSON bool
+}
+
+var _ Command = (*moduleGetCommand)(nil)
+
+func (c *moduleGetCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewModuleGetCommandFactory returns a moduleGetCommand struct.
-func NewModuleGetCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleGetCommand{
-			meta: meta,
+func NewModuleGetCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleGetCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (mgc moduleGetCommand) Run(args []string) int {
-	mgc.meta.Logger.Debugf("Starting the 'module get' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		mgc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *moduleGetCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("module get"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := mgc.meta.GetSDKClient()
+	input := &pb.GetTerraformModuleByIDRequest{
+		Id: c.arguments[0],
+	}
+
+	c.Logger.Debug("module get input", "input", input)
+
+	module, err := c.client.TerraformModulesClient.GetTerraformModuleByID(c.Context, input)
 	if err != nil {
-		mgc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to get module")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return mgc.doModuleGet(ctx, client, args)
+	return outputModule(c.UI, c.toJSON, module)
 }
 
-func (mgc moduleGetCommand) doModuleGet(ctx context.Context, client *tharsis.Client, opts []string) int {
-	mgc.meta.Logger.Debugf("will do module get, %d opts", len(opts))
-
-	defs := buildJSONOptionDefs(optparser.OptionDefinitions{})
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(mgc.meta.BinaryName+" module get", defs, opts)
-	if err != nil {
-		mgc.meta.Logger.Error(output.FormatError("failed to parse module get argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		mgc.meta.Logger.Error(output.FormatError("missing module get path", nil), mgc.HelpModuleGet())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module get arguments: %s", cmdArgs)
-		mgc.meta.Logger.Error(output.FormatError(msg, nil), mgc.HelpModuleGet())
-		return 1
-	}
-
-	modulePath := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		mgc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	actualPath := trn.ToPath(modulePath)
-	if !isResourcePathValid(mgc.meta, actualPath) {
-		return 1
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.GetTerraformModuleInput{Path: &actualPath} // Use extracted path
-	mgc.meta.Logger.Debugf("module get input: %#v", input)
-
-	// Get the Terraform module.
-	foundModule, err := client.TerraformModule.GetModule(ctx, input)
-	if err != nil {
-		mgc.meta.Logger.Error(output.FormatError("failed to get module", err))
-		return 1
-	}
-
-	return outputModule(mgc.meta, toJSON, foundModule)
+func (*moduleGetCommand) Synopsis() string {
+	return "Get a single Terraform module."
 }
 
-func (mgc moduleGetCommand) Synopsis() string {
-	return "Get a single module."
+func (*moduleGetCommand) Usage() string {
+	return "tharsis [global options] module get [options] <id>"
 }
 
-func (mgc moduleGetCommand) Help() string {
-	return mgc.HelpModuleGet()
+func (*moduleGetCommand) Description() string {
+	return `
+   The module get command prints information about one
+   Terraform module.
+`
 }
 
-// HelpModuleGet prints the help string for the 'module get' command.
-func (mgc moduleGetCommand) HelpModuleGet() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module get [options] <module-path>
+func (*moduleGetCommand) Example() string {
+	return `
+tharsis module get trn:terraform_module:ops/my-group/vpc
+`
+}
 
-   The module get command prints information about one module.
+func (c *moduleGetCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
 
-%s
+	return f
+}
 
-`, mgc.meta.BinaryName, buildHelpText(buildJSONOptionDefs(optparser.OptionDefinitions{})))
+func outputModule(ui terminal.UI, toJSON bool, module *pb.TerraformModule) int {
+	if toJSON {
+		if err := ui.JSON(module); err != nil {
+			ui.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+	} else {
+		t := terminal.NewTable("id", "name", "system", "group_id", "private")
+		t.Rich([]string{
+			module.Metadata.Id,
+			module.Name,
+			module.System,
+			module.GroupId,
+			fmt.Sprintf("%t", module.Private),
+		}, nil)
+
+		ui.Table(t)
+	}
+
+	return 0
 }

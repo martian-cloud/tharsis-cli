@@ -6,24 +6,27 @@ package settings
 // Functions to work with the settings file and its siblings.
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdkauth "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/auth"
-	sdkconfig "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/config"
+	"github.com/hashicorp/go-hclog"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 )
 
 const (
+	// settingsDirectoryName is the name of directory where settings reside.
+	settingsDirectoryName = ".tharsis"
 
-	// SettingsDirectoryName is the name of directory where settings reside.
-	SettingsDirectoryName = ".tharsis"
+	// credentialsFilename is the name of the credentials file.
+	credentialsFilename = "credentials.json"
 
-	// SettingsFilename is the name of the settings file.
-	SettingsFilename = "settings.json"
+	// settingsFilename is the name of the settings file.
+	settingsFilename = "settings.json"
 
 	// DefaultProfileName is the name of the default profile
 	DefaultProfileName = "default"
@@ -35,11 +38,15 @@ const (
 	noSettingsMessage = "please run 'tharsis configure' to create your initial settings file"
 )
 
-var (
+// ErrNoSettings is a special error if settings file does not exist.
+var ErrNoSettings = errors.New(noSettingsMessage)
 
-	// ErrNoSettings is a special error if settings file does not exist.
-	ErrNoSettings = fmt.Errorf(noSettingsMessage)
-)
+// creds is used to store the credentials to the credentials file.
+// Callers should still access the Token field on the Profile.
+type creds struct {
+	// Map of profile name to its token.
+	Tokens map[string]string `json:"stateTokens"`
+}
 
 // A settings file can define several profiles, of which exactly one is the "default" profile.
 
@@ -52,16 +59,66 @@ type Settings struct {
 
 // Profile holds the contents of one profile from a settings file.
 type Profile struct {
-	Token      *string `json:"stateToken"`
-	TharsisURL string  `json:"tharsisURL"`
+	token         *string `json:"-"`        // Not persistent, written via creds struct above!
+	Endpoint      string  `json:"endpoint"` // HTTP.
+	TLSSkipVerify bool    `json:"tlsSkipVerify"`
+}
+
+// SetToken sets the token for a profile.
+func (p *Profile) SetToken(token string) {
+	p.token = &token
 }
 
 // ReadSettings reads the settings file.
 // If no argument, it reads the default settings file: ~/.tharsis/settings.json
 func ReadSettings(name *string) (*Settings, error) {
+	data, err := readFile(name, DefaultSettingsFilepath)
+	if err != nil {
+		return nil, err
+	}
 
+	var settings Settings
+	if err = json.Unmarshal(data, &settings); err != nil {
+		return nil, err
+	}
+
+	if err := readCredentials(&settings); err != nil {
+		return nil, fmt.Errorf("failed to read credentials file: %w", err)
+	}
+
+	return &settings, nil
+}
+
+// readCredentials reads the credentials from the credentials file and
+// populates the 'Token' field on the profiles.
+func readCredentials(settings *Settings) error {
+	data, err := readFile(nil, DefaultCredentialsFilepath)
+	if err != nil {
+		if errors.Is(err, ErrNoSettings) {
+			return nil
+		}
+		return err
+	}
+
+	var c creds
+	if err = json.Unmarshal(data, &c); err != nil {
+		return err
+	}
+
+	// Populate appropriate profile with the token read.
+	for name, profile := range settings.Profiles {
+		if token, ok := c.Tokens[name]; ok {
+			profile.token = &token
+			settings.Profiles[name] = profile
+		}
+	}
+
+	return nil
+}
+
+func readFile(name *string, defaultFunc func() (string, error)) ([]byte, error) {
 	// Figure out the filename.
-	filename, err := resolveFilename(name, DefaultSettingsFilename)
+	filename, err := resolveFilename(name, defaultFunc)
 	if err != nil {
 		return nil, err
 	}
@@ -72,19 +129,12 @@ func ReadSettings(name *string) (*Settings, error) {
 	}
 
 	// Read the file.
-	bytes, err := os.ReadFile(filename)
+	bytes, err := os.ReadFile(filename) // nosemgrep: gosec.G304-1
 	if err != nil {
 		return nil, err
 	}
 
-	// Decode the file's contents.
-	var settings Settings
-	err = json.Unmarshal(bytes, &settings)
-	if err != nil {
-		return nil, err
-	}
-
-	return &settings, nil
+	return bytes, nil
 }
 
 // SetCurrentProfile sets the current profile pointer in a settings object.
@@ -98,18 +148,42 @@ func (s *Settings) SetCurrentProfile(profileName string) error {
 	return nil
 }
 
-// WriteSettingsFile reads the settings file.
+// WriteSettingsFile writes the settings file.
 // If no filename argument, it writes the default settings file: ~/.tharsis/settings.json
 func (s *Settings) WriteSettingsFile(name *string) error {
-
 	// Figure out the filename.
-	filename, err := resolveFilename(name, DefaultSettingsFilename)
+	filename, err := resolveFilename(name, DefaultSettingsFilepath)
 	if err != nil {
 		return err
 	}
 
-	// Encode the file's contents.
-	buf, err := json.MarshalIndent(s, "", "  ")
+	if err = s.writeFile(s, filename); err != nil {
+		return err
+	}
+
+	return s.writeCredentialsFile()
+}
+
+// writeCredentialsFile writes the credentials file.
+// It writes the default credentials file: ~/.tharsis/credentials.json
+func (s *Settings) writeCredentialsFile() error {
+	filename, err := resolveFilename(nil, DefaultCredentialsFilepath)
+	if err != nil {
+		return err
+	}
+
+	c := &creds{Tokens: map[string]string{}}
+	for k, profile := range s.Profiles {
+		if profile.token != nil {
+			c.Tokens[k] = *profile.token
+		}
+	}
+
+	return s.writeFile(c, filename)
+}
+
+func (s *Settings) writeFile(v any, filename string) error {
+	buf, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -118,24 +192,20 @@ func (s *Settings) WriteSettingsFile(name *string) error {
 	dirPath := filepath.Dir(filename)
 	if _, sErr := os.Stat(dirPath); os.IsNotExist(sErr) {
 		// Must create the directory.
-		mErr := os.MkdirAll(dirPath, 0700)
+		mErr := os.MkdirAll(dirPath, 0o700)
 		if mErr != nil {
 			return fmt.Errorf("failed to create settings directory: %s", mErr)
 		}
 	}
 
-	// Write the file.
-	writer, err := os.OpenFile(filename, flagWrite, 0600)
+	writer, err := os.OpenFile(filename, flagWrite, 0o600) // nosemgrep: gosec.G304-1
 	if err != nil {
 		return err
 	}
 	defer writer.Close()
-	_, err = (*writer).Write(buf)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	_, err = (*writer).Write(buf)
+	return err
 }
 
 // resolveFilename figures out a filename, including calling a function to find the default name.
@@ -149,23 +219,32 @@ func resolveFilename(specified *string, defaultFunc func() (string, error)) (str
 	return *specified, nil
 }
 
-// DefaultSettingsFilename returns the OS-dependent path/name of the default settings file.
-func DefaultSettingsFilename() (string, error) {
+// DefaultSettingsFilepath returns the default settings file path.
+func DefaultSettingsFilepath() (string, error) {
 	dirname, err := defaultSettingsDirectory()
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(dirname, SettingsFilename), nil
+	return filepath.Join(dirname, settingsFilename), nil
+}
+
+// DefaultCredentialsFilepath returns the OS-dependent path/name of the default credentials file.
+func DefaultCredentialsFilepath() (string, error) {
+	dirname, err := defaultSettingsDirectory()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(dirname, credentialsFilename), nil
 }
 
 // Return the OS-dependent path of the default settings directory.
 func defaultSettingsDirectory() (string, error) {
-
 	// If $HOME is set, use it.
 	home := os.Getenv("HOME")
 	if home != "" {
-		return filepath.Join(home, SettingsDirectoryName), nil
+		return filepath.Join(home, settingsDirectoryName), nil
 	}
 
 	// Otherwise, use the Golang calls.
@@ -177,54 +256,39 @@ func defaultSettingsDirectory() (string, error) {
 	if homedir == "" {
 		return "", fmt.Errorf("failed to find user's home directory")
 	}
-	return filepath.Join(homedir, SettingsDirectoryName), nil
+	return filepath.Join(homedir, settingsDirectoryName), nil
 }
 
-// getAuthProvider attempts to return an SDK authentication provider.
-// If not successful but no error happened while reading the file, it returns nil.
-func getAuthProvider(profile *Profile) (sdkauth.TokenProvider, error) {
-
-	token := profile.Token
-	if token == nil {
-		// No token available, so don't return a provider.
-		return nil, nil
-	}
-
-	// So far, only static tokens are supported by this CLI's settings and so forth.
-	provider, err := sdkauth.NewStaticTokenProvider(*token)
+// NewTokenGetter creates a new token getter for the profile.
+func (p *Profile) NewTokenGetter(ctx context.Context) (client.TokenGetter, error) {
+	tokenGetter, err := createTokenGetter(ctx, p.token, p.Endpoint, p.TLSSkipVerify)
 	if err != nil {
 		return nil, err
 	}
 
-	return provider, nil
+	return tokenGetter, nil
 }
 
-// GetSDKClient returns a Tharsis SDK client with user agent configured
-func (p *Profile) GetSDKClient(userAgent string) (*tharsis.Client, error) {
-	provider, err := getAuthProvider(p)
-	if err != nil {
-		return nil, err
+// NewClient returns a Tharsis client based on the specified profile.
+func (p *Profile) NewClient(ctx context.Context, withAuth bool, userAgent string, logger hclog.Logger) (*client.Client, error) {
+	clientConfig := &client.Config{
+		HTTPEndpoint:  p.Endpoint,
+		TLSSkipVerify: p.TLSSkipVerify,
+		UserAgent:     userAgent,
+		Logger:        logger,
 	}
 
-	configOptions := []func(*sdkconfig.LoadOptions) error{
-		sdkconfig.WithTokenProvider(provider),
-		sdkconfig.WithEndpoint(p.TharsisURL),
+	if withAuth {
+		tokenGetter, err := p.NewTokenGetter(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		// Update the client config since values may have been overridden.
+		clientConfig.HTTPEndpoint = p.Endpoint
+		clientConfig.TLSSkipVerify = p.TLSSkipVerify
+		clientConfig.TokenGetter = tokenGetter
 	}
 
-	// Add user agent if provided
-	if userAgent != "" {
-		configOptions = append(configOptions, sdkconfig.WithUserAgent(userAgent))
-	}
-
-	sdkConfig, err := sdkconfig.Load(configOptions...)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := tharsis.NewClient(sdkConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	return client, nil
+	return client.New(ctx, clientConfig)
 }

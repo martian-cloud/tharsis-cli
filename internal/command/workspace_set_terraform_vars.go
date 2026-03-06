@@ -1,138 +1,123 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// workspaceSetTerraformVarsCommand is the top-level structure for the workspace set-terraform-vars command.
 type workspaceSetTerraformVarsCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	tfVarFiles []string
 }
 
 // NewWorkspaceSetTerraformVarsCommandFactory returns a workspaceSetTerraformVarsCommand struct.
-func NewWorkspaceSetTerraformVarsCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceSetTerraformVarsCommand{
-			meta: meta,
+func NewWorkspaceSetTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceSetTerraformVarsCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wsv workspaceSetTerraformVarsCommand) Run(args []string) int {
-	wsv.meta.Logger.Debugf("Starting the 'workspace set-terraform-vars' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wsv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := wsv.meta.GetSDKClient()
-	if err != nil {
-		wsv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return wsv.doWorkspaceSetTerraformVars(ctx, client, args)
+func (c *workspaceSetTerraformVarsCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.tfVarFiles, validation.Required),
+	)
 }
 
-func (wsv workspaceSetTerraformVarsCommand) doWorkspaceSetTerraformVars(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wsv.meta.Logger.Debugf("will do workspace set-terraform-vars, %d opts", len(opts))
+func (c *workspaceSetTerraformVarsCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace set-terraform-vars"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	workspaceTerraformDefs := buildTerraformDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wsv.meta.BinaryName+" workspace set-terraform-vars", workspaceTerraformDefs, opts)
+	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to parse workspace set-terraform-vars options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wsv.meta.Logger.Error(output.FormatError("missing workspace set-terraform-vars workspace path", nil), wsv.HelpWorkspaceSetTerraformVars())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace set-terraform-vars arguments: %s", cmdArgs)
-		wsv.meta.Logger.Error(output.FormatError(msg, nil), wsv.HelpWorkspaceSetTerraformVars())
-		return 1
-	}
-
-	namespacePath := cmdArgs[0]
-	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(namespacePath)
-	if !isNamespacePathValid(wsv.meta, actualPath) {
-		return 1
-	}
-
-	// Ensure namespace is a workspace.
-	if _, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{
-		Path: &actualPath, // Use extracted path, not original namespacePath
-	}); err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to get workspace", err))
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
 	parser := varparser.NewVariableParser(nil, false)
 
-	variables, err := parser.ParseTerraformVariables(&varparser.ParseTerraformVariablesInput{TfVarFilePaths: tfVarFiles})
+	variables, err := parser.ParseTerraformVariables(&varparser.ParseTerraformVariablesInput{TfVarFilePaths: c.tfVarFiles})
 	if err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to process environment variables", err))
+		c.UI.ErrorWithSummary(err, "failed to process terraform variables")
 		return 1
 	}
 
-	// Prepare the inputs.
-	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
-	actualPath = trn.ToPath(namespacePath)
-
-	input := &sdktypes.SetNamespaceVariablesInput{
-		NamespacePath: actualPath,
-		Category:      sdktypes.TerraformVariableCategory,
-		Variables:     convertToSetNamespaceVariablesInput(variables),
+	pbVariables := make([]*pb.SetNamespaceVariablesInputVariable, len(variables))
+	for i, v := range variables {
+		pbVariables[i] = &pb.SetNamespaceVariablesInputVariable{
+			Key:   v.Key,
+			Value: v.Value,
+		}
 	}
 
-	wsv.meta.Logger.Debugf("workspace set-terraform-vars input: %#v", input)
+	input := &pb.SetNamespaceVariablesRequest{
+		NamespacePath: workspace.FullPath,
+		Category:      pb.VariableCategory_TERRAFORM,
+		Variables:     pbVariables,
+	}
 
-	// Set the workspace variables.
-	err = client.Variable.SetVariables(ctx, input)
-	if err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to set workspace variables", err))
+	c.Logger.Debug("workspace set-terraform-vars input", "input", input)
+
+	if _, err = c.client.NamespaceVariablesClient.SetNamespaceVariables(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to set terraform variables")
 		return 1
 	}
 
-	// Format the output.
-	wsv.meta.UI.Output(fmt.Sprintf("Terraform variables created successfully in workspace %s", namespacePath))
+	c.UI.Successf("Terraform variables set successfully in workspace %s", workspace.FullPath)
 	return 0
 }
 
-func (wsv workspaceSetTerraformVarsCommand) Synopsis() string {
+func (*workspaceSetTerraformVarsCommand) Synopsis() string {
 	return "Set terraform variables for a workspace."
 }
 
-func (wsv workspaceSetTerraformVarsCommand) Help() string {
-	return wsv.HelpWorkspaceSetTerraformVars()
+func (*workspaceSetTerraformVarsCommand) Description() string {
+	return `
+   The workspace set-terraform-vars command sets terraform variables for a workspace.
+   Command will overwrite any existing Terraform variables in the target workspace!
+   Note: This command does not support sensitive variables.
+`
 }
 
-// HelpWorkspaceSetTerraformVars produces the help string for the 'workspace set-terraform-vars' command.
-func (wsv workspaceSetTerraformVarsCommand) HelpWorkspaceSetTerraformVars() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace set-terraform-vars [options] <workspace>
+func (*workspaceSetTerraformVarsCommand) Usage() string {
+	return "tharsis [global options] workspace set-terraform-vars [options] <workspace-id>"
+}
 
-   The workspace set-terraform-vars command sets Terraform
-   variables for a workspace. Expects an option with the
-   path to the .tfvars file.
+func (*workspaceSetTerraformVarsCommand) Example() string {
+	return `
+tharsis workspace set-terraform-vars \
+  --tf-var-file terraform.tfvars \
+  trn:workspace:ops/my-workspace
+`
+}
 
-   Command will overwrite any existing Terraform variables
-   in the target workspace!
+func (c *workspaceSetTerraformVarsCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"tf-var-file",
+		"Path to a .tfvars file (can be specified multiple times).",
+		func(s string) error {
+			c.tfVarFiles = append(c.tfVarFiles, s)
+			return nil
+		},
+	)
 
-%s
-
-`, wsv.meta.BinaryName, buildHelpText(buildTerraformDefs()))
+	return f
 }

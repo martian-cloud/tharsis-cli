@@ -1,172 +1,263 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
 )
 
-// destroyCommand is the top-level structure for the destroy command.
 type destroyCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	directoryPath    *string
+	moduleSource     *string
+	moduleVersion    *string
+	terraformVersion *string
+	tfVarFiles       []string
+	envVarFiles      []string
+	tfVariables      []string
+	envVariables     []string
+	targetAddresses  []string
+	comment          string
+	autoApprove      bool
+	input            bool
+	refresh          bool
 }
 
 // NewDestroyCommandFactory returns a destroyCommand struct.
-func NewDestroyCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return destroyCommand{
-			meta: meta,
+func NewDestroyCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &destroyCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (dc destroyCommand) Run(args []string) int {
-	dc.meta.Logger.Debugf("Starting the 'destroy' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		dc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := dc.meta.GetSDKClient()
-	if err != nil {
-		dc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return dc.doDestroy(ctx, client, args)
+func (c *destroyCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (dc destroyCommand) doDestroy(ctx context.Context, client *tharsis.Client, opts []string) int {
-	dc.meta.Logger.Debugf("will do destroy, %d opts", len(opts))
+func (c *destroyCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("destroy"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	// Build option definitions for this command.
-	defs := buildCommonRunOptionDefs()
-	buildCommonApplyOptionDefs(defs)
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(dc.meta.BinaryName+" destroy", defs, opts)
+	curSettings, err := c.getCurrentSettings()
 	if err != nil {
-		dc.meta.Logger.Error(output.FormatError("failed to parse destroy argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		dc.meta.Logger.Error(output.FormatError("missing destroy workspace path", nil), dc.HelpDestroy())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive destroy arguments: %s", cmdArgs)
-		dc.meta.Logger.Error(output.FormatError(msg, nil), dc.HelpDestroy())
+		c.UI.ErrorWithSummary(err, "failed to get current settings")
 		return 1
 	}
 
-	workspacePath := cmdArgs[0]
-	directoryPath := getOption("directory-path", "", cmdOpts)[0]
-	comment := getOption("comment", "", cmdOpts)[0]
-	autoApprove, err := getBoolOptionValue("auto-approve", "false", cmdOpts)
+	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
 	if err != nil {
-		dc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	inputRequired, err := getBoolOptionValue("input", "true", cmdOpts)
-	if err != nil {
-		dc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		c.UI.ErrorWithSummary(err, "failed to create token getter")
 		return 1
 	}
 
-	// TODO remove the requirement of having to pass in the module source /
-	// configuration version for destroy operations.
-	// Update the API to automatically grab the last module that was deployed on the workspace.
-	moduleSource := getOption("module-source", "", cmdOpts)[0]
-	moduleVersion := getOption("module-version", "", cmdOpts)[0]
-	tfVariables := getOptionSlice("tf-var", cmdOpts)
-	envVariables := getOptionSlice("env-var", cmdOpts)
-	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
-	envVarFiles := getOptionSlice("env-var-file", cmdOpts)
-	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
-	targetAddresses := getOptionSlice("target", cmdOpts)
-	refresh, err := getBoolOptionValue("refresh", "true", cmdOpts)
-	if err != nil {
-		dc.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh option", err))
-		return 1
-	}
+	runMgr := run.NewManager(c.client, tokenGetter, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
 
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(workspacePath)
-	if !isNamespacePathValid(dc.meta, actualPath) {
-		return 1
-	}
-
-	// Do the inner plan. Make it _NON_-speculative.
-	createdRun, exitCode := createRun(ctx, client, dc.meta, &runInput{
-		workspacePath:    workspacePath,
-		directoryPath:    directoryPath,
-		tfVarFilePath:    tfVarFiles,
-		envVarFilePath:   envVarFiles,
-		moduleSource:     moduleSource,
-		moduleVersion:    moduleVersion,
-		terraformVersion: terraformVersion,
-		tfVariables:      tfVariables,
-		envVariables:     envVariables,
-		isDestroy:        true,
-		isSpeculative:    false,
-		targetAddresses:  targetAddresses,
-		refresh:          refresh,
+	// Create non-speculative destroy run
+	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
+		WorkspaceID:      c.arguments[0],
+		DirectoryPath:    c.directoryPath,
+		ModuleSource:     c.moduleSource,
+		ModuleVersion:    c.moduleVersion,
+		TerraformVersion: c.terraformVersion,
+		TfVarFiles:       c.tfVarFiles,
+		EnvVarFiles:      c.envVarFiles,
+		TfVariables:      c.tfVariables,
+		EnvVariables:     c.envVariables,
+		TargetAddresses:  c.targetAddresses,
+		IsDestroy:        true,
+		IsSpeculative:    false,
+		Refresh:          c.refresh,
 	})
-	if exitCode != 0 {
-		// The error message has already been logged.
-		return exitCode
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to create run")
+		return 1
 	}
 
-	return startApplyStage(ctx, comment, autoApprove, inputRequired, client, createdRun, dc.meta)
+	// Check if plan has changes
+	if runResult.Status == plannedAndFinished {
+		c.UI.Output("Stopping since plan had no changes.")
+		return 0
+	}
+
+	// Return if input is false and autoApprove is not set
+	if !c.input && !c.autoApprove {
+		c.UI.Output("Will not apply the plan since -input was false.")
+		return 0
+	}
+
+	// Handle approval
+	if c.autoApprove {
+		c.UI.Output("\nAuto-approving.\n")
+	} else {
+		c.UI.Output("\nDo you approve to destroy the above resources?\n")
+		answer, err := c.UI.Input(&terminal.Input{
+			Prompt: "  only 'yes' will be accepted: ",
+		})
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to ask for approval")
+			return 1
+		}
+		if answer != "yes" {
+			c.UI.Output("Approval response was negative. Will NOT destroy resources.")
+			return 0
+		}
+		c.UI.Output("\n\n")
+	}
+
+	// Apply the destroy run
+	appliedRun, err := runMgr.ApplyRun(c.Context, runResult.Metadata.Id)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to apply run")
+		return 1
+	}
+
+	c.Logger.Debug("destroy completed", "run_id", appliedRun.Metadata.Id, "status", appliedRun.Status)
+
+	return 0
 }
 
-func (dc destroyCommand) Synopsis() string {
-	return "Destroy the workspace state."
+func (*destroyCommand) Synopsis() string {
+	return "Destroy workspace resources"
 }
 
-func (dc destroyCommand) Help() string {
-	return dc.HelpDestroy()
-}
-
-// HelpDestroy prints the help string for the 'destroy' command.
-func (dc destroyCommand) HelpDestroy() string {
-	defs := buildCommonRunOptionDefs()
-	buildCommonApplyOptionDefs(defs)
-
-	return fmt.Sprintf(`
-Usage: %s [global options] destroy [options] <workspace>
-
-   The destroy command destroys a workspace state. Similar
-   to the apply command, it supports setting run-scoped
-   Terraform and environment variables, using remote
-   modules, etc.
+func (*destroyCommand) Description() string {
+	return `
+   The destroy command destroys resources in a workspace.
+   It creates a destroy plan, then applies it after approval.
+   Supports setting run-scoped Terraform / environment variables.
 
    Terraform variables may be passed in via supported
-   options or from the environment with a 'TF_VAR_'
-   prefix.
+   options or from the environment with a 'TF_VAR_' prefix.
+`
+}
 
-   Variable parsing precedence:
-     1. Terraform variables from the environment.
-     2. terraform.tfvars file from module's directory,
-        if present.
-     3. terraform.tfvars.json file from module's
-        directory, if present.
-     4. *.auto.tfvars, *.auto.tfvars.json files
-        from the module's directory, if present.
-     5. --tf-var-file option(s).
-     6. --tf-var option(s).
+func (*destroyCommand) Usage() string {
+	return "tharsis [global options] destroy [options] <workspace-id>"
+}
 
-   NOTE: If the same variable is assigned multiple
-   values, the last value found will be used. A
-   --tf-var option will override the values from a
-   *.tfvars file which will override values from
-   the environment.
+func (*destroyCommand) Example() string {
+	return `
+tharsis destroy --directory-path ./terraform trn:workspace:ops/my-workspace
+`
+}
 
-%s
+func (c *destroyCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
 
-`, dc.meta.BinaryName, buildHelpText(defs))
+	f.Func(
+		"directory-path",
+		"The path of the root module's directory.",
+		func(s string) error {
+			c.directoryPath = &s
+			return nil
+		},
+	)
+	f.Func(
+		"module-source",
+		"Remote module source specification.",
+		func(s string) error {
+			c.moduleSource = &s
+			return nil
+		},
+	)
+	f.Func(
+		"module-version",
+		"Remote module version number--defaults to latest.",
+		func(s string) error {
+			c.moduleVersion = &s
+			return nil
+		},
+	)
+	f.Func(
+		"terraform-version",
+		"The Terraform CLI version to use for the run.",
+		func(s string) error {
+			c.terraformVersion = &s
+			return nil
+		},
+	)
+	f.StringVar(
+		&c.comment,
+		"comment",
+		"",
+		"Comment for the destroy.",
+	)
+	f.BoolVar(
+		&c.autoApprove,
+		"auto-approve",
+		false,
+		"Skip interactive approval of the plan.",
+	)
+	f.BoolVar(
+		&c.input,
+		"input",
+		true,
+		"Ask for input for variables if not directly set.",
+	)
+	f.BoolVar(
+		&c.refresh,
+		"refresh",
+		true,
+		"Whether to do the usual refresh step.",
+	)
+	f.Func(
+		"tf-var-file",
+		"The path to a .tfvars variables file.",
+		func(s string) error {
+			c.tfVarFiles = append(c.tfVarFiles, s)
+			return nil
+		},
+	)
+	f.Func(
+		"env-var-file",
+		"The path to an environment variables file.",
+		func(s string) error {
+			c.envVarFiles = append(c.envVarFiles, s)
+			return nil
+		},
+	)
+	f.Func(
+		"tf-var",
+		"A terraform variable as a key=value pair.",
+		func(s string) error {
+			c.tfVariables = append(c.tfVariables, s)
+			return nil
+		},
+	)
+	f.Func(
+		"env-var",
+		"An environment variable as a key=value pair.",
+		func(s string) error {
+			c.envVariables = append(c.envVariables, s)
+			return nil
+		},
+	)
+	f.Func(
+		"target",
+		"The Terraform address of the resources to be acted upon.",
+		func(s string) error {
+			c.targetAddresses = append(c.targetAddresses, s)
+			return nil
+		},
+	)
+
+	return f
 }

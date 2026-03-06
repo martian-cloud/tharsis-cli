@@ -1,50 +1,66 @@
+// Package main contains the necessary functions for
+// building the help menu and configuring the CLI
+// library with all subcommand routes.
 package main
 
 import (
+	"bytes"
+	"context"
+	"flag"
 	"fmt"
-	"net"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/mitchellh/cli"
+	"github.com/posener/complete"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/command"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/logger"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/useragent"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const (
 	// Logger level environment variable
 	logLevelEnvVar = "THARSIS_CLI_LOG"
-
-	// Profile (-p) global option
-	profileOption = "p"
-
-	// Short versions of help and version options
-	helpOptionShort    = "h"
-	versionOptionShort = "v"
+	// Profile environment variable
+	profileEnvVar = "THARSIS_PROFILE"
+	// User-Agent header name
+	userAgentHeader = "User-Agent"
 )
 
 var (
-	// Binary name and display title
-	binaryName   string
-	displayTitle string
-
-	// Global option names and how many value arguments each requires.
-	// Will be properly initialized shortly.
-	globalOptionNames = optparser.OptionDefinitions{}
-
 	// Version is passed in via ldflags at build time
 	Version = "1.0.0"
 
-	// DefaultEndpointURL is passed in via ldflags at build time.
-	DefaultEndpointURL string
+	// DefaultHTTPEndpoint is passed in via ldflags at build time.
+	DefaultHTTPEndpoint string
+
+	// DefaultTLSSkipVerify is passed in via ldflags at build time.
+	// Indicates if client should skip verifying the server's
+	// certificate chain and domain name.
+	DefaultTLSSkipVerify bool
 )
+
+// userAgentTransport wraps an http.RoundTripper to add User-Agent header
+type userAgentTransport struct {
+	userAgent string
+	transport http.RoundTripper
+}
+
+// RoundTrip implements http.RoundTripper interface by adding User-Agent header to requests
+func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set(userAgentHeader, t.userAgent)
+	return t.transport.RoundTrip(req)
+}
 
 func main() {
 	os.Exit(realMain())
@@ -53,35 +69,88 @@ func main() {
 // Facilitate testing the main function by wrapping it.
 // Now, a test can call realMain without having the os.Exit call getting in the way.
 func realMain() int {
-	// Binary name and raw arguments.
-	binaryName = filepath.Base(os.Args[0])
-	displayTitle = capitalizeFirst(binaryName)
+	var (
+		// binaryName is the name of the binary.
+		binaryName = filepath.Base(os.Args[0])
+		// displayTitle is the name of the binary in title case.
+		displayTitle = cases.Title(language.English, cases.Compact).String(binaryName)
+		// rawArgs are the arguments passed to the binary.
+		rawArgs = os.Args[1:]
+		// profileName is the name of the profile to use.
+		profileName string
 
-	// Build the global options.
-	// The CLI library automatically handles short and long flavors of help and version,
-	// but the flag parser requires every flavor of every option to be defined up front.
-	globalOptionNames = optparser.OptionDefinitions{
-		helpOptionShort: {
-			Synopsis: "Show this usage message.",
-		},
-		profileOption: {
-			Arguments: []string{"PROFILE"},
-			Synopsis:  "Profile name from config file, defaults to \"default\".",
-		},
-		versionOptionShort: {
-			Synopsis: fmt.Sprintf("Show the %s version information.", displayTitle),
-		},
+		// Autocomplete flag names.
+		autocompleteFlagInstall   = "enable-autocomplete"
+		autocompleteFlagUninstall = "disable-autocomplete"
+	)
+
+	// Create a global flagSet.
+	f := flag.NewFlagSet("global options", flag.ContinueOnError)
+	f.SetOutput(io.Discard)
+
+	// Default profile from env var, then fall back to default.
+	defaultProfile := os.Getenv(profileEnvVar)
+	if defaultProfile == "" {
+		defaultProfile = settings.DefaultProfileName
 	}
 
-	// Binary name and raw arguments.
-	rawArgs := os.Args[1:]
+	f.StringVar(
+		&profileName,
+		"p",
+		defaultProfile,
+		"Profile name from config file. Overrides THARSIS_PROFILE env var.",
+	)
+	f.BoolVar(&color.NoColor, "no-color", os.Getenv("NO_COLOR") != "", "Disable colored output. Also respects NO_COLOR env var.")
+
+	// Values are never used since CLI framework can handle them,
+	// these are simply meant to facilitate the help output for
+	// available global flags.
+	_ = f.String("v", "", "Show the version information.")
+	_ = f.String("h", "", "Show this usage message.")
+	_ = f.Bool(autocompleteFlagInstall, false, "Install shell autocompletion.")
+	_ = f.Bool(autocompleteFlagUninstall, false, "Uninstall shell autocompletion.")
+
+	// Check for autocomplete flags - pass directly to CLI without parsing global flags
+	isAutocomplete := false
+	for _, arg := range rawArgs {
+		if arg == "-"+autocompleteFlagInstall || arg == "-"+autocompleteFlagUninstall ||
+			arg == "--"+autocompleteFlagInstall || arg == "--"+autocompleteFlagUninstall {
+			isAutocomplete = true
+			break
+		}
+	}
+
+	// Only parse global flags if not an autocomplete request
+	if !isAutocomplete {
+		// Ignore errors since CLI framework will handle them.
+		_ = f.Parse(rawArgs)
+	}
+
+	logLevel := os.Getenv(logLevelEnvVar)
+	if logLevel == "" {
+		// if log level is not set, keep it off by default.
+		logLevel = "off"
+	}
 
 	// Log the startup.
-	log := logger.NewAtLevel(os.Getenv(logLevelEnvVar))
-	log.Debugf("Tharsis CLI version %s", Version)
-	log.Debugf("binary name: %s", binaryName)
-	log.Debugf("display title: %s", displayTitle)
-	log.Debugf("raw arguments: %#v", rawArgs)
+	log := hclog.New(&hclog.LoggerOptions{
+		Name:              binaryName,
+		Level:             hclog.LevelFromString(logLevel),
+		Output:            os.Stderr, // Send logs to stderr
+		Color:             hclog.AutoColor,
+		DisableTime:       true,
+		IndependentLevels: true,
+	})
+
+	hclog.SetDefault(log)
+
+	log.Debug("",
+		"version", Version,
+		"binary_name", binaryName,
+		"display_title", displayTitle,
+		"arguments", rawArgs,
+		"profile_name", profileName,
+	)
 
 	// For any variation of "-h" or "-help", simply use "-h".
 	// Since help option can be used for any command, we must
@@ -98,219 +167,398 @@ func realMain() int {
 		rawArgs[0] = "-v"
 	}
 
-	// Read any global options.
-	globalOptions, commandArgs, err := optparser.ParseCommandOptions(binaryName+" global options", globalOptionNames, rawArgs)
+	// Get the CLI context.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Build user agent
+	userAgent := useragent.BuildUserAgent(Version)
+
+	// Create HTTP client with retry logic
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 3
+	retryClient.RequestLogHook = func(_ retryablehttp.Logger, r *http.Request, i int) {
+		if i > 0 {
+			log.Debug("HTTP request retry", "method", r.Method, "url", r.URL, "attempt", i)
+		}
+	}
+	retryClient.Logger = nil
+	retryClient.RetryWaitMin = 10 * time.Second
+	retryClient.RetryWaitMax = 60 * time.Second
+	httpClient := retryClient.StandardClient()
+
+	// Add User-Agent header to all requests
+	httpClient.Transport = &userAgentTransport{
+		userAgent: userAgent,
+		transport: httpClient.Transport,
+	}
+
+	// Prepare the command metadata struct.
+	baseCommand := &command.BaseCommand{
+		Context:              ctx,
+		BinaryName:           binaryName,
+		DisplayTitle:         displayTitle,
+		Version:              Version,
+		Logger:               log,
+		UI:                   terminal.ConsoleUI(ctx),
+		CurrentProfileName:   profileName,
+		DefaultHTTPEndpoint:  DefaultHTTPEndpoint,
+		DefaultTLSSkipVerify: DefaultTLSSkipVerify,
+		UserAgent:            userAgent,
+		HTTPClient:           httpClient,
+	}
+
+	// Defer closing the base command, so the UI output could finish rendering.
+	defer baseCommand.Close()
+
+	commandArgs := rawArgs // No global flag.
+	if f.NFlag() > 0 {
+		// A global option was set, so pass remaining arguments to commands,
+		// since it will automatically be handled.
+		commandArgs = f.Args()
+	}
+
+	availableCommands, err := commands(baseCommand)
 	if err != nil {
-		log.Info(output.FormatError("failed to parse global options", err))
+		log.Error(err.Error())
 		return 1
 	}
 
-	// Do some manual fix-up to feed -h and -v back to the CLI library for it to handle.
-	commandArgs = fixUpHelpVersionOptions(commandArgs, globalOptions)
-
-	log.Debugf("global options: %#v", globalOptions)
-	log.Debugf("   commandArgs: %#v", commandArgs)
-
-	// Build user agent once
-	userAgent := useragent.BuildUserAgent(Version)
-
-	// Prepare the command metadata struct.
-	meta := &command.Metadata{
-		BinaryName:   binaryName,
-		DisplayTitle: displayTitle,
-		Version:      Version,
-		UserAgent:    userAgent,
-		Logger:       log,
-		UI: &output.UI{
-			BasicUI: &cli.BasicUi{
-				Reader:      os.Stdin,
-				Writer:      os.Stdout,
-				ErrorWriter: os.Stderr,
-			},
-		},
-		HTTPClient: &http.Client{
-			Transport: &http.Transport{
-				Proxy: http.ProxyFromEnvironment, // Respect HTTP_PROXY, HTTPS_PROXY, NO_PROXY env vars.
-				DialContext: (&net.Dialer{
-					Timeout:   30 * time.Second, // Connection timeout.
-					KeepAlive: 30 * time.Second, // Keep-alive probe interval.
-				}).DialContext,
-				TLSHandshakeTimeout:   10 * time.Second, // TLS handshake timeout.
-				ResponseHeaderTimeout: 30 * time.Second, // Time to wait for response headers.
-				IdleConnTimeout:       90 * time.Second, // Idle connection cleanup.
-				ForceAttemptHTTP2:     true,             // Enable HTTP/2.
-			},
-			Timeout: 5 * time.Minute, // Overall request timeout for large downloads.
-		},
-		// CurrentProfileName will be set later in this module.
-		// Settings will be set in individual command modules.
-		DefaultEndpointURL: DefaultEndpointURL,
-	}
-
-	// Commands.
-	commands := map[string]cli.CommandFactory{
-		// There is no explicit 'help' command, only the '-help' global option.
-		"apply":                                     command.NewApplyCommandFactory(meta),
-		"configure":                                 command.NewConfigureCommandFactory(meta),
-		"configure list":                            command.NewConfigureListCommandFactory(meta),
-		"group":                                     command.NewGroupCommandFactory(meta),
-		"group set-terraform-vars":                  command.NewGroupSetTerraformVarsCommandFactory(meta),
-		"group set-terraform-var":                   command.NewGroupSetTerraformVarCommandFactory(meta),
-		"group get-terraform-var":                   command.NewGroupGetTerraformVarCommandFactory(meta),
-		"group list-terraform-vars":                 command.NewGroupListTerraformVarsCommandFactory(meta),
-		"group delete-terraform-var":                command.NewGroupDeleteTerraformVarCommandFactory(meta),
-		"group set-environment-vars":                command.NewGroupSetEnvironmentVarsCommandFactory(meta),
-		"group list":                                command.NewGroupListCommandFactory(meta),
-		"group get":                                 command.NewGroupGetCommandFactory(meta),
-		"group create":                              command.NewGroupCreateCommandFactory(meta),
-		"group migrate":                             command.NewGroupMigrateCommandFactory(meta),
-		"group update":                              command.NewGroupUpdateCommandFactory(meta),
-		"group delete":                              command.NewGroupDeleteCommandFactory(meta),
-		"group get-membership":                      command.NewGroupGetMembershipCommandFactory(meta),
-		"group list-memberships":                    command.NewGroupListMembershipsCommandFactory(meta),
-		"group add-membership":                      command.NewGroupAddMembershipCommandFactory(meta),
-		"group remove-membership":                   command.NewGroupRemoveMembershipCommandFactory(meta),
-		"group update-membership":                   command.NewGroupUpdateMembershipCommandFactory(meta),
-		"plan":                                      command.NewPlanCommandFactory(meta),
-		"destroy":                                   command.NewDestroyCommandFactory(meta),
-		"mcp":                                       command.NewMCPCommandFactory(meta),
-		"managed-identity":                          command.NewManagedIdentityCommandFactory(meta),
-		"managed-identity create":                   command.NewManagedIdentityCreateCommandFactory(meta),
-		"managed-identity delete":                   command.NewManagedIdentityDeleteCommandFactory(meta),
-		"managed-identity get":                      command.NewManagedIdentityGetCommandFactory(meta),
-		"managed-identity update":                   command.NewManagedIdentityUpdateCommandFactory(meta),
-		"managed-identity-access-rule":              command.NewManagedIdentityAccessRuleCommandFactory(meta),
-		"managed-identity-access-rule create":       command.NewManagedIdentityAccessRuleCreateCommandFactory(meta),
-		"managed-identity-access-rule delete":       command.NewManagedIdentityAccessRuleDeleteCommandFactory(meta),
-		"managed-identity-access-rule get":          command.NewManagedIdentityAccessRuleGetCommandFactory(meta),
-		"managed-identity-access-rule list":         command.NewManagedIdentityAccessRuleListCommandFactory(meta),
-		"managed-identity-access-rule update":       command.NewManagedIdentityAccessRuleUpdateCommandFactory(meta),
-		"managed-identity-alias":                    command.NewManagedIdentityAliasCommandFactory(meta),
-		"managed-identity-alias create":             command.NewManagedIdentityAliasCreateCommandFactory(meta),
-		"managed-identity-alias delete":             command.NewManagedIdentityAliasDeleteCommandFactory(meta),
-		"module":                                    command.NewModuleCommandFactory(meta),
-		"module get":                                command.NewModuleGetCommandFactory(meta),
-		"module list":                               command.NewModuleListCommandFactory(meta),
-		"module create":                             command.NewModuleCreateCommandFactory(meta),
-		"module update":                             command.NewModuleUpdateCommandFactory(meta),
-		"module delete":                             command.NewModuleDeleteCommandFactory(meta),
-		"module create-attestation":                 command.NewModuleCreateAttestationCommandFactory(meta),
-		"module update-attestation":                 command.NewModuleUpdateAttestationCommandFactory(meta),
-		"module delete-attestation":                 command.NewModuleDeleteAttestationCommandFactory(meta),
-		"module list-attestations":                  command.NewModuleListAttestationsCommandFactory(meta),
-		"module get-version":                        command.NewModuleGetVersionCommandFactory(meta),
-		"module list-versions":                      command.NewModuleListVersionsCommandFactory(meta),
-		"module delete-version":                     command.NewModuleDeleteVersionCommandFactory(meta),
-		"module upload-version":                     command.NewModuleUploadVersionCommandFactory(meta),
-		"run":                                       command.NewRunCommandFactory(meta),
-		"run cancel":                                command.NewRunCancelCommandFactory(meta),
-		"service-account":                           command.NewServiceAccountCommandFactory(meta),
-		"service-account create-token":              command.NewServiceAccountCreateTokenCommandFactory(meta),
-		"sso":                                       command.NewSSOCommandFactory(meta),
-		"sso login":                                 command.NewLoginCommandFactory(meta),
-		"terraform-provider":                        command.NewTerraformProviderCommandFactory(meta),
-		"terraform-provider create":                 command.NewTerraformProviderCreateCommandFactory(meta),
-		"terraform-provider upload-version":         command.NewTerraformProviderUploadVersionCommandFactory(meta),
-		"terraform-provider-mirror":                 command.NewTerraformProviderMirrorCommandFactory(meta),
-		"terraform-provider-mirror sync":            command.NewTerraformProviderMirrorSyncCommandFactory(meta),
-		"terraform-provider-mirror get-version":     command.NewTerraformProviderMirrorGetVersionCommandFactory(meta),
-		"terraform-provider-mirror list-versions":   command.NewTerraformProviderMirrorListVersionsCommandFactory(meta),
-		"terraform-provider-mirror delete-version":  command.NewTerraformProviderMirrorDeleteVersionCommandFactory(meta),
-		"terraform-provider-mirror list-platforms":  command.NewTerraformProviderMirrorListPlatformsCommandFactory(meta),
-		"terraform-provider-mirror delete-platform": command.NewTerraformProviderMirrorDeletePlatformCommandFactory(meta),
-		"workspace":                                 command.NewWorkspaceCommandFactory(meta),
-		"workspace get-membership":                  command.NewWorkspaceGetMembershipCommandFactory(meta),
-		"workspace list-memberships":                command.NewWorkspaceListMembershipsCommandFactory(meta),
-		"workspace assign-managed-identity":         command.NewWorkspaceAssignManagedIdentityCommandFactory(meta),
-		"workspace unassign-managed-identity":       command.NewWorkspaceUnassignManagedIdentityCommandFactory(meta),
-		"workspace get-assigned-managed-identities": command.NewWorkspaceGetAssignedManagedIdentitiesCommandFactory(meta),
-		"workspace set-terraform-vars":              command.NewWorkspaceSetTerraformVarsCommandFactory(meta),
-		"workspace set-terraform-var":               command.NewWorkspaceSetTerraformVarCommandFactory(meta),
-		"workspace get-terraform-var":               command.NewWorkspaceGetTerraformVarCommandFactory(meta),
-		"workspace list-terraform-vars":             command.NewWorkspaceListTerraformVarsCommandFactory(meta),
-		"workspace delete-terraform-var":            command.NewWorkspaceDeleteTerraformVarCommandFactory(meta),
-		"workspace set-environment-vars":            command.NewWorkspaceSetEnvironmentVarsCommandFactory(meta),
-		"workspace label":                           command.NewWorkspaceLabelCommandFactory(meta),
-		"workspace list":                            command.NewWorkspaceListCommandFactory(meta),
-		"workspace get":                             command.NewWorkspaceGetCommandFactory(meta),
-		"workspace create":                          command.NewWorkspaceCreateCommandFactory(meta),
-		"workspace update":                          command.NewWorkspaceUpdateCommandFactory(meta),
-		"workspace delete":                          command.NewWorkspaceDeleteCommandFactory(meta),
-		"workspace outputs":                         command.NewWorkspaceOutputsCommandFactory(meta),
-		"workspace add-membership":                  command.NewWorkspaceAddMembershipCommandFactory(meta),
-		"workspace remove-membership":               command.NewWorkspaceRemoveMembershipCommandFactory(meta),
-		"workspace update-membership":               command.NewWorkspaceUpdateMembershipCommandFactory(meta),
-		"runner-agent":                              command.NewRunnerAgentCommandFactory(meta),
-		"runner-agent get":                          command.NewRunnerAgentGetCommandFactory(meta),
-		"runner-agent create":                       command.NewRunnerAgentCreateCommandFactory(meta),
-		"runner-agent update":                       command.NewRunnerAgentUpdateCommandFactory(meta),
-		"runner-agent delete":                       command.NewRunnerAgentDeleteCommandFactory(meta),
-		"runner-agent assign-service-account":       command.NewRunnerAgentAssignServiceAccountCommandFactory(meta),
-		"runner-agent unassign-service-account":     command.NewRunnerAgentUnassignServiceAccountCommandFactory(meta),
-	}
-
-	// Set the profile name.
-	profileNames, ok := globalOptions[profileOption]
-	var profileName string
-	if ok {
-		profileName = profileNames[0] // already know a value was processed
-	} else {
-		profileName = settings.DefaultProfileName
-	}
-	log.Debugf("profile name: %s", profileName)
-	meta.CurrentProfileName = profileName
-
-	// Prepare to launch the CLI platform.
 	c := cli.CLI{
-		Name:       binaryName,
-		Version:    Version,
-		Args:       commandArgs,
-		Commands:   commands,
-		HelpFunc:   helpFunc,
-		HelpWriter: os.Stdout,
+		Name:                  binaryName,
+		Version:               Version,
+		Args:                  commandArgs,
+		Commands:              availableCommands,
+		HelpFunc:              helpFunc(cli.BasicHelpFunc(binaryName), f),
+		HelpWriter:            os.Stdout,
+		ErrorWriter:           os.Stderr,
+		Autocomplete:          true,
+		AutocompleteInstall:   autocompleteFlagInstall,
+		AutocompleteUninstall: autocompleteFlagUninstall,
+		AutocompleteGlobalFlags: complete.Flags{
+			"-p": complete.PredictFunc(predictProfiles),
+		},
 	}
 
-	// Launch the CLI platform.
+	// Run the CLI.
 	exitStatus, err := c.Run()
 	if err != nil {
 		log.Error(err.Error())
 		return 1
 	}
 
-	log.Debugf("exit status: %d", exitStatus)
 	return exitStatus
 }
 
-func capitalizeFirst(arg string) string {
-	if arg == "" {
-		return arg // for pathological input, return pathological output
+// commands returns all the available commands.
+func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, error) {
+	// The map of all commands except documentation.
+	commandMap := map[string]command.Factory{
+		"apply":                                     command.NewApplyCommandFactory(baseCommand),
+		"configure":                                 command.NewConfigureCommandFactory(baseCommand),
+		"configure delete":                          command.NewConfigureDeleteCommandFactory(baseCommand),
+		"configure list":                            command.NewConfigureListCommandFactory(baseCommand),
+		"destroy":                                   command.NewDestroyCommandFactory(baseCommand),
+		"group":                                     command.NewHelpCommandFactory(getHelpText("group")),
+		"group get":                                 command.NewGroupGetCommandFactory(baseCommand),
+		"group create":                              command.NewGroupCreateCommandFactory(baseCommand),
+		"group update":                              command.NewGroupUpdateCommandFactory(baseCommand),
+		"group delete":                              command.NewGroupDeleteCommandFactory(baseCommand),
+		"group list":                                command.NewGroupListCommandFactory(baseCommand),
+		"group list-memberships":                    command.NewGroupListMembershipsCommandFactory(baseCommand),
+		"group get-terraform-var":                   command.NewGroupGetTerraformVarCommandFactory(baseCommand),
+		"group set-terraform-var":                   command.NewGroupSetTerraformVarCommandFactory(baseCommand),
+		"group delete-terraform-var":                command.NewGroupDeleteTerraformVarCommandFactory(baseCommand),
+		"group list-terraform-vars":                 command.NewGroupListTerraformVarsCommandFactory(baseCommand),
+		"group set-terraform-vars":                  command.NewGroupSetTerraformVarsCommandFactory(baseCommand),
+		"group list-environment-vars":               command.NewGroupListEnvironmentVarsCommandFactory(baseCommand),
+		"group set-environment-vars":                command.NewGroupSetEnvironmentVarsCommandFactory(baseCommand),
+		"managed-identity":                          command.NewHelpCommandFactory(getHelpText("managed-identity")),
+		"managed-identity get":                      command.NewManagedIdentityGetCommandFactory(baseCommand),
+		"managed-identity create":                   command.NewManagedIdentityCreateCommandFactory(baseCommand),
+		"managed-identity update":                   command.NewManagedIdentityUpdateCommandFactory(baseCommand),
+		"managed-identity delete":                   command.NewManagedIdentityDeleteCommandFactory(baseCommand),
+		"managed-identity-access-rule":              command.NewHelpCommandFactory(getHelpText("managed-identity-access-rule")),
+		"managed-identity-access-rule get":          command.NewManagedIdentityAccessRuleGetCommandFactory(baseCommand),
+		"managed-identity-access-rule list":         command.NewManagedIdentityAccessRuleListCommandFactory(baseCommand),
+		"managed-identity-access-rule create":       command.NewManagedIdentityAccessRuleCreateCommandFactory(baseCommand),
+		"managed-identity-access-rule update":       command.NewManagedIdentityAccessRuleUpdateCommandFactory(baseCommand),
+		"managed-identity-access-rule delete":       command.NewManagedIdentityAccessRuleDeleteCommandFactory(baseCommand),
+		"managed-identity-alias":                    command.NewHelpCommandFactory(getHelpText("managed-identity-alias")),
+		"managed-identity-alias create":             command.NewManagedIdentityAliasCreateCommandFactory(baseCommand),
+		"managed-identity-alias delete":             command.NewManagedIdentityAliasDeleteCommandFactory(baseCommand),
+		"module":                                    command.NewHelpCommandFactory(getHelpText("module")),
+		"module get":                                command.NewModuleGetCommandFactory(baseCommand),
+		"module create":                             command.NewModuleCreateCommandFactory(baseCommand),
+		"module update":                             command.NewModuleUpdateCommandFactory(baseCommand),
+		"module delete":                             command.NewModuleDeleteCommandFactory(baseCommand),
+		"module list":                               command.NewModuleListCommandFactory(baseCommand),
+		"module list-versions":                      command.NewModuleListVersionsCommandFactory(baseCommand),
+		"module list-attestations":                  command.NewModuleListAttestationsCommandFactory(baseCommand),
+		"module create-attestation":                 command.NewModuleCreateAttestationCommandFactory(baseCommand),
+		"module update-attestation":                 command.NewModuleUpdateAttestationCommandFactory(baseCommand),
+		"module delete-attestation":                 command.NewModuleDeleteAttestationCommandFactory(baseCommand),
+		"module get-version":                        command.NewModuleGetVersionCommandFactory(baseCommand),
+		"module delete-version":                     command.NewModuleDeleteVersionCommandFactory(baseCommand),
+		"plan":                                      command.NewPlanCommandFactory(baseCommand),
+		"run":                                       command.NewHelpCommandFactory(getHelpText("run")),
+		"run cancel":                                command.NewRunCancelCommandFactory(baseCommand),
+		"runner-agent":                              command.NewHelpCommandFactory(getHelpText("runner-agent")),
+		"runner-agent get":                          command.NewRunnerAgentGetCommandFactory(baseCommand),
+		"runner-agent create":                       command.NewRunnerAgentCreateCommandFactory(baseCommand),
+		"runner-agent assign-service-account":       command.NewRunnerAgentAssignServiceAccountCommandFactory(baseCommand),
+		"runner-agent unassign-service-account":     command.NewRunnerAgentUnassignServiceAccountCommandFactory(baseCommand),
+		"runner-agent update":                       command.NewRunnerAgentUpdateCommandFactory(baseCommand),
+		"runner-agent delete":                       command.NewRunnerAgentDeleteCommandFactory(baseCommand),
+		"service-account":                           command.NewHelpCommandFactory(getHelpText("service-account")),
+		"service-account create-oidc-token":         command.NewServiceAccountCreateOIDCTokenCommandFactory(baseCommand),
+		"sso":                                       command.NewHelpCommandFactory(getHelpText("sso")),
+		"sso login":                                 command.NewLoginCommandFactory(baseCommand),
+		"terraform-provider":                        command.NewHelpCommandFactory(getHelpText("terraform-provider")),
+		"terraform-provider create":                 command.NewTerraformProviderCreateCommandFactory(baseCommand),
+		"terraform-provider-mirror":                 command.NewHelpCommandFactory(getHelpText("terraform-provider-mirror")),
+		"terraform-provider-mirror get-version":     command.NewTerraformProviderMirrorGetVersionCommandFactory(baseCommand),
+		"terraform-provider-mirror list-versions":   command.NewTerraformProviderMirrorListVersionsCommandFactory(baseCommand),
+		"terraform-provider-mirror list-platforms":  command.NewTerraformProviderMirrorListPlatformsCommandFactory(baseCommand),
+		"terraform-provider-mirror delete-version":  command.NewTerraformProviderMirrorDeleteVersionCommandFactory(baseCommand),
+		"terraform-provider-mirror delete-platform": command.NewTerraformProviderMirrorDeletePlatformCommandFactory(baseCommand),
+		"version":                                   command.NewVersionCommandFactory(baseCommand),
+		"workspace":                                 command.NewHelpCommandFactory(getHelpText("workspace")),
+		"workspace get":                             command.NewWorkspaceGetCommandFactory(baseCommand),
+		"workspace create":                          command.NewWorkspaceCreateCommandFactory(baseCommand),
+		"workspace update":                          command.NewWorkspaceUpdateCommandFactory(baseCommand),
+		"workspace delete":                          command.NewWorkspaceDeleteCommandFactory(baseCommand),
+		"workspace list":                            command.NewWorkspaceListCommandFactory(baseCommand),
+		"workspace list-memberships":                command.NewWorkspaceListMembershipsCommandFactory(baseCommand),
+		"workspace assign-managed-identity":         command.NewWorkspaceAssignManagedIdentityCommandFactory(baseCommand),
+		"workspace unassign-managed-identity":       command.NewWorkspaceUnassignManagedIdentityCommandFactory(baseCommand),
+		"workspace get-assigned-managed-identities": command.NewWorkspaceGetAssignedManagedIdentitiesCommandFactory(baseCommand),
+		"workspace outputs":                         command.NewWorkspaceOutputsCommandFactory(baseCommand),
+		"workspace label":                           command.NewWorkspaceLabelCommandFactory(baseCommand),
+		"workspace get-terraform-var":               command.NewWorkspaceGetTerraformVarCommandFactory(baseCommand),
+		"workspace set-terraform-var":               command.NewWorkspaceSetTerraformVarCommandFactory(baseCommand),
+		"workspace delete-terraform-var":            command.NewWorkspaceDeleteTerraformVarCommandFactory(baseCommand),
+		"workspace list-terraform-vars":             command.NewWorkspaceListTerraformVarsCommandFactory(baseCommand),
+		"workspace set-terraform-vars":              command.NewWorkspaceSetTerraformVarsCommandFactory(baseCommand),
+		"workspace list-environment-vars":           command.NewWorkspaceListEnvironmentVarsCommandFactory(baseCommand),
+		"workspace set-environment-vars":            command.NewWorkspaceSetEnvironmentVarsCommandFactory(baseCommand),
 	}
-	return strings.ToUpper(arg[0:1]) + arg[1:]
+
+	// Add the documentation commands.
+	commandMap["documentation"] = command.NewHelpCommandFactory(getHelpText("documentation"))
+	commandMap["documentation generate"] = command.NewDocumentationGenerateCommandFactory(baseCommand, commandMap)
+
+	// Convert CommandFactory to cli.CommandFactory.
+	returnMap := map[string]cli.CommandFactory{}
+	for name, helpCommandFactory := range commandMap {
+		helpCommand, err := helpCommandFactory()
+		if err != nil {
+			return nil, err
+		}
+
+		returnMap[name] = func() (cli.Command, error) {
+			return command.NewWrapper(helpCommand), nil
+		}
+	}
+
+	return returnMap, nil
 }
 
-// Manual fix-up to put -h and -v options back into command arguments so the CLI library can handle them.
-func fixUpHelpVersionOptions(commandArgs []string, globalOptions map[string][]string) []string {
-	// First, capture the -h and -v options to the result slice.
-	hasDashH := false
-	hasDashV := false
-	if _, ok := globalOptions[helpOptionShort]; ok {
-		hasDashH = true
+// helpFunc adds global options to the default help function.
+func helpFunc(h cli.HelpFunc, f *flag.FlagSet) cli.HelpFunc {
+	return func(commands map[string]cli.CommandFactory) string {
+		var headingBuf bytes.Buffer
+
+		// Build the header with colors
+		titleColor := color.New(color.Bold, color.FgMagenta)
+		boldColor := color.New(color.Bold)
+		greenBold := color.New(color.Bold, color.FgGreen)
+
+		fmt.Fprint(&headingBuf, titleColor.Sprint("Welcome to Tharsis!"))
+		fmt.Fprint(&headingBuf, " — ")
+		fmt.Fprintln(&headingBuf, "An open-source Terraform platform.")
+
+		fmt.Fprint(&headingBuf, boldColor.Sprint("Documentation:"))
+		fmt.Fprintln(&headingBuf, " https://tharsis.martian-cloud.io")
+
+		fmt.Fprint(&headingBuf, greenBold.Sprint("Version:"))
+		fmt.Fprintln(&headingBuf, " "+Version)
+		fmt.Fprintln(&headingBuf)
+
+		// Build global flag usage.
+		var usageBuf bytes.Buffer
+		usageBuf.Write([]byte("\n"))
+		globalFlags := f
+		globalFlags.SetOutput(&usageBuf)
+		globalFlags.Usage()
+
+		return strings.TrimSpace(headingBuf.String() + h(commands) + usageBuf.String())
 	}
-	if _, ok := globalOptions[versionOptionShort]; ok {
-		hasDashV = true
+}
+
+// predictProfiles returns available profile names for autocompletion.
+func predictProfiles(_ complete.Args) []string {
+	s, err := settings.ReadSettings(nil)
+	if err != nil {
+		return nil
 	}
 
-	// Start building the result.
-	result := []string{}
-	if hasDashH {
-		result = append(result, "-h")
+	profiles := make([]string, 0, len(s.Profiles))
+	for name := range s.Profiles {
+		profiles = append(profiles, name)
 	}
-	if hasDashV {
-		result = append(result, "-v")
-	}
+	return profiles
+}
 
-	// Last, copy the other command args.
-	result = append(result, commandArgs...)
+// getHelpText returns the helpText for command.
+func getHelpText(commandName string) (string, string) {
+	return helpText[commandName][0], helpText[commandName][1]
+}
 
-	return result
+// This should be used for all parent commands that appear on the main page
+// i.e., commands that are generally placeholders for subcommands.
+var helpText = map[string][2]string{
+	"sso": {
+		"Log in to the OAuth2 provider and return an authentication token.",
+		`
+The sso command authenticates the CLI with the OAuth2 provider,
+and allows making authenticated calls to Tharsis backend.
+`,
+	},
+	"documentation": {
+		"Perform command documentation operations.",
+		`
+The documentation command(s) perform operations on the documentation.
+`,
+	},
+	"configure": {
+		"Create or update a profile.",
+		`
+The configure command creates or updates a profile. If no
+options are specified, the command prompts for values.
+`,
+	},
+	"group": {
+		"Do operations on groups.",
+		`
+Groups are containers for organizing workspaces hierarchically.
+They can be nested and inherit variables and managed identities
+to children. Use group commands to create, update, delete groups,
+set Terraform and environment variables, manage memberships, and
+migrate groups between parents.
+`,
+	},
+	"workspace": {
+		"Do operations on workspaces.",
+		`
+Workspaces contain Terraform deployments, state, runs, and variables.
+Use workspace commands to create, update, delete workspaces, assign
+and unassign managed identities, set Terraform and environment
+variables, manage memberships, and view workspace outputs.
+`,
+	},
+	"managed-identity": {
+		"Do operations on a managed identity.",
+		`
+Managed identities provide OIDC-federated credentials for cloud
+providers (AWS, Azure, Kubernetes) without storing secrets. Use
+managed-identity commands to create, update, delete, and get
+managed identities.
+`,
+	},
+	"managed-identity-access-rule": {
+		"Do operations on a managed identity access rule.",
+		`
+Access rules control which runs can use a managed identity based
+on conditions like module source or workspace path. Use these
+commands to create, update, delete, list, and get access rules.
+`,
+	},
+	"managed-identity-alias": {
+		"Do operations on a managed identity alias.",
+		`
+Aliases allow referencing managed identities from other groups.
+Use these commands to create and delete managed identity aliases.
+`,
+	},
+	"module": {
+		"Do operations on a terraform module.",
+		`
+The module registry stores Terraform modules with versioning and
+attestation support. Use module commands to create, update, delete
+modules, upload versions, manage attestations, and list modules
+and versions.
+`,
+	},
+	"terraform-provider": {
+		"Do operations on a terraform provider.",
+		`
+The provider registry stores Terraform providers with versioning
+support. Use terraform-provider commands to create providers and
+upload provider versions to the registry.
+`,
+	},
+	"terraform-provider-mirror": {
+		"Mirror Terraform providers from any Terraform registry.",
+		`
+The provider mirror caches Terraform providers from any registry
+for use within a group hierarchy. It supports Terraform's Provider
+Network Mirror Protocol and gives root group owners control over
+which providers, platform packages, and registries are available.
+Use these commands to sync providers, list versions and platforms,
+get version details, and delete versions or platforms.
+`,
+	},
+	"runner-agent": {
+		"Do operations on runner agents.",
+		`
+Runner agents are distributed job executors responsible for
+launching Terraform jobs that deploy infrastructure to the cloud.
+Use runner-agent commands to create, update, delete, get agents,
+and assign or unassign service accounts.
+`,
+	},
+	"service-account": {
+		"Create an authentication token for a service account.",
+		`
+Service accounts provide machine-to-machine authentication for
+CI/CD pipelines and automation. Use service-account commands to
+create authentication tokens.
+`,
+	},
+	"run": {
+		"Do operations on runs.",
+		`
+Runs are units of execution (plan or apply) that create, update,
+or destroy infrastructure resources. Use run commands to cancel
+runs gracefully or forcefully.
+`,
+	},
+	"plan": {
+		"Create a speculative plan",
+		`
+The plan command creates a speculative plan to view the changes
+Terraform will make to your infrastructure without applying them.
+Supports setting run-scoped Terraform and environment variables,
+planning destroy runs, and using remote module sources.
+`,
+	},
+	"apply": {
+		"Apply a single run.",
+		`
+The apply command applies a run to create, update, or destroy
+infrastructure resources. Supports setting run-scoped Terraform
+and environment variables, auto-approving changes, using remote
+module sources, and specifying Terraform versions.
+`,
+	},
+	"destroy": {
+		"Destroy the workspace state.",
+		`
+The destroy command destroys all infrastructure resources managed
+by a workspace. Similar to apply, it supports setting run-scoped
+Terraform and environment variables, auto-approving changes, and
+using remote module sources.
+`,
+	},
 }

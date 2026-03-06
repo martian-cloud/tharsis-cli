@@ -1,296 +1,116 @@
 package command
 
 import (
-	"context"
-	"fmt"
-	"strings"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-var (
-	// limit on number of users to fetch in one page
-	usersPerPage = int32(50)
-	// estimate that we're likely looking for a more recently updated user than a less recently updated user
-	userSortBy = sdktypes.UserSortableFieldUpdatedAtDesc
-)
-
-// groupGetMembershipCommand is the top-level structure for the group get-membership command.
 type groupGetMembershipCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	toJSON bool
 }
 
 // NewGroupGetMembershipCommandFactory returns a groupGetMembershipCommand struct.
-func NewGroupGetMembershipCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupGetMembershipCommand{
-			meta: meta,
+func NewGroupGetMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupGetMembershipCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (ggm groupGetMembershipCommand) Run(args []string) int {
-	ggm.meta.Logger.Debugf("Starting the 'group get-membership' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		ggm.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := ggm.meta.GetSDKClient()
-	if err != nil {
-		ggm.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return ggm.doGroupGetMembership(ctx, client, args)
+func (c *groupGetMembershipCommand) validate() error {
+	const message = "membership-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (ggm groupGetMembershipCommand) doGroupGetMembership(ctx context.Context, client *tharsis.Client, opts []string) int {
-	ggm.meta.Logger.Debugf("will do group get-membership, %d opts", len(opts))
+func (c *groupGetMembershipCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group get-membership"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := ggm.buildGroupGetMembershipOptionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(ggm.meta.BinaryName+" group get-membership", defs, opts)
+	input := &pb.GetNamespaceMembershipByIDRequest{
+		Id: c.arguments[0],
+	}
+
+	c.Logger.Debug("group get-membership input", "input", input)
+
+	membership, err := c.client.NamespaceMembershipsClient.GetNamespaceMembershipByID(c.Context, input)
 	if err != nil {
-		ggm.meta.Logger.Error(output.FormatError("failed to parse group get-membership argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		ggm.meta.Logger.Error(output.FormatError("missing group get-membership full path", nil), ggm.HelpGroupGetMembership())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group get-membership arguments: %s", cmdArgs)
-		ggm.meta.Logger.Error(output.FormatError(msg, nil), ggm.HelpGroupGetMembership())
+		c.UI.ErrorWithSummary(err, "failed to get group membership")
 		return 1
 	}
 
-	path := cmdArgs[0]
-	wantUsername := getOption("username", "", cmdOpts)[0]
-	wantServiceAccountID := getOption("service-account-id", "", cmdOpts)[0]
-	wantTeamName := getOption("team-name", "", cmdOpts)[0]
+	return outputMembership(c.UI, c.toJSON, membership)
+}
 
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		ggm.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
+func (*groupGetMembershipCommand) Synopsis() string {
+	return "Get a group membership by ID."
+}
 
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(path)
-	if !isNamespacePathValid(ggm.meta, actualPath) {
-		return 1
-	}
+func (*groupGetMembershipCommand) Description() string {
+	return `
+   The group get-membership command retrieves details about a specific group membership.
+`
+}
 
-	// Query for the group to make sure it exists and is a group.
-	// Use the path/TRN directly - SDK handles both formats
-	var getGroupInput *sdktypes.GetGroupInput
-	if strings.HasPrefix(path, "trn:") {
-		// It's already a TRN, use ID field
-		getGroupInput = &sdktypes.GetGroupInput{ID: &path}
+func (*groupGetMembershipCommand) Usage() string {
+	return "tharsis [global options] group get-membership [options] <membership-id>"
+}
+
+func (*groupGetMembershipCommand) Example() string {
+	return `
+tharsis group get-membership trn:namespace_membership:ops/Tk1fZj
+`
+}
+
+func (c *groupGetMembershipCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
+
+	return f
+}
+
+func outputMembership(ui terminal.UI, toJSON bool, membership *pb.NamespaceMembership) int {
+	if toJSON {
+		if err := ui.JSON(membership); err != nil {
+			ui.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
 	} else {
-		// It's a path, use Path field
-		getGroupInput = &sdktypes.GetGroupInput{Path: &path}
+		t := terminal.NewTable("id", "role_id", "user_id", "service_account_id", "team_id")
+
+		t.Rich([]string{
+			membership.GetMetadata().Id,
+			membership.RoleId,
+			ptr.ToString(membership.UserId),
+			ptr.ToString(membership.ServiceAccountId),
+			ptr.ToString(membership.TeamId),
+		}, nil)
+
+		ui.Table(t)
 	}
 
-	_, err = client.Group.GetGroup(ctx, getGroupInput)
-	if err != nil {
-		ggm.meta.UI.Error(output.FormatError("failed to find group", err))
-		return 1
-	}
-
-	return getNamespaceMembership(ctx, ggm.meta, client, toJSON, wantUsername, wantServiceAccountID, wantTeamName, path)
-}
-
-// buildGroupGetMembershipOptionDefs returns the defs used by
-// group get-membership command.
-func (ggm groupGetMembershipCommand) buildGroupGetMembershipOptionDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"username": {
-			Arguments: []string{"Username"},
-			Synopsis:  "Username to find the group membership.",
-		},
-		"service-account-id": {
-			Arguments: []string{"Service_Account_ID"},
-			Synopsis:  "Service account ID to find the group membership.",
-		},
-		"team-name": {
-			Arguments: []string{"TeamName"},
-			Synopsis:  "Team name to find the group membership.",
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-func (ggm groupGetMembershipCommand) Synopsis() string {
-	return "Get a group membership."
-}
-
-func (ggm groupGetMembershipCommand) Help() string {
-	return ggm.HelpGroupGetMembership()
-}
-
-// HelpGroupGetMembership prints the help string for the 'group get-membership' command.
-func (ggm groupGetMembershipCommand) HelpGroupGetMembership() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group get-membership <full_path>
-
-   The group get-membership command gets a group's membership.
-
-%s
-
-   Exactly one of --username, --service-account-id, --team-name is required.
-
-`, ggm.meta.BinaryName, buildHelpText(ggm.buildGroupGetMembershipOptionDefs()))
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// getNamespaceMembership is shared by group get-membership and workspace get-membership.
-func getNamespaceMembership(
-	ctx context.Context,
-	meta *Metadata,
-	client *tharsis.Client,
-	toJSON bool,
-	wantUsername, wantServiceAccountID, wantTeamName, namespacePath string,
-) int {
-
-	// Don't allow multiple user, service account, team options.
-	countOfWants := 0
-	if wantUsername != "" {
-		countOfWants++
-	}
-	if wantServiceAccountID != "" {
-		countOfWants++
-	}
-	if wantTeamName != "" {
-		countOfWants++
-	}
-	if countOfWants < 1 {
-		meta.UI.Error(output.FormatError("one of --username, --service-account-id, --team-name required", nil))
-		return 1
-	}
-	if countOfWants > 1 {
-		meta.UI.Error(output.FormatError("only one of --username, --service-account-id, --team-name allowed", nil))
-		return 1
-	}
-
-	// If a username is specified, find the corresponding user ID.
-	var wantUser *sdktypes.User
-	if wantUsername != "" {
-		userPaginator, err := client.User.GetUserPaginator(ctx, &sdktypes.GetUsersInput{
-			Sort: &userSortBy,
-			PaginationOptions: &sdktypes.PaginationOptions{
-				Limit: &usersPerPage,
-			},
-			Filter: &sdktypes.UserFilter{
-				Search: &wantUsername,
-			},
-		})
-		if err != nil {
-			meta.UI.Error(output.FormatError("error looking up user paginator", err))
-			return 1
-		}
-
-		for (wantUser == nil) && userPaginator.HasMore() {
-
-			// Get a page of userPage.
-			userPage, nErr := userPaginator.Next(ctx)
-			if nErr != nil {
-				meta.UI.Error(output.FormatError("error looking up users by name", nErr))
-				return 1
-			}
-
-			// Find the user if it's on this page.
-			for _, u := range userPage.Users {
-				copyU := u
-				if copyU.Username == wantUsername {
-					wantUser = &copyU
-					break
-				}
-			}
-		}
-
-		// If not found yet, try another page.
-		if wantUser == nil {
-			// No such user.
-			meta.UI.Error(output.FormatError("user does not exist: "+wantUsername, err))
-			return 1
-		}
-	}
-
-	// If a team name is specified, find the corresponding team ID.
-	var wantTeam *sdktypes.Team
-	if wantTeamName != "" {
-		var err error
-
-		wantTeam, err = client.Team.GetTeam(ctx, &sdktypes.GetTeamInput{Name: &wantTeamName})
-		if err != nil {
-			meta.UI.Error(output.FormatError("error trying to find team "+wantTeamName, err))
-			return 1
-		}
-		if wantTeam == nil {
-			meta.UI.Error(output.FormatError("team does not exist: "+wantTeamName, err))
-			return 1
-		}
-	}
-
-	// Prepare the inputs.
-	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
-	actualPath := trn.ToPath(namespacePath)
-
-	input := &sdktypes.GetNamespaceMembershipsInput{
-		NamespacePath: actualPath,
-	}
-	meta.Logger.Debugf("group list-memberships input: %#v", input)
-
-	// Get the group's memberships.
-	allMemberships, err := client.NamespaceMembership.GetMemberships(ctx, input)
-	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to list a group's memberships", err))
-		return 1
-	}
-
-	// Return only the specified user, service account, or team.
-	// Breaks out of outer loop upon finding the first match.
-	var result sdktypes.NamespaceMembership // not a pointer in order to avoid pointer aliasing problems
-outerLoop:
-	for _, m := range allMemberships {
-		switch {
-		case m.UserID != nil:
-			if wantUser != nil {
-				if *m.UserID == wantUser.Metadata.ID {
-					result = m
-					break outerLoop
-				}
-			}
-		case m.ServiceAccountID != nil:
-			if *m.ServiceAccountID == wantServiceAccountID {
-				result = m
-				break outerLoop
-			}
-		case m.TeamID != nil:
-			if wantTeam != nil {
-				if *m.TeamID == wantTeam.Metadata.ID {
-					result = m
-					break outerLoop
-				}
-			}
-		}
-	}
-
-	// Handle if the specified membership is not found.
-	// Role's zero value is empty string, so use that to detect whether a member was found.
-	if result.Role == "" {
-		meta.Logger.Error(output.FormatError("did not find the specified membership", err))
-		return 1
-	}
-
-	return outputNamespaceMembership(meta, toJSON, &result)
+	return 0
 }

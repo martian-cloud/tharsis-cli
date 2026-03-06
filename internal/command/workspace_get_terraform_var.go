@@ -1,146 +1,136 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// workspaceGetTerraformVarCommand is the top-level structure for the workspace get-terraform-var command.
 type workspaceGetTerraformVarCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	key           string
+	showSensitive bool
+	toJSON        bool
 }
 
 // NewWorkspaceGetTerraformVarCommandFactory returns a workspaceGetTerraformVarCommand struct.
-func NewWorkspaceGetTerraformVarCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceGetTerraformVarCommand{
-			meta: meta,
+func NewWorkspaceGetTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceGetTerraformVarCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wgv workspaceGetTerraformVarCommand) Run(args []string) int {
-	wgv.meta.Logger.Debugf("Starting the 'workspace get-terraform-var' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wgv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := wgv.meta.GetSDKClient()
-	if err != nil {
-		wgv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return wgv.doWorkspaceGetTerraformVar(ctx, client, args)
+func (c *workspaceGetTerraformVarCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.key, validation.Required),
+	)
 }
 
-func (wgv workspaceGetTerraformVarCommand) doWorkspaceGetTerraformVar(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wgv.meta.Logger.Debugf("will do workspace get-terraform-var, %d opts", len(opts))
+func (c *workspaceGetTerraformVarCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace get-terraform-var"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := wgv.buildWorkspaceGetTerraformVarDefs()
-
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wgv.meta.BinaryName+" workspace get-terraform-var", defs, opts)
+	// Get workspace to retrieve full path
+	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
-		wgv.meta.Logger.Error(output.FormatError("failed to parse workspace get-terraform-var options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wgv.meta.Logger.Error(output.FormatError("missing workspace get-terraform-var workspace path", nil), wgv.HelpWorkspaceGetTerraformVar())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace get-terraform-var arguments: %s", cmdArgs)
-		wgv.meta.Logger.Error(output.FormatError(msg, nil), wgv.HelpWorkspaceGetTerraformVar())
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
-	namespacePath := cmdArgs[0]
-	key := getOption("key", "", cmdOpts)[0]
+	// Build TRN: trn:variable:namespace-path/terraform/key
+	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, "terraform", c.key)
 
-	if key == "" {
-		wgv.meta.Logger.Error(output.FormatError("missing required --key option", nil), wgv.HelpWorkspaceGetTerraformVar())
-		return 1
+	input := &pb.GetNamespaceVariableByIDRequest{
+		Id: variableTRN,
 	}
 
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	c.Logger.Debug("workspace get-terraform-var input", "input", input)
+
+	variable, err := c.client.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, input)
 	if err != nil {
-		wgv.meta.UI.Error(output.FormatError("failed to parse boolean value for --json", err))
+		c.UI.ErrorWithSummary(err, "failed to get terraform variable")
 		return 1
 	}
 
-	showSensitive, err := getBoolOptionValue("show-sensitive", "false", cmdOpts)
-	if err != nil {
-		wgv.meta.UI.Error(output.FormatError("failed to parse boolean value for --show-sensitive", err))
-		return 1
+	// If showing sensitive value, fetch the variable version
+	if c.showSensitive && variable.Sensitive {
+		versionInput := &pb.GetNamespaceVariableVersionByIDRequest{
+			Id:                    variable.LatestVersionId,
+			IncludeSensitiveValue: true,
+		}
+
+		version, err := c.client.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get variable version")
+			return 1
+		}
+
+		// Set the value from the version
+		variable.Value = version.Value
 	}
 
-	actualPath := trn.ToPath(namespacePath)
-	if !isNamespacePathValid(wgv.meta, actualPath) {
-		return 1
-	}
-
-	// Prepare the inputs - convert path to TRN and use ID field
-	trnID := trn.ToTRN(namespacePath, trn.ResourceTypeWorkspace)
-	input := &sdktypes.GetWorkspaceInput{ID: &trnID}
-
-	if _, err = client.Workspaces.GetWorkspace(ctx, input); err != nil {
-		wgv.meta.Logger.Error(output.FormatError("failed to get workspace", err))
-		return 1
-	}
-
-	variable, err := getTerraformVariable(ctx, wgv.meta, client, namespacePath, key, showSensitive)
-	if err != nil {
-		wgv.meta.Logger.Error(output.FormatError("failed to get variable", err))
-		return 1
-	}
-
-	return outputNamespaceVariable(wgv.meta, toJSON, variable)
+	return outputNamespaceVariable(c.UI, c.toJSON, c.showSensitive, variable)
 }
 
-func (wgv workspaceGetTerraformVarCommand) buildWorkspaceGetTerraformVarDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"key": {
-			Arguments: []string{"Variable_Key"},
-			Synopsis:  "The key/name of the terraform variable.",
-			Required:  true,
-		},
-		"show-sensitive": {
-			Arguments: []string{},
-			Synopsis:  "Show the actual value of sensitive variables (requires appropriate permissions).",
-		},
-		"json": {
-			Arguments: []string{},
-			Synopsis:  "Output in JSON format.",
-		},
-	}
+func (*workspaceGetTerraformVarCommand) Synopsis() string {
+	return "Get a terraform variable for a workspace."
 }
 
-func (wgv workspaceGetTerraformVarCommand) Synopsis() string {
-	return "Get a single terraform variable from a workspace."
+func (*workspaceGetTerraformVarCommand) Description() string {
+	return `
+   The workspace get-terraform-var command retrieves a terraform variable for a workspace.
+`
 }
 
-func (wgv workspaceGetTerraformVarCommand) Help() string {
-	return wgv.HelpWorkspaceGetTerraformVar()
+func (*workspaceGetTerraformVarCommand) Usage() string {
+	return "tharsis [global options] workspace get-terraform-var [options] <workspace-id>"
 }
 
-// HelpWorkspaceGetTerraformVar produces the help string for the 'workspace get-terraform-var' command.
-func (wgv workspaceGetTerraformVarCommand) HelpWorkspaceGetTerraformVar() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace get-terraform-var [options] <workspace>
+func (*workspaceGetTerraformVarCommand) Example() string {
+	return `
+tharsis workspace get-terraform-var \
+  --key region \
+  trn:workspace:ops/my-workspace
+`
+}
 
-   The workspace get-terraform-var command retrieves a single terraform
-   variable from a workspace by its key.
+func (c *workspaceGetTerraformVarCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.key,
+		"key",
+		"",
+		"Variable key.",
+	)
+	f.BoolVar(
+		&c.showSensitive,
+		"show-sensitive",
+		false,
+		"Show the actual value of sensitive variables (requires appropriate permissions).",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-%s
-
-`, wgv.meta.BinaryName, buildHelpText(wgv.buildWorkspaceGetTerraformVarDefs()))
+	return f
 }

@@ -1,130 +1,115 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// workspaceListMembershipsCommand is the top-level structure for the workspace list-memberships command.
 type workspaceListMembershipsCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	toJSON bool
 }
 
 // NewWorkspaceListMembershipsCommandFactory returns a workspaceListMembershipsCommand struct.
-func NewWorkspaceListMembershipsCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceListMembershipsCommand{
-			meta: meta,
+func NewWorkspaceListMembershipsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceListMembershipsCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wlm workspaceListMembershipsCommand) Run(args []string) int {
-	wlm.meta.Logger.Debugf("Starting the 'workspace list-memberships' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wlm.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := wlm.meta.GetSDKClient()
-	if err != nil {
-		wlm.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return wlm.doWorkspaceListMemberships(ctx, client, args)
+func (c *workspaceListMembershipsCommand) validate() error {
+	const message = "workspace-path is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (wlm workspaceListMembershipsCommand) doWorkspaceListMemberships(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wlm.meta.Logger.Debugf("will do workspace list-memberships, %d opts", len(opts))
+func (c *workspaceListMembershipsCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace list-memberships"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := wlm.buildWorkspaceListMembershipsOptionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wlm.meta.BinaryName+" workspace list-memberships", defs, opts)
+	input := &pb.GetNamespaceMembershipsForNamespaceRequest{
+		NamespacePath: c.arguments[0],
+	}
+
+	c.Logger.Debug("workspace list-memberships input", "input", input)
+
+	result, err := c.client.NamespaceMembershipsClient.GetNamespaceMembershipsForNamespace(c.Context, input)
 	if err != nil {
-		wlm.meta.Logger.Error(output.FormatError("failed to parse workspace list-memberships argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wlm.meta.Logger.Error(output.FormatError("missing workspace list-memberships full path", nil), wlm.HelpWorkspaceListMemberships())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace list-memberships arguments: %s", cmdArgs)
-		wlm.meta.Logger.Error(output.FormatError(msg, nil), wlm.HelpWorkspaceListMemberships())
+		c.UI.ErrorWithSummary(err, "failed to get a list of workspace memberships")
 		return 1
 	}
 
-	path := cmdArgs[0]
+	if c.toJSON {
+		if err := c.UI.JSON(result); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+	} else {
+		t := terminal.NewTable("id", "role_id", "user_id", "service_account_id", "team_id")
 
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		wlm.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
+		for _, membership := range result.NamespaceMemberships {
+			t.Rich([]string{
+				membership.GetMetadata().Id,
+				membership.RoleId,
+				ptr.ToString(membership.UserId),
+				ptr.ToString(membership.ServiceAccountId),
+				ptr.ToString(membership.TeamId),
+			}, nil)
+		}
+
+		c.UI.Table(t)
 	}
 
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(path)
-	if !isNamespacePathValid(wlm.meta, actualPath) {
-		return 1
-	}
-
-	// Query for the workspace to make sure it exists and is a workspace.
-	trnID := trn.ToTRN(path, trn.ResourceTypeWorkspace)
-	_, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &trnID})
-	if err != nil {
-		wlm.meta.UI.Error(output.FormatError("failed to find workspace", err))
-		return 1
-	}
-
-	// Prepare the inputs.
-	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
-	actualPath = trn.ToPath(path)
-
-	input := &sdktypes.GetNamespaceMembershipsInput{
-		NamespacePath: actualPath,
-	}
-	wlm.meta.Logger.Debugf("workspace list-memberships input: %#v", input)
-
-	// Get the workspace's memberships.
-	foundMemberships, err := client.NamespaceMembership.GetMemberships(ctx, input)
-	if err != nil {
-		wlm.meta.Logger.Error(output.FormatError("failed to list a workspace's memberships", err))
-		return 1
-	}
-
-	return outputNamespaceMemberships(wlm.meta, toJSON, foundMemberships)
+	return 0
 }
 
-// buildWorkspaceListMembershipsOptionDefs returns the defs used by
-// workspace list-memberships command.
-func (wlm workspaceListMembershipsCommand) buildWorkspaceListMembershipsOptionDefs() optparser.OptionDefinitions {
-	return buildJSONOptionDefs(optparser.OptionDefinitions{})
+func (*workspaceListMembershipsCommand) Synopsis() string {
+	return "Retrieve a list of workspace memberships."
 }
 
-func (wlm workspaceListMembershipsCommand) Synopsis() string {
-	return "List a workspace's memberships."
+func (*workspaceListMembershipsCommand) Description() string {
+	return `
+   The workspace list-memberships command prints information about
+   memberships for a specific workspace.
+`
 }
 
-func (wlm workspaceListMembershipsCommand) Help() string {
-	return wlm.HelpWorkspaceListMemberships()
+func (*workspaceListMembershipsCommand) Usage() string {
+	return "tharsis [global options] workspace list-memberships [options] <workspace-path>"
 }
 
-// HelpWorkspaceListMemberships prints the help string for the 'workspace list-memberships' command.
-func (wlm workspaceListMembershipsCommand) HelpWorkspaceListMemberships() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace list-memberships <full_path>
+func (*workspaceListMembershipsCommand) Example() string {
+	return `
+tharsis workspace list-memberships top-level/my-workspace
+`
+}
 
-   The workspace list-memberships command lists a workspace's memberships.
+func (c *workspaceListMembershipsCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
 
-%s
-
-`, wlm.meta.BinaryName, buildHelpText(wlm.buildWorkspaceListMembershipsOptionDefs()))
+	return f
 }

@@ -1,190 +1,179 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 type terraformProviderMirrorListVersionsCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	limit  *int32
+	cursor *string
+	sortBy *pb.TerraformProviderVersionMirrorSortableField
+	toJSON bool
 }
 
 // NewTerraformProviderMirrorListVersionsCommandFactory returns a terraformProviderMirrorListVersionsCommand struct.
-func NewTerraformProviderMirrorListVersionsCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return terraformProviderMirrorListVersionsCommand{
-			meta: meta,
+func NewTerraformProviderMirrorListVersionsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &terraformProviderMirrorListVersionsCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (c terraformProviderMirrorListVersionsCommand) Run(args []string) int {
-	c.meta.Logger.Debugf("Starting the 'terraform-provider-mirror list-versions' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		c.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := c.meta.GetSDKClient()
-	if err != nil {
-		c.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return c.doTerraformProviderMirrorListVersions(ctx, client, args)
+func (c *terraformProviderMirrorListVersionsCommand) validate() error {
+	const message = "namespace-path is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(100), validation.When(c.limit != nil)),
+	)
 }
 
-func (c terraformProviderMirrorListVersionsCommand) doTerraformProviderMirrorListVersions(ctx context.Context, client *tharsis.Client, opts []string) int {
-	c.meta.Logger.Debugf("will do terraform-provider-mirror list-versions, %d opts: %#v", len(opts), opts)
-
-	defs := c.defs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(c.meta.BinaryName+" terraform-provider-mirror list-versions", defs, opts)
-	if err != nil {
-		c.meta.Logger.Error(output.FormatError("failed to parse terraform-provider-mirror list-versions options", err))
-		return cli.RunResultHelp
-	}
-	if len(cmdArgs) < 1 {
-		c.meta.Logger.Error(output.FormatError("missing terraform-provider-mirror list-versions group path", nil))
-		return cli.RunResultHelp
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive terraform-provider-mirror list-versions arguments: %s", cmdArgs)
-		c.meta.Logger.Error(output.FormatError(msg, nil))
-		return cli.RunResultHelp
+func (c *terraformProviderMirrorListVersionsCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("terraform-provider-mirror list-versions"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	// Extract option values.
-	groupPath := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		c.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	cursor := getOption("cursor", "", cmdOpts)[0]
-	limit, err := strconv.ParseInt(getOption("limit", "100", cmdOpts)[0], 10, 64) // 100 is the maximum allowed by GraphQL
-	if err != nil {
-		msg := fmt.Sprintf("invalid limit option value: %s", cmdOpts["limit"])
-		c.meta.Logger.Error(output.FormatError(msg, nil))
-		return 1
-	}
-	limit32 := int32(limit)
-	sortOrderOption := strings.ToLower(getOption("sort-order", "", cmdOpts)[0])
-
-	actualPath := trn.ToPath(groupPath)
-	if !isNamespacePathValid(c.meta, actualPath) {
-		return 1
+	if c.limit == nil {
+		c.limit = ptr.Int32(defaultPaginationLimit)
 	}
 
-	// Leniently default to ascending order unless instructed otherwise.
-	sortOrder := "asc"
-	if strings.HasSuffix(sortOrderOption, "desc") {
-		sortOrder = sortOrderOption
-	}
-
-	var sortable sdktypes.TerraformProviderVersionMirrorSortableField
-
-	if sortOrder == "asc" {
-		sortable = sdktypes.TerraformProviderVersionMirrorSortableFieldCreatedAtAsc
-	} else {
-		sortable = sdktypes.TerraformProviderVersionMirrorSortableFieldCreatedAtDesc
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.GetTerraformProviderVersionMirrorsInput{
-		Sort: &sortable,
-		PaginationOptions: &sdktypes.PaginationOptions{
-			Limit: &limit32,
+	input := &pb.GetTerraformProviderVersionMirrorsRequest{
+		NamespacePath: c.arguments[0],
+		Sort:          c.sortBy,
+		PaginationOptions: &pb.PaginationOptions{
+			First: c.limit,
+			After: c.cursor,
 		},
-		// We will include all inherited version mirrors, since it's likely
-		// the user will be querying from outside the root group but within
-		// its hierarchy.
-		IncludeInherited: ptr.Bool(true),
-		GroupPath:        groupPath,
 	}
 
-	if cursor != "" {
-		input.PaginationOptions.Cursor = &cursor
-	}
+	c.Logger.Debug("terraform-provider-mirror list-versions input", "input", input)
 
-	c.meta.Logger.Debugf("terraform-provider-mirror list-versions input: %#v", input)
-
-	versionsOutput, err := client.TerraformProviderVersionMirror.GetProviderVersionMirrors(ctx, input)
+	result, err := c.client.TerraformProviderMirrorsClient.GetTerraformProviderVersionMirrors(c.Context, input)
 	if err != nil {
-		c.meta.Logger.Error(output.FormatError("failed to get a list of provider version mirrors", err))
+		c.UI.ErrorWithSummary(err, "failed to get a list of provider version mirrors")
 		return 1
 	}
 
-	if toJSON {
-		buf, err := objectToJSON(versionsOutput)
-		if err != nil {
-			c.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+	if c.toJSON {
+		if err := c.UI.JSON(result); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
 		}
-		c.meta.UI.Output(string(buf))
 	} else {
-		// Format the output.
-		tableInput := make([][]string, len(versionsOutput.VersionMirrors)+1)
-		tableInput[0] = []string{"id", "semantic version", "registry hostname", "registry namespace", "type"}
-		for ix, vm := range versionsOutput.VersionMirrors {
-			tableInput[ix+1] = []string{vm.Metadata.ID, vm.SemanticVersion, vm.RegistryHostname,
-				vm.RegistryNamespace, vm.Type}
-		}
-		c.meta.UI.Output(tableformatter.FormatTable(tableInput))
+		t := terminal.NewTable("id", "type", "registry_hostname", "registry_namespace", "semantic_version")
 
-		c.meta.UI.Output(fmt.Sprintf("has next page: %v", versionsOutput.PageInfo.HasNextPage))
-		if versionsOutput.PageInfo.HasNextPage {
-			// Show the next cursor _ONLY_ if there is a next page.
-			c.meta.UI.Output(fmt.Sprintf("next cursor: %s", versionsOutput.PageInfo.Cursor))
+		for _, mirror := range result.VersionMirrors {
+			t.Rich([]string{
+				mirror.Metadata.Id,
+				mirror.Type,
+				mirror.RegistryHostname,
+				mirror.RegistryNamespace,
+				mirror.SemanticVersion,
+			}, nil)
 		}
+
+		c.UI.Table(t)
+		namedValues := []terminal.NamedValue{
+			{Name: "Total count", Value: result.GetPageInfo().TotalCount},
+			{Name: "Has Next Page", Value: result.GetPageInfo().HasNextPage},
+		}
+		if result.GetPageInfo().EndCursor != nil {
+			namedValues = append(namedValues, terminal.NamedValue{
+				Name:  "Next cursor",
+				Value: result.GetPageInfo().GetEndCursor(),
+			})
+		}
+
+		c.UI.NamedValues(namedValues)
 	}
 
 	return 0
 }
 
-func (terraformProviderMirrorListVersionsCommand) defs() optparser.OptionDefinitions {
-	return buildJSONOptionDefs(buildPaginationOptionDefs())
+func (*terraformProviderMirrorListVersionsCommand) Synopsis() string {
+	return "Retrieve a paginated list of provider version mirrors."
 }
 
-func (terraformProviderMirrorListVersionsCommand) Synopsis() string {
-	return "List Terraform Provider versions available via Tharsis provider mirror."
+func (*terraformProviderMirrorListVersionsCommand) Description() string {
+	return `
+   The terraform-provider-mirror list-versions command prints information
+   about provider version mirrors in a namespace. Supports pagination and sorting.
+`
 }
 
-func (c terraformProviderMirrorListVersionsCommand) Help() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] terraform-provider-mirror list-versions [options] <root-group-path>
+func (*terraformProviderMirrorListVersionsCommand) Usage() string {
+	return "tharsis [global options] terraform-provider-mirror list-versions [options] <namespace-path>"
+}
 
-   The terraform-provider-mirror list-versions command prints
-   information about (likely multiple) Terraform provider
-   version mirrors. Supports pagination, filtering and
-   sorting the output.
+func (*terraformProviderMirrorListVersionsCommand) Example() string {
+	return `
+tharsis terraform-provider-mirror list-versions \
+  --sort-by CREATED_AT_DESC \
+  --limit 10 \
+  ops
+`
+}
 
-   Example:
-
-   %s terraform-provider-mirror list-versions \
-      --limit 5 \
-      --json \
-      top-level
-
-   Above command will only show five version mirrors
-   in JSON format from root group top-level.
-
-%s
-
-`,
-		c.meta.BinaryName,
-		c.meta.BinaryName,
-		buildHelpText(c.defs()),
+func (c *terraformProviderMirrorListVersionsCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"cursor",
+		"The cursor string for manual pagination.",
+		func(s string) error {
+			c.cursor = &s
+			return nil
+		},
 	)
+	f.Func(
+		"limit",
+		"Maximum number of result elements to return. Defaults to 100.",
+		func(s string) error {
+			i, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return err
+			}
+			c.limit = ptr.Int32(int32(i))
+			return nil
+		},
+	)
+	f.Func(
+		"sort-by",
+		"Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).",
+		func(s string) error {
+			value, ok := pb.TerraformProviderVersionMirrorSortableField_value[strings.ToUpper(s)]
+			if !ok {
+				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, maps.Keys(pb.TerraformProviderVersionMirrorSortableField_value))
+			}
+			c.sortBy = pb.TerraformProviderVersionMirrorSortableField(value).Enum()
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
 }

@@ -1,113 +1,117 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 // workspaceGetCommand is the top-level structure for the workspace get command.
 type workspaceGetCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	toJSON bool
 }
 
-// NewWorkspaceGetCommandFactory returns a workspaceCommandGet struct.
-func NewWorkspaceGetCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceGetCommand{
-			meta: meta,
+var _ Command = (*workspaceGetCommand)(nil)
+
+func (c *workspaceGetCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
+}
+
+// NewWorkspaceGetCommandFactory returns a workspaceGetCommand struct.
+func NewWorkspaceGetCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceGetCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wgc workspaceGetCommand) Run(args []string) int {
-	wgc.meta.Logger.Debugf("Starting the 'workspace get' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wgc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *workspaceGetCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace get"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := wgc.meta.GetSDKClient()
+	input := &pb.GetWorkspaceByIDRequest{
+		Id: c.arguments[0],
+	}
+
+	c.Logger.Debug("workspace get input", "input", input)
+
+	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, input)
 	if err != nil {
-		wgc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return wgc.doWorkspaceGet(ctx, client, args)
+	return outputWorkspace(c.UI, c.toJSON, workspace)
 }
 
-func (wgc workspaceGetCommand) doWorkspaceGet(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wgc.meta.Logger.Debugf("will do workspace get, %d opts", len(opts))
-
-	// Get one argument, no options allowed.
-	defs := buildJSONOptionDefs(optparser.OptionDefinitions{})
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wgc.meta.BinaryName+" workspace get", defs, opts)
-	if err != nil {
-		wgc.meta.Logger.Error(output.FormatError("failed to parse workspace get argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wgc.meta.Logger.Error(output.FormatError("missing workspace get full path", nil), wgc.HelpWorkspaceGet())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace get arguments: %s", cmdArgs)
-		wgc.meta.Logger.Error(output.FormatError(msg, nil), wgc.HelpWorkspaceGet())
-		return 1
-	}
-
-	workspacePath := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		wgc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(workspacePath)
-	if !isNamespacePathValid(wgc.meta, actualPath) {
-		return 1
-	}
-
-	// Prepare the inputs - convert path to TRN and use ID field
-	trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
-	input := &sdktypes.GetWorkspaceInput{ID: &trnID}
-	wgc.meta.Logger.Debugf("workspace get input: %#v", input)
-
-	// Get the workspace.
-	foundWorkspace, err := client.Workspaces.GetWorkspace(ctx, input)
-	if err != nil {
-		wgc.meta.Logger.Error(output.FormatError("failed to get a workspace", err))
-		return 1
-	}
-
-	return outputWorkspace(wgc.meta, toJSON, foundWorkspace)
-}
-
-func (wgc workspaceGetCommand) Synopsis() string {
+func (*workspaceGetCommand) Synopsis() string {
 	return "Get a single workspace."
 }
 
-func (wgc workspaceGetCommand) Help() string {
-	return wgc.HelpWorkspaceGet()
+func (*workspaceGetCommand) Usage() string {
+	return "tharsis [global options] workspace get [options] <id>"
 }
 
-// HelpWorkspaceGet prints the help string for the 'workspace get' command.
-func (wgc workspaceGetCommand) HelpWorkspaceGet() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace get [options] <full_path>
-
+func (*workspaceGetCommand) Description() string {
+	return `
    The workspace get command prints information about one
    workspace.
+`
+}
 
-%s
+func (*workspaceGetCommand) Example() string {
+	return `
+tharsis workspace get trn:workspace:ops/my-group/my-workspace
+`
+}
 
-`, wgc.meta.BinaryName, buildHelpText(buildJSONOptionDefs(optparser.OptionDefinitions{})))
+func (c *workspaceGetCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
+}
+
+func outputWorkspace(ui terminal.UI, toJSON bool, workspace *pb.Workspace) int {
+	if toJSON {
+		if err := ui.JSON(workspace); err != nil {
+			ui.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+	} else {
+		t := terminal.NewTable("id", "name", "description", "full_path")
+		t.Rich([]string{
+			workspace.Metadata.Id,
+			workspace.Name,
+			workspace.Description,
+			workspace.FullPath,
+		}, nil)
+
+		ui.Table(t)
+	}
+
+	return 0
 }

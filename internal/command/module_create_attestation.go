@@ -1,157 +1,137 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// moduleCreateAttestationCommand is the top-level structure for the module create-attestation command.
+// moduleCreateAttestationCommand is the top-level structure for the module create attestation command.
 type moduleCreateAttestationCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	description     string
+	attestationData string
+	toJSON          bool
+}
+
+var _ Command = (*moduleCreateAttestationCommand)(nil)
+
+func (c *moduleCreateAttestationCommand) validate() error {
+	const message = "module-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.attestationData, validation.Required),
+	)
 }
 
 // NewModuleCreateAttestationCommandFactory returns a moduleCreateAttestationCommand struct.
-func NewModuleCreateAttestationCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleCreateAttestationCommand{
-			meta: meta,
+func NewModuleCreateAttestationCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleCreateAttestationCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (mcc moduleCreateAttestationCommand) Run(args []string) int {
-	mcc.meta.Logger.Debugf("Starting the 'module create-attestation' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		mcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *moduleCreateAttestationCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("module create-attestation"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := mcc.meta.GetSDKClient()
+	input := &pb.CreateTerraformModuleAttestationRequest{
+		ModuleId:        c.arguments[0],
+		Description:     c.description,
+		AttestationData: c.attestationData,
+	}
+
+	c.Logger.Debug("module create attestation input", "input", input)
+
+	createdAttestation, err := c.client.TerraformModulesClient.CreateTerraformModuleAttestation(c.Context, input)
 	if err != nil {
-		mcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to create module attestation")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return mcc.doModuleCreateAttestation(ctx, client, args)
+	return outputModuleAttestation(c.UI, c.toJSON, createdAttestation)
 }
 
-func (mcc moduleCreateAttestationCommand) doModuleCreateAttestation(ctx context.Context, client *tharsis.Client, opts []string) int {
-	mcc.meta.Logger.Debugf("will do module create-attestation, %d opts", len(opts))
-
-	defs := mcc.buildDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(mcc.meta.BinaryName+" module create-attestation", defs, opts)
-	if err != nil {
-		mcc.meta.Logger.Error(output.FormatError("failed to parse module create-attestation options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		mcc.meta.Logger.Error(output.FormatError("missing module create-attestation module path", nil), mcc.HelpModuleCreateAttestation())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module create-attestation arguments: %s", cmdArgs)
-		mcc.meta.Logger.Error(output.FormatError(msg, nil), mcc.HelpModuleCreateAttestation())
-		return 1
-	}
-
-	modulePath := cmdArgs[0]
-	attestationData := getOption("data", "", cmdOpts)[0]
-	description := getOption("description", "", cmdOpts)[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(modulePath)
-	if !isResourcePathValid(mcc.meta, actualPath) {
-		return 1
-	}
-
-	input := &sdktypes.CreateTerraformModuleAttestationInput{
-		ModulePath:      modulePath,
-		Description:     description,
-		AttestationData: attestationData,
-	}
-	mcc.meta.Logger.Debugf("module create input: %#v", input)
-
-	attestation, err := client.TerraformModuleAttestation.CreateModuleAttestation(ctx, input)
-	if err != nil {
-		mcc.meta.UI.Error(output.FormatError("failed to create module attestation", err))
-		return 1
-	}
-
-	return outputModuleAttestation(mcc.meta, toJSON, attestation)
-}
-
-// outputModuleAttestation is the final output for most module attestation operations.
-func outputModuleAttestation(meta *Metadata, toJSON bool, attestation *sdktypes.TerraformModuleAttestation) int {
-	if toJSON {
-		buf, err := objectToJSON(attestation)
-		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
-			return 1
-		}
-		meta.UI.Output(string(buf))
-	} else {
-		tableInput := [][]string{
-			{"id", "module id", "description", "schema type", "predicate type"},
-			{
-				attestation.Metadata.ID, attestation.ModuleID, attestation.Description,
-				attestation.SchemaType, attestation.PredicateType,
-			},
-		}
-		meta.UI.Output(tableformatter.FormatTable(tableInput))
-	}
-
-	return 0
-}
-
-// buildModuleCreateAttestationDefs returns defs used by module create-attestation command.
-func (mcc moduleCreateAttestationCommand) buildDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"data": {
-			Arguments: []string{"Data"},
-			Synopsis:  "The Base64-encoded attestation data.",
-			Required:  true,
-		},
-		"description": {
-			Arguments: []string{"Description"},
-			Synopsis:  "Description for the new module attestation.",
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-func (mcc moduleCreateAttestationCommand) Synopsis() string {
+func (*moduleCreateAttestationCommand) Synopsis() string {
 	return "Create a new module attestation."
 }
 
-func (mcc moduleCreateAttestationCommand) Help() string {
-	return mcc.HelpModuleCreateAttestation()
+func (*moduleCreateAttestationCommand) Usage() string {
+	return "tharsis [global options] module create-attestation [options] <module-id>"
 }
 
-// HelpModuleCreateAttestation produces the help string for the 'module create-attestation' command.
-func (mcc moduleCreateAttestationCommand) HelpModuleCreateAttestation() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module create-attestation [options] <module-path>
+func (*moduleCreateAttestationCommand) Description() string {
+	return `
+   The module create-attestation command creates a new module attestation.
+`
+}
 
-   The module create-attestation command creates a
-   new module attestation. Attestation data must
-   only be a Base64-encoded string.
+func (*moduleCreateAttestationCommand) Example() string {
+	return `
+tharsis module create-attestation \
+  --description "Attestation for v1.0.0" \
+  --attestation-data '{"key":"value"}' \
+  trn:terraform_module:ops/installer/aws
+`
+}
 
-%s
+func (c *moduleCreateAttestationCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.description,
+		"description",
+		"",
+		"Description for the attestation.",
+	)
+	f.StringVar(
+		&c.attestationData,
+		"attestation-data",
+		"",
+		"The attestation data (must be a Base64-encoded string).",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
 
-`, mcc.meta.BinaryName, buildHelpText(mcc.buildDefs()))
+	return f
+}
+
+func outputModuleAttestation(ui terminal.UI, toJSON bool, attestation *pb.TerraformModuleAttestation) int {
+	if toJSON {
+		if err := ui.JSON(attestation); err != nil {
+			ui.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+	} else {
+		t := terminal.NewTable("id", "module_id", "description", "predicate_type", "schema_type")
+		t.Rich([]string{
+			attestation.Metadata.Id,
+			attestation.ModuleId,
+			attestation.Description,
+			attestation.PredicateType,
+			attestation.SchemaType,
+		}, nil)
+
+		ui.Table(t)
+	}
+
+	return 0
 }

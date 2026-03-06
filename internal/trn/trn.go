@@ -32,6 +32,17 @@ const (
 	ResourceTypeTerraformProviderPlatform ResourceType = "terraform_provider_platform"
 	// ResourceTypeFederatedRegistry is the resource type constant for federated registry TRNs.
 	ResourceTypeFederatedRegistry ResourceType = "federated_registry"
+	// ResourceTypeServiceAccount is the resource type constant for service account TRNs.
+	ResourceTypeServiceAccount ResourceType = "service_account"
+	// ResourceTypeTeam is the resource type constant for team TRNs.
+	ResourceTypeTeam ResourceType = "team"
+	// ResourceTypeUser is the resource type constant for user TRNs.
+	ResourceTypeUser ResourceType = "user"
+)
+
+const (
+	// TRNPrefix is the prefix for a Tharsis resource name.
+	TRNPrefix = "trn:"
 )
 
 // ToPath extracts the path portion from a TRN.
@@ -59,15 +70,15 @@ func ToPathParts(identifier string) []string {
 
 // IsTRN returns true if the identifier is a valid TRN format.
 func IsTRN(identifier string) bool {
-	return strings.HasPrefix(identifier, "trn:")
+	return strings.HasPrefix(identifier, TRNPrefix)
 }
 
 // ToTRN converts a path or TRN to a TRN format.
 // If the input is already a TRN, it returns it unchanged.
 // If the input is a path, it converts it to a TRN with the specified resource type.
-func ToTRN(identifier string, resourceType ResourceType) string {
+func ToTRN(resourceType ResourceType, identifier string) string {
 	// If it's already a TRN, return as-is
-	if strings.HasPrefix(identifier, "trn:") {
+	if strings.HasPrefix(identifier, TRNPrefix) {
 		return identifier
 	}
 
@@ -78,5 +89,5 @@ func ToTRN(identifier string, resourceType ResourceType) string {
 // NewResourceTRN returns a new TRN string for the given resource and
 // arguments. This is a helper function for creating TRNs.
 func NewResourceTRN(resource ResourceType, a ...string) string {
-	return fmt.Sprintf("trn:%s:%s", resource, strings.Join(a, "/"))
+	return fmt.Sprintf("%s%s:%s", TRNPrefix, resource, strings.Join(a, "/"))
 }

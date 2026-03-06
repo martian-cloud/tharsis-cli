@@ -1,138 +1,123 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// workspaceSetEnvironmentVarsCommand is the top-level structure for the workspace set-environment-vars command.
 type workspaceSetEnvironmentVarsCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	envVarFiles []string
 }
 
 // NewWorkspaceSetEnvironmentVarsCommandFactory returns a workspaceSetEnvironmentVarsCommand struct.
-func NewWorkspaceSetEnvironmentVarsCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceSetEnvironmentVarsCommand{
-			meta: meta,
+func NewWorkspaceSetEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceSetEnvironmentVarsCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wsv workspaceSetEnvironmentVarsCommand) Run(args []string) int {
-	wsv.meta.Logger.Debugf("Starting the 'workspace set-environment-vars' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wsv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := wsv.meta.GetSDKClient()
-	if err != nil {
-		wsv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return wsv.doWorkspaceSetEnvironmentVars(ctx, client, args)
+func (c *workspaceSetEnvironmentVarsCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.envVarFiles, validation.Required),
+	)
 }
 
-func (wsv workspaceSetEnvironmentVarsCommand) doWorkspaceSetEnvironmentVars(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wsv.meta.Logger.Debugf("will do workspace set-environment-vars, %d opts", len(opts))
+func (c *workspaceSetEnvironmentVarsCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace set-environment-vars"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := buildEnvironmentDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wsv.meta.BinaryName+" workspace set-environment-vars", defs, opts)
+	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to parse workspace set-environment-vars options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wsv.meta.Logger.Error(output.FormatError("missing workspace set-environment-vars workspace path", nil), wsv.HelpWorkspaceSetEnvironmentVars())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace set-environment-vars arguments: %s", cmdArgs)
-		wsv.meta.Logger.Error(output.FormatError(msg, nil), wsv.HelpWorkspaceSetEnvironmentVars())
-		return 1
-	}
-
-	namespacePath := cmdArgs[0]
-	envVarFiles := getOptionSlice("env-var-file", cmdOpts)
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(namespacePath)
-	if !isNamespacePathValid(wsv.meta, actualPath) {
-		return 1
-	}
-
-	// Ensure namespace is a workspace.
-	if _, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{
-		Path: &actualPath, // Use extracted path, not original namespacePath
-	}); err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to get workspace", err))
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
 	parser := varparser.NewVariableParser(nil, false)
 
-	variables, err := parser.ParseEnvironmentVariables(&varparser.ParseEnvironmentVariablesInput{EnvVarFilePaths: envVarFiles})
+	variables, err := parser.ParseEnvironmentVariables(&varparser.ParseEnvironmentVariablesInput{EnvVarFilePaths: c.envVarFiles})
 	if err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to process environment variables", err))
+		c.UI.ErrorWithSummary(err, "failed to process environment variables")
 		return 1
 	}
 
-	// Prepare the inputs.
-	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
-	actualPath = trn.ToPath(namespacePath)
-
-	input := &sdktypes.SetNamespaceVariablesInput{
-		NamespacePath: actualPath,
-		Category:      sdktypes.EnvironmentVariableCategory,
-		Variables:     convertToSetNamespaceVariablesInput(variables),
+	pbVariables := make([]*pb.SetNamespaceVariablesInputVariable, len(variables))
+	for i, v := range variables {
+		pbVariables[i] = &pb.SetNamespaceVariablesInputVariable{
+			Key:   v.Key,
+			Value: v.Value,
+		}
 	}
 
-	wsv.meta.Logger.Debugf("workspace set-environment-vars input: %#v", input)
+	input := &pb.SetNamespaceVariablesRequest{
+		NamespacePath: workspace.FullPath,
+		Category:      pb.VariableCategory_ENVIRONMENT,
+		Variables:     pbVariables,
+	}
 
-	// Set the workspace variables.
-	err = client.Variable.SetVariables(ctx, input)
-	if err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to set workspace variables", err))
+	c.Logger.Debug("workspace set-environment-vars input", "input", input)
+
+	if _, err = c.client.NamespaceVariablesClient.SetNamespaceVariables(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to set environment variables")
 		return 1
 	}
 
-	// Format the output.
-	wsv.meta.UI.Output(fmt.Sprintf("Environment variables created successfully in workspace %s", namespacePath))
+	c.UI.Successf("Environment variables set successfully in workspace %s", workspace.FullPath)
 	return 0
 }
 
-func (wsv workspaceSetEnvironmentVarsCommand) Synopsis() string {
+func (*workspaceSetEnvironmentVarsCommand) Synopsis() string {
 	return "Set environment variables for a workspace."
 }
 
-func (wsv workspaceSetEnvironmentVarsCommand) Help() string {
-	return wsv.HelpWorkspaceSetEnvironmentVars()
+func (*workspaceSetEnvironmentVarsCommand) Description() string {
+	return `
+   The workspace set-environment-vars command sets environment variables for a workspace.
+   Command will overwrite any existing environment variables in the target workspace!
+   Note: This command does not support sensitive variables.
+`
 }
 
-// HelpWorkspaceSetEnvironmentVars produces the help string for the 'workspace set-environment-vars' command.
-func (wsv workspaceSetEnvironmentVarsCommand) HelpWorkspaceSetEnvironmentVars() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace set-environment-vars [options] <workspace>
+func (*workspaceSetEnvironmentVarsCommand) Usage() string {
+	return "tharsis [global options] workspace set-environment-vars [options] <workspace-id>"
+}
 
-   The workspace set-environment-vars command sets environment
-   variables for a workspace. Expects an option with the path
-   to the variable file.
+func (*workspaceSetEnvironmentVarsCommand) Example() string {
+	return `
+tharsis workspace set-environment-vars \
+  --env-var-file vars.env \
+  trn:workspace:ops/my-workspace
+`
+}
 
-   Command will overwrite any existing environment variables
-   in the target workspace!
+func (c *workspaceSetEnvironmentVarsCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"env-var-file",
+		"Path to an environment variables file (can be specified multiple times).",
+		func(s string) error {
+			c.envVarFiles = append(c.envVarFiles, s)
+			return nil
+		},
+	)
 
-%s
-
-`, wsv.meta.BinaryName, buildHelpText(buildEnvironmentDefs()))
+	return f
 }

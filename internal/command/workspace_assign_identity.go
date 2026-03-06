@@ -1,141 +1,99 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// workspaceAssignManagedIdentityCommand is the top-level structure for the workspace assign-managed-identity command.
 type workspaceAssignManagedIdentityCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	workspaceID       string
+	managedIdentityID string
 }
 
 // NewWorkspaceAssignManagedIdentityCommandFactory returns a workspaceAssignManagedIdentityCommand struct.
-func NewWorkspaceAssignManagedIdentityCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceAssignManagedIdentityCommand{
-			meta: meta,
+func NewWorkspaceAssignManagedIdentityCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceAssignManagedIdentityCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wam workspaceAssignManagedIdentityCommand) Run(args []string) int {
-	wam.meta.Logger.Debugf("Starting the 'workspace assign-managed-identity' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wam.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := wam.meta.GetSDKClient()
-	if err != nil {
-		wam.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return wam.doWorkspaceAssignManagedIdentity(ctx, client, args)
-}
-
-func (wam workspaceAssignManagedIdentityCommand) doWorkspaceAssignManagedIdentity(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wam.meta.Logger.Debugf("will do workspace assign-managed-identity, %d opts", len(opts))
-
-	defs := buildJSONOptionDefs(optparser.OptionDefinitions{})
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wam.meta.BinaryName+" workspace assign-managed-identity", defs, opts)
-	if err != nil {
-		wam.meta.Logger.Error(output.FormatError("failed to parse workspace assign-managed-identity options", err))
-		return 1
-	}
-	if len(cmdArgs) < 2 {
-		wam.meta.Logger.Error(output.FormatError("missing workspace assign-managed-identity workspace or full path", nil), wam.HelpWorkspaceAssignManagedIdentity())
-		return 1
-	}
-	if len(cmdArgs) > 2 {
-		msg := fmt.Sprintf("excessive workspace assign-managed-identity arguments: %s", cmdArgs)
-		wam.meta.Logger.Error(output.FormatError(msg, nil), wam.HelpWorkspaceAssignManagedIdentity())
-		return 1
-	}
-
-	workspacePath := cmdArgs[0]
-	identityPath := cmdArgs[1]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		wam.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Do some basic validation on workspace path.
-	actualPath := trn.ToPath(workspacePath)
-	if !isNamespacePathValid(wam.meta, actualPath) {
-		return 1
-	}
-
-	// Validate managed identity path.
-	actualPath = trn.ToPath(identityPath)
-	if !isResourcePathValid(wam.meta, actualPath) {
-		return 1
-	}
-
-	wam.meta.Logger.Debugf("workspace assign-managed-identity: workspace: %s, managed identity: %s", workspacePath, identityPath)
-
-	workspace, err := assignManagedIdentities(ctx, workspacePath, []string{identityPath}, client)
-	if err != nil {
-		wam.meta.Logger.Error(output.FormatError("failed to assign managed identity to workspace", err))
-		return 1
-	}
-
-	return outputWorkspace(wam.meta, toJSON, workspace)
-}
-
-// assignManagedIdentities assigns the managed identities and returns the updated workspace.
-func assignManagedIdentities(ctx context.Context, workspacePath string, identityPaths []string, client *tharsis.Client) (*sdktypes.Workspace, error) {
-	var (
-		createdWorkspace *sdktypes.Workspace
-		err              error
+func (c *workspaceAssignManagedIdentityCommand) validate() error {
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments, validation.Empty),
+		validation.Field(&c.workspaceID, validation.Required),
+		validation.Field(&c.managedIdentityID, validation.Required),
 	)
-
-	// Assign all managed identities to workspace.
-	for _, path := range identityPaths {
-		pathCopy := path
-		createdWorkspace, err = client.ManagedIdentity.AssignManagedIdentityToWorkspace(ctx,
-			&sdktypes.AssignManagedIdentityInput{
-				ManagedIdentityPath: &pathCopy,
-				WorkspacePath:       workspacePath,
-			})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return createdWorkspace, nil
 }
 
-func (wam workspaceAssignManagedIdentityCommand) Synopsis() string {
+func (c *workspaceAssignManagedIdentityCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace assign-managed-identity"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
+
+	input := &pb.AssignManagedIdentityToWorkspaceRequest{
+		WorkspaceId:       c.workspaceID,
+		ManagedIdentityId: c.managedIdentityID,
+	}
+
+	c.Logger.Debug("workspace assign-managed-identity input", "input", input)
+
+	if _, err := c.client.ManagedIdentitiesClient.AssignManagedIdentityToWorkspace(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to assign managed identity to workspace")
+		return 1
+	}
+
+	c.UI.Successf("Managed identity %s assigned to workspace successfully", c.managedIdentityID)
+	return 0
+}
+
+func (*workspaceAssignManagedIdentityCommand) Synopsis() string {
 	return "Assign a managed identity to a workspace."
 }
 
-func (wam workspaceAssignManagedIdentityCommand) Help() string {
-	return wam.HelpWorkspaceAssignManagedIdentity()
+func (*workspaceAssignManagedIdentityCommand) Description() string {
+	return `
+   The workspace assign-managed-identity command assigns a managed identity to a workspace.
+`
 }
 
-// HelpWorkspaceAssignManagedIdentity produces the help string for the 'workspace assign-managed-identity' command.
-func (wam workspaceAssignManagedIdentityCommand) HelpWorkspaceAssignManagedIdentity() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace assign-managed-identity [options] <workspace> <full_path>
+func (*workspaceAssignManagedIdentityCommand) Usage() string {
+	return "tharsis [global options] workspace assign-managed-identity [options]"
+}
 
-   The workspace assign-managed-identity command designates
-   a managed identity to a workspace. Expects two
-   arguments: the first being the full path to the target
-   workspace and second being the full path to the managed
-   identity.
+func (*workspaceAssignManagedIdentityCommand) Example() string {
+	return `
+tharsis workspace assign-managed-identity \
+  --workspace-id trn:workspace:ops/my-workspace \
+  --managed-identity-id trn:managed_identity:ops/my-identity
+`
+}
 
-%s
+func (c *workspaceAssignManagedIdentityCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.workspaceID,
+		"workspace-id",
+		"",
+		"The ID of the workspace.",
+	)
+	f.StringVar(
+		&c.managedIdentityID,
+		"managed-identity-id",
+		"",
+		"The ID of the managed identity to assign.",
+	)
 
-`, wam.meta.BinaryName, buildHelpText(buildJSONOptionDefs(optparser.OptionDefinitions{})))
+	return f
 }
