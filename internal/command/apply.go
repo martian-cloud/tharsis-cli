@@ -1,326 +1,275 @@
-// Package command contains the logic for processing
-// all the commands and subcommands. It uses the Tharsis
-// SDK to interface with Tharsis API's remote Terraform
-// backend.
 package command
 
 import (
-	"context"
-	"fmt"
-	"strings"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
 )
 
 const (
-
-	// Run status string value for a successful apply.
-	applySucceededRunValue = "applied"
-
-	// Apply status string value for a successful apply.
-	applySucceededApplyValue = "finished"
+	plannedAndFinished = "planned_and_finished"
 )
 
-// applyCommand is the top-level structure for the apply command.
 type applyCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	directoryPath    *string
+	moduleSource     *string
+	moduleVersion    *string
+	terraformVersion *string
+	tfVarFiles       []string
+	envVarFiles      []string
+	tfVariables      []string
+	envVariables     []string
+	targetAddresses  []string
+	comment          string
+	autoApprove      bool
+	input            bool
+	refresh          bool
+	refreshOnly      bool
 }
 
-// NewApplyCommandFactory returns a applyCommand struct.
-func NewApplyCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return applyCommand{
-			meta: meta,
+// NewApplyCommandFactory returns an applyCommand struct.
+func NewApplyCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &applyCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (ac applyCommand) Run(args []string) int {
-	ac.meta.Logger.Debugf("Starting the 'apply' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		ac.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := ac.meta.GetSDKClient()
-	if err != nil {
-		ac.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return ac.doApply(ctx, client, args)
+func (c *applyCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (ac applyCommand) doApply(ctx context.Context, client *tharsis.Client, opts []string) int {
-	ac.meta.Logger.Debugf("will do apply, %d opts", len(opts))
+func (c *applyCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("apply"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	// Build option definitions for this command.
-	defs := buildCommonRunOptionDefs()
-	buildCommonApplyOptionDefs(defs)
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(ac.meta.BinaryName+" apply", defs, opts)
+	curSettings, err := c.getCurrentSettings()
 	if err != nil {
-		ac.meta.Logger.Error(output.FormatError("failed to parse apply argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		ac.meta.Logger.Error(output.FormatError("missing apply workspace path", nil), ac.HelpApply())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive apply arguments: %s", cmdArgs)
-		ac.meta.Logger.Error(output.FormatError(msg, nil), ac.HelpApply())
+		c.UI.ErrorWithSummary(err, "failed to get current settings")
 		return 1
 	}
 
-	workspacePath := cmdArgs[0]
-	directoryPath := getOption("directory-path", "", cmdOpts)[0]
-	comment := getOption("comment", "", cmdOpts)[0]
-	autoApprove, err := getBoolOptionValue("auto-approve", "false", cmdOpts)
+	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
 	if err != nil {
-		ac.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	inputRequired, err := getBoolOptionValue("input", "true", cmdOpts)
-	if err != nil {
-		ac.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	moduleSource := getOption("module-source", "", cmdOpts)[0]
-	moduleVersion := getOption("module-version", "", cmdOpts)[0]
-	tfVariables := getOptionSlice("tf-var", cmdOpts)
-	envVariables := getOptionSlice("env-var", cmdOpts)
-	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
-	envVarFiles := getOptionSlice("env-var-file", cmdOpts)
-	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
-	targetAddresses := getOptionSlice("target", cmdOpts)
-	refresh, err := getBoolOptionValue("refresh", "true", cmdOpts)
-	if err != nil {
-		ac.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh option", err))
-		return 1
-	}
-	refreshOnly, err := getBoolOptionValue("refresh-only", "false", cmdOpts)
-	if err != nil {
-		ac.meta.UI.Error(output.FormatError("failed to parse boolean value for -refresh-only option", err))
+		c.UI.ErrorWithSummary(err, "failed to create token getter")
 		return 1
 	}
 
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(workspacePath)
-	if !isNamespacePathValid(ac.meta, actualPath) {
-		return 1
-	}
+	runMgr := run.NewManager(c.client, tokenGetter, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
 
-	// Do the inner plan.  Make it _NON_-speculative.
-	createdRun, exitCode := createRun(ctx, client, ac.meta, &runInput{
-		workspacePath:    workspacePath,
-		directoryPath:    directoryPath,
-		tfVarFilePath:    tfVarFiles,
-		envVarFilePath:   envVarFiles,
-		moduleSource:     moduleSource,
-		moduleVersion:    moduleVersion,
-		terraformVersion: terraformVersion,
-		tfVariables:      tfVariables,
-		envVariables:     envVariables,
-		isDestroy:        false,
-		isSpeculative:    false,
-		targetAddresses:  targetAddresses,
-		refresh:          refresh,
-		refreshOnly:      refreshOnly,
+	// Create non-speculative run
+	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
+		WorkspaceID:      c.arguments[0],
+		DirectoryPath:    c.directoryPath,
+		ModuleSource:     c.moduleSource,
+		ModuleVersion:    c.moduleVersion,
+		TerraformVersion: c.terraformVersion,
+		TfVarFiles:       c.tfVarFiles,
+		EnvVarFiles:      c.envVarFiles,
+		TfVariables:      c.tfVariables,
+		EnvVariables:     c.envVariables,
+		TargetAddresses:  c.targetAddresses,
+		IsDestroy:        false,
+		IsSpeculative:    false,
+		Refresh:          c.refresh,
+		RefreshOnly:      c.refreshOnly,
 	})
-	if exitCode != 0 {
-		// The error message has already been logged.
-		return exitCode
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to create run")
+		return 1
 	}
 
-	return startApplyStage(ctx, comment, autoApprove, inputRequired, client, createdRun, ac.meta)
-}
-
-// startApplyStage a run after it has been planned.
-func startApplyStage(ctx context.Context, comment string, autoApprove, inputRequired bool,
-	client *tharsis.Client, createdRun *sdktypes.Run, meta *Metadata,
-) int {
-	// If the run has transitioned to plannedAndFinished,
-	// plan contains no changes and apply does not have to be run.
-	if createdRun.Status == sdktypes.RunPlannedAndFinished {
-		meta.UI.Output("Stopping since plan had no changes.")
+	// Check if plan has changes
+	if runResult.Status == plannedAndFinished {
+		c.UI.Output("Stopping since plan had no changes.")
 		return 0
 	}
 
-	// Return if only inputRequired is false and autoApprove is not set.
-	if !inputRequired && !autoApprove {
-		meta.UI.Output("Will not apply the plan since -input was false.")
+	// Return if input is false and autoApprove is not set
+	if !c.input && !c.autoApprove {
+		c.UI.Output("Will not apply the plan since -input was false.")
 		return 0
 	}
 
-	// Ask for approval unless autoApprove is true.
-	if autoApprove {
-		meta.UI.Output("\nAuto-approving.\n")
+	// Handle approval
+	if c.autoApprove {
+		c.UI.Output("\nAuto-approving.\n")
 	} else {
-		meta.UI.Output("\nDo you approve to apply the above plan?\n")
-		answer, err := meta.UI.Ask("  only 'yes' will be accepted: ")
+		c.UI.Output("\nDo you approve to apply the above plan?\n")
+		answer, err := c.UI.Input(&terminal.Input{
+			Prompt: "  only 'yes' will be accepted: ",
+		})
 		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to ask for approval of the plan", err))
+			c.UI.ErrorWithSummary(err, "failed to ask for approval")
 			return 1
 		}
 		if answer != "yes" {
-			meta.UI.Output("Approval response was negative.  Will NOT apply the plan.")
+			c.UI.Output("Approval response was negative. Will NOT apply the plan.")
 			return 0
 		}
-		// Prettify the output.
-		meta.UI.Output("\n\n")
+		c.UI.Output("\n\n")
 	}
 
-	// Prepare the inputs.
-	input := &sdktypes.ApplyRunInput{RunID: createdRun.Metadata.ID}
-	if comment != "" {
-		input.Comment = &comment
-	}
-	meta.Logger.Debugf("run apply input: %#v", input)
-
-	// Apply the run.
-	appliedRun, err := client.Run.ApplyRun(ctx, input)
+	// Apply the run
+	appliedRun, err := runMgr.ApplyRun(c.Context, runResult.Metadata.Id)
 	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to apply a run", err))
+		c.UI.ErrorWithSummary(err, "failed to apply run")
 		return 1
 	}
 
-	// Make sure the run has an apply.
-	if appliedRun.Apply == nil {
-		msg := fmt.Sprintf("Created run does not have an apply: %s", appliedRun.Metadata.ID)
-		meta.Logger.Error(output.FormatError(msg, nil))
-		return 1
-	}
-
-	lastSeenLogSize := int32(0)
-	logsInput := &sdktypes.JobLogsSubscriptionInput{
-		JobID:           *appliedRun.Apply.CurrentJobID,
-		RunID:           appliedRun.Metadata.ID,
-		WorkspacePath:   appliedRun.WorkspacePath,
-		LastSeenLogSize: &lastSeenLogSize,
-	}
-
-	meta.Logger.Debugf("apply: job logs input: %#v", logsInput)
-
-	// Subscribe to job log events so we know when to fetch new logs.
-	logChannel, err := client.Job.SubscribeToJobLogs(ctx, logsInput)
-	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to get job logs", err))
-		return 1
-	}
-
-	for {
-		logEvent, ok := <-logChannel
-		if !ok {
-			// No more logs since channel was closed.
-			break
-		}
-
-		if logEvent.Error != nil {
-			// Catch any incoming errors.
-			meta.Logger.Error(output.FormatError("failed to get job logs", logEvent.Error))
-			return 1
-		}
-
-		meta.UI.Output(strings.TrimSpace(logEvent.Logs))
-	}
-
-	finishedRun, err := client.Run.GetRun(ctx, &sdktypes.GetRunInput{ID: createdRun.Metadata.ID})
-	if err != nil {
-		meta.Logger.Error(output.FormatError("failed to get finished run", err))
-		return 1
-	}
-
-	// If an apply job succeeds, finishedRun.Status is "applied" and
-	// finishedRun.Apply.Status is "finished".
-	meta.Logger.Debugf("post-apply run status: %s", finishedRun.Status)
-	meta.Logger.Debugf("post-apply run.apply.status: %s", finishedRun.Apply.Status)
-	if finishedRun.Status != applySucceededRunValue {
-		// Status is already printed in the jog logs, so no need to log it here.
-		return 1
-	}
-	if finishedRun.Apply.Status != applySucceededApplyValue {
-		meta.Logger.Errorf("Apply status: %s", finishedRun.Apply.Status)
-		return 1
-	}
+	c.Logger.Debug("apply completed", "run_id", appliedRun.Metadata.Id, "status", appliedRun.Status)
 
 	return 0
 }
 
-// buildCommonApplyOptionDefs assigns common option definitions
-// used by both apply and destroy commands.
-func buildCommonApplyOptionDefs(defs optparser.OptionDefinitions) optparser.OptionDefinitions {
-	commonDefs := optparser.OptionDefinitions{
-		"comment": {
-			Arguments: []string{"Comment"},
-			Synopsis:  "Comment for the action.",
-		},
-		"auto-approve": {
-			Arguments: []string{},
-			Synopsis:  "Do not ask for approval; take approval as already granted.",
-		},
-		"input": {
-			Arguments: []string{"true/false"},
-			Synopsis:  "Do ask for user input. (default true).",
-		},
-	}
-
-	// Populate existing defs.
-	for k, v := range commonDefs {
-		defs[k] = v
-	}
-
-	return defs
+func (*applyCommand) Synopsis() string {
+	return "Apply a Terraform run"
 }
 
-func (ac applyCommand) Synopsis() string {
-	return "Apply a single run."
-}
-
-func (ac applyCommand) Help() string {
-	return ac.HelpApply()
-}
-
-// HelpApply prints the help string for the 'apply' command.
-func (ac applyCommand) HelpApply() string {
-	defs := buildCommonRunOptionDefs()
-	buildCommonApplyOptionDefs(defs)
-
-	return fmt.Sprintf(`
-Usage: %s [global options] apply [options] <workspace>
-
-   The run apply command applies a run. Supports setting
-   run-scoped Terraform and environment variables, auto-
-   approving any changes to the infrastructure, running
-   from remote module sources and more.
+func (*applyCommand) Description() string {
+	return `
+   The apply command creates and applies a Terraform run.
+   It first creates a plan, then applies it after approval.
+   Supports setting run-scoped Terraform / environment variables.
 
    Terraform variables may be passed in via supported
-   options or from the environment with a 'TF_VAR_'
-   prefix.
+   options or from the environment with a 'TF_VAR_' prefix.
+`
+}
 
-   Variable parsing precedence:
-     1. Terraform variables from the environment.
-     2. terraform.tfvars file from module's directory,
-        if present.
-     3. terraform.tfvars.json file from module's
-        directory, if present.
-     4. *.auto.tfvars, *.auto.tfvars.json files
-        from the module's directory, if present.
-     5. --tf-var-file option(s).
-     6. --tf-var option(s).
+func (*applyCommand) Usage() string {
+	return "tharsis [global options] apply [options] <workspace-id>"
+}
 
-   NOTE: If the same variable is assigned multiple
-   values, the last value found will be used. A
-   --tf-var option will override the values from a
-   *.tfvars file which will override values from
-   the environment.
+func (*applyCommand) Example() string {
+	return `
+tharsis apply --directory-path ./terraform trn:workspace:ops/my-workspace
+`
+}
 
-%s
+func (c *applyCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
 
-`, ac.meta.BinaryName, buildHelpText(defs))
+	f.Func(
+		"directory-path",
+		"The path of the root module's directory.",
+		func(s string) error {
+			c.directoryPath = &s
+			return nil
+		},
+	)
+	f.Func(
+		"module-source",
+		"Remote module source specification.",
+		func(s string) error {
+			c.moduleSource = &s
+			return nil
+		},
+	)
+	f.Func(
+		"module-version",
+		"Remote module version number--defaults to latest.",
+		func(s string) error {
+			c.moduleVersion = &s
+			return nil
+		},
+	)
+	f.Func(
+		"terraform-version",
+		"The Terraform CLI version to use for the run.",
+		func(s string) error {
+			c.terraformVersion = &s
+			return nil
+		},
+	)
+	f.StringVar(
+		&c.comment,
+		"comment",
+		"",
+		"Comment for the apply.",
+	)
+	f.BoolVar(
+		&c.autoApprove,
+		"auto-approve",
+		false,
+		"Skip interactive approval of the plan.",
+	)
+	f.BoolVar(
+		&c.input,
+		"input",
+		true,
+		"Ask for input for variables if not directly set.",
+	)
+	f.BoolVar(
+		&c.refresh,
+		"refresh",
+		true,
+		"Whether to do the usual refresh step.",
+	)
+	f.BoolVar(
+		&c.refreshOnly,
+		"refresh-only",
+		false,
+		"Whether to do ONLY a refresh operation.",
+	)
+	f.Func(
+		"tf-var-file",
+		"The path to a .tfvars variables file.",
+		func(s string) error {
+			c.tfVarFiles = append(c.tfVarFiles, s)
+			return nil
+		},
+	)
+	f.Func(
+		"env-var-file",
+		"The path to an environment variables file.",
+		func(s string) error {
+			c.envVarFiles = append(c.envVarFiles, s)
+			return nil
+		},
+	)
+	f.Func(
+		"tf-var",
+		"A terraform variable as a key=value pair.",
+		func(s string) error {
+			c.tfVariables = append(c.tfVariables, s)
+			return nil
+		},
+	)
+	f.Func(
+		"env-var",
+		"An environment variable as a key=value pair.",
+		func(s string) error {
+			c.envVariables = append(c.envVariables, s)
+			return nil
+		},
+	)
+	f.Func(
+		"target",
+		"The Terraform address of the resources to be acted upon.",
+		func(s string) error {
+			c.targetAddresses = append(c.targetAddresses, s)
+			return nil
+		},
+	)
+
+	return f
 }

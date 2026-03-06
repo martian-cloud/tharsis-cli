@@ -1,191 +1,156 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// workspaceSetTerraformVarCommand is the top-level structure for the workspace set-terraform-var command.
 type workspaceSetTerraformVarCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	key       string
+	value     string
+	sensitive bool
 }
 
 // NewWorkspaceSetTerraformVarCommandFactory returns a workspaceSetTerraformVarCommand struct.
-func NewWorkspaceSetTerraformVarCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceSetTerraformVarCommand{
-			meta: meta,
+func NewWorkspaceSetTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceSetTerraformVarCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wsv workspaceSetTerraformVarCommand) Run(args []string) int {
-	wsv.meta.Logger.Debugf("Starting the 'workspace set-terraform-var' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wsv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := wsv.meta.GetSDKClient()
-	if err != nil {
-		wsv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return wsv.doWorkspaceSetTerraformVar(ctx, client, args)
+func (c *workspaceSetTerraformVarCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.key, validation.Required),
+		validation.Field(&c.value, validation.Required),
+	)
 }
 
-func (wsv workspaceSetTerraformVarCommand) doWorkspaceSetTerraformVar(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wsv.meta.Logger.Debugf("will do workspace set-terraform-var, %d opts", len(opts))
+func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace set-terraform-var"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := wsv.buildWorkspaceSetTerraformVarDefs()
-
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wsv.meta.BinaryName+" workspace set-terraform-var", defs, opts)
+	// Get workspace to retrieve full path
+	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to parse workspace set-terraform-var options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wsv.meta.Logger.Error(output.FormatError("missing workspace set-terraform-var workspace path", nil), wsv.HelpWorkspaceSetTerraformVar())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace set-terraform-var arguments: %s", cmdArgs)
-		wsv.meta.Logger.Error(output.FormatError(msg, nil), wsv.HelpWorkspaceSetTerraformVar())
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
-	namespacePath := cmdArgs[0]
-	key := getOption("key", "", cmdOpts)[0]
-	value := getOption("value", "", cmdOpts)[0]
-
-	if key == "" {
-		wsv.meta.Logger.Error(output.FormatError("missing required --key option", nil), wsv.HelpWorkspaceSetTerraformVar())
-		return 1
-	}
-	if value == "" {
-		wsv.meta.Logger.Error(output.FormatError("missing required --value option", nil), wsv.HelpWorkspaceSetTerraformVar())
+	// Build TRN and check if variable exists
+	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, "terraform", c.key)
+	existingVar, err := c.client.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, &pb.GetNamespaceVariableByIDRequest{
+		Id: variableTRN,
+	})
+	if err != nil && status.Code(err) != codes.NotFound {
+		c.UI.ErrorWithSummary(err, "failed to check existing variable")
 		return 1
 	}
 
-	sensitive, err := getBoolOptionValue("sensitive", "false", cmdOpts)
-	if err != nil {
-		wsv.meta.UI.Error(output.FormatError("failed to parse boolean value for --sensitive", err))
-		return 1
-	}
-
-	actualPath := trn.ToPath(namespacePath)
-	if !isNamespacePathValid(wsv.meta, actualPath) {
-		return 1
-	}
-
-	if _, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{
-		Path: &actualPath, // Use extracted path, not original namespacePath
-	}); err != nil {
-		wsv.meta.Logger.Error(output.FormatError("failed to get workspace", err))
-		return 1
-	}
-
-	getInput := &sdktypes.GetNamespaceVariableInput{
-		ID: trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, string(sdktypes.TerraformVariableCategory), key),
-	}
-
-	wsv.meta.Logger.Debugf("workspace set-terraform-var get variable input: %#v", getInput)
-
-	variable, err := client.Variable.GetVariable(ctx, getInput)
-	if err != nil && !tharsis.IsNotFoundError(err) {
-		wsv.meta.Logger.Error(output.FormatError("failed to get variable", err))
-		return 1
-	}
-
-	if variable != nil {
-		if variable.Sensitive != sensitive {
-			wsv.meta.Logger.Error(output.FormatError("cannot change sensitive flag - delete and recreate the variable instead", nil))
+	if existingVar != nil {
+		// Variable exists - check if sensitivity matches
+		if existingVar.Sensitive != c.sensitive {
+			c.UI.Errorf("cannot change sensitive flag - delete and recreate the variable instead")
 			return 1
 		}
 
-		updateInput := &sdktypes.UpdateNamespaceVariableInput{
-			ID:    variable.Metadata.ID,
-			Key:   variable.Key,
-			Value: value,
+		// Update existing variable
+		updateInput := &pb.UpdateNamespaceVariableRequest{
+			Id:    existingVar.Metadata.Id,
+			Key:   c.key,
+			Value: c.value,
 		}
 
-		wsv.meta.Logger.Debugf("workspace set-terraform-var update variable input: %#v", updateInput)
-
-		if _, err = client.Variable.UpdateVariable(ctx, updateInput); err != nil {
-			wsv.meta.Logger.Error(output.FormatError("failed to update variable", err))
+		if _, err = c.client.NamespaceVariablesClient.UpdateNamespaceVariable(c.Context, updateInput); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to update terraform variable")
 			return 1
 		}
 	} else {
-		// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
-		actualPath = trn.ToPath(namespacePath)
 
-		createInput := &sdktypes.CreateNamespaceVariableInput{
-			Key:           key,
-			Value:         value,
-			Category:      sdktypes.TerraformVariableCategory,
-			NamespacePath: actualPath,
-			Sensitive:     sensitive,
+		// Create new variable
+		createInput := &pb.CreateNamespaceVariableRequest{
+			NamespacePath: workspace.FullPath,
+			Category:      pb.VariableCategory_TERRAFORM,
+			Key:           c.key,
+			Value:         c.value,
+			Sensitive:     c.sensitive,
 		}
 
-		wsv.meta.Logger.Debugf("workspace set-terraform-var create variable input: %#v", createInput)
+		c.Logger.Debug("workspace set-terraform-var input", "input", createInput)
 
-		if _, err = client.Variable.CreateVariable(ctx, createInput); err != nil {
-			wsv.meta.Logger.Error(output.FormatError("failed to create variable", err))
+		if _, err = c.client.NamespaceVariablesClient.CreateNamespaceVariable(c.Context, createInput); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to set terraform variable")
 			return 1
 		}
 	}
 
-	wsv.meta.UI.Output(fmt.Sprintf("Terraform variable '%s' set successfully in workspace %s", key, namespacePath))
+	c.UI.Successf("Terraform variable %q set successfully in workspace %s", c.key, workspace.FullPath)
 	return 0
 }
 
-func (wsv workspaceSetTerraformVarCommand) buildWorkspaceSetTerraformVarDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"key": {
-			Arguments: []string{"Variable_Key"},
-			Synopsis:  "The key/name of the terraform variable.",
-			Required:  true,
-		},
-		"value": {
-			Arguments: []string{"Variable_Value"},
-			Synopsis:  "The value of the terraform variable.",
-			Required:  true,
-		},
-		"sensitive": {
-			Arguments: []string{},
-			Synopsis:  "Mark the variable as sensitive.",
-		},
-	}
+func (*workspaceSetTerraformVarCommand) Synopsis() string {
+	return "Set a terraform variable for a workspace."
 }
 
-func (wsv workspaceSetTerraformVarCommand) Synopsis() string {
-	return "Set a single terraform variable for a workspace."
+func (*workspaceSetTerraformVarCommand) Description() string {
+	return `
+   The workspace set-terraform-var command creates or updates a terraform variable for a workspace.
+`
 }
 
-func (wsv workspaceSetTerraformVarCommand) Help() string {
-	return wsv.HelpWorkspaceSetTerraformVar()
+func (*workspaceSetTerraformVarCommand) Usage() string {
+	return "tharsis [global options] workspace set-terraform-var [options] <workspace-id>"
 }
 
-// HelpWorkspaceSetTerraformVar produces the help string for the 'workspace set-terraform-var' command.
-func (wsv workspaceSetTerraformVarCommand) HelpWorkspaceSetTerraformVar() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace set-terraform-var [options] <workspace>
+func (*workspaceSetTerraformVarCommand) Example() string {
+	return `
+tharsis workspace set-terraform-var \
+  --key region \
+  --value us-east-1 \
+  trn:workspace:ops/my-workspace
+`
+}
 
-   The workspace set-terraform-var command sets a single terraform
-   variable for a workspace. If the variable already exists, it will
-   be deleted and recreated with the new value. Use the --sensitive
-   flag to mark the variable as sensitive.
+func (c *workspaceSetTerraformVarCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.key,
+		"key",
+		"",
+		"Variable key.",
+	)
+	f.StringVar(
+		&c.value,
+		"value",
+		"",
+		"Variable value.",
+	)
+	f.BoolVar(
+		&c.sensitive,
+		"sensitive",
+		false,
+		"Mark variable as sensitive.",
+	)
 
-%s
-
-`, wsv.meta.BinaryName, buildHelpText(wsv.buildWorkspaceSetTerraformVarDefs()))
+	return f
 }

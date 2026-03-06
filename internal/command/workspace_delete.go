@@ -1,127 +1,116 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 // workspaceDeleteCommand is the top-level structure for the workspace delete command.
 type workspaceDeleteCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	version *int64
+	force   bool
+}
+
+var _ Command = (*workspaceDeleteCommand)(nil)
+
+func (c *workspaceDeleteCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewWorkspaceDeleteCommandFactory returns a workspaceDeleteCommand struct.
-func NewWorkspaceDeleteCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceDeleteCommand{
-			meta: meta,
+func NewWorkspaceDeleteCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceDeleteCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wdc workspaceDeleteCommand) Run(args []string) int {
-	wdc.meta.Logger.Debugf("Starting the 'workspace delete' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wdc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *workspaceDeleteCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace delete"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+		WithForcePrompt("Are you sure you want to delete this workspace?"),
+	); code != 0 {
+		return code
 	}
 
-	client, err := wdc.meta.GetSDKClient()
-	if err != nil {
-		wdc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+	input := &pb.DeleteWorkspaceRequest{
+		Id:      c.arguments[0],
+		Version: c.version,
+		Force:   &c.force,
+	}
+
+	c.Logger.Debug("workspace delete input", "input", input)
+
+	if _, err := c.client.WorkspacesClient.DeleteWorkspace(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to delete a workspace")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return wdc.doWorkspaceDelete(ctx, client, args)
-}
-
-func (wdc workspaceDeleteCommand) doWorkspaceDelete(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wdc.meta.Logger.Debugf("will do workspace delete, %d opts", len(opts))
-
-	defs := wdc.buildWorkspaceDeleteDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wdc.meta.BinaryName+" workspace delete", defs, opts)
-	if err != nil {
-		wdc.meta.Logger.Error(output.FormatError("failed to parse workspace delete options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wdc.meta.Logger.Error(output.FormatError("missing workspace delete full path", nil), wdc.HelpWorkspaceDelete())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace delete arguments: %s", cmdArgs)
-		wdc.meta.Logger.Error(output.FormatError(msg, nil), wdc.HelpWorkspaceDelete())
-		return 1
-	}
-
-	workspacePath := cmdArgs[0]
-	force, err := getBoolOptionValue("force", "false", cmdOpts)
-	if err != nil {
-		wdc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(workspacePath)
-	if !isNamespacePathValid(wdc.meta, actualPath) {
-		return 1
-	}
-
-	// Prepare the inputs - convert path to TRN and use ID field
-	trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
-	input := &sdktypes.DeleteWorkspaceInput{ID: &trnID, Force: &force}
-	wdc.meta.Logger.Debugf("workspace delete input: %#v", input)
-
-	// Delete the workspace.
-	err = client.Workspaces.DeleteWorkspace(ctx, input)
-	if err != nil {
-		wdc.meta.Logger.Error(output.FormatError("failed to delete a workspace", err))
-		return 1
-	}
-
-	// Cannot show the deleted workspace, but say something.
-	wdc.meta.UI.Output("workspace delete succeeded.")
-
+	c.UI.Successf("Workspace deleted successfully!")
 	return 0
 }
 
-func (wdc workspaceDeleteCommand) buildWorkspaceDeleteDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"force": {
-			Arguments: []string{},
-			Synopsis:  "Force the workspace to delete even if resources are deployed.",
-		},
-	}
-}
-
-func (wdc workspaceDeleteCommand) Synopsis() string {
+func (*workspaceDeleteCommand) Synopsis() string {
 	return "Delete a workspace."
 }
 
-func (wdc workspaceDeleteCommand) Help() string {
-	return wdc.HelpWorkspaceDelete()
+func (*workspaceDeleteCommand) Usage() string {
+	return "tharsis [global options] workspace delete [options] <id>"
 }
 
-// HelpWorkspaceDelete produces the help string for the 'workspace delete' command.
-func (wdc workspaceDeleteCommand) HelpWorkspaceDelete() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace delete <full_path>
-
+func (*workspaceDeleteCommand) Description() string {
+	return `
    The workspace delete command deletes a workspace. Includes
    a force flag to delete the workspace even if resources are
    deployed (dangerous!).
 
    Use with caution as deleting a workspace is irreversible!
+`
+}
 
-%s
+func (*workspaceDeleteCommand) Example() string {
+	return `
+tharsis workspace delete --force trn:workspace:ops/my-group/my-workspace
+`
+}
 
-`, wdc.meta.BinaryName, buildHelpText(wdc.buildWorkspaceDeleteDefs()))
+func (c *workspaceDeleteCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be deleted. "+
+			"In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.force,
+		"force",
+		false,
+		"Force the workspace to delete even if resources are deployed.",
+	)
+
+	return f
 }

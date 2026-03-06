@@ -1,106 +1,84 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// managedIdentityAccessRuleDeleteCommand is the top-level structure for the managed-identity-access-rule delete command.
+// managedIdentityAccessRuleDeleteCommand is the top-level structure for the managed identity access rule delete command.
 type managedIdentityAccessRuleDeleteCommand struct {
-	meta *Metadata
+	*BaseCommand
+}
+
+var _ Command = (*managedIdentityAccessRuleDeleteCommand)(nil)
+
+func (c *managedIdentityAccessRuleDeleteCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewManagedIdentityAccessRuleDeleteCommandFactory returns a managedIdentityAccessRuleDeleteCommand struct.
-func NewManagedIdentityAccessRuleDeleteCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return managedIdentityAccessRuleDeleteCommand{
-			meta: meta,
+func NewManagedIdentityAccessRuleDeleteCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &managedIdentityAccessRuleDeleteCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (m managedIdentityAccessRuleDeleteCommand) Run(args []string) int {
-	m.meta.Logger.Debugf("Starting the 'managed-identity-access-rule delete' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *managedIdentityAccessRuleDeleteCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithCommandName("managed-identity-access-rule delete"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := m.meta.GetSDKClient()
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+	input := &pb.DeleteManagedIdentityAccessRuleRequest{
+		Id: c.arguments[0],
+	}
+
+	c.Logger.Debug("managed identity access rule delete input", "input", input)
+
+	if _, err := c.client.ManagedIdentitiesClient.DeleteManagedIdentityAccessRule(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to delete managed identity access rule")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return m.doManagedIdentityAccessRuleDelete(ctx, client, args)
-}
-
-func (m managedIdentityAccessRuleDeleteCommand) doManagedIdentityAccessRuleDelete(ctx context.Context,
-	client *tharsis.Client, opts []string,
-) int {
-	m.meta.Logger.Debugf("will do managed-identity-access-rule delete, %d opts", len(opts))
-
-	defs := buildManagedIdentityAccessRuleDeleteDefs()
-	_, cmdArgs, err := optparser.ParseCommandOptions(m.meta.BinaryName+" managed-identity-access-rule delete", defs, opts)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse managed-identity-access-rule delete options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		m.meta.Logger.Error(output.FormatError("missing managed identity access rule ID", nil))
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive managed-identity-access-rule delete arguments: %s", cmdArgs)
-		m.meta.Logger.Error(output.FormatError(msg, nil), m.HelpManagedIdentityAccessRuleDelete())
-		return 1
-	}
-
-	input := &sdktypes.DeleteManagedIdentityAccessRuleInput{
-		ID: cmdArgs[0],
-	}
-	m.meta.Logger.Debugf("managed-identity-access-rule delete input: %#v", input)
-
-	err = client.ManagedIdentity.DeleteManagedIdentityAccessRule(ctx, input)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to delete managed identity access rule", err))
-		return 1
-	}
-
-	// Cannot show the deleted group, but say something.
-	m.meta.UI.Output("managed-identity-access-rule delete succeeded.")
+	c.UI.Output("Managed identity access rule deleted successfully!")
 
 	return 0
 }
 
-// buildManagedIdentityAccessRuleDeleteDefs returns defs used by managed-identity-access-rule delete command.
-func buildManagedIdentityAccessRuleDeleteDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{}
-}
-
-func (m managedIdentityAccessRuleDeleteCommand) Synopsis() string {
+func (*managedIdentityAccessRuleDeleteCommand) Synopsis() string {
 	return "Delete a managed identity access rule."
 }
 
-func (m managedIdentityAccessRuleDeleteCommand) Help() string {
-	return m.HelpManagedIdentityAccessRuleDelete()
+func (*managedIdentityAccessRuleDeleteCommand) Usage() string {
+	return "tharsis [global options] managed-identity-access-rule delete [options] <id>"
 }
 
-// HelpManagedIdentityAccessRuleDelete produces the help string for the 'managed-identity-access-rule delete' command.
-func (m managedIdentityAccessRuleDeleteCommand) HelpManagedIdentityAccessRuleDelete() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] managed-identity-access-rule delete [options] <managed-identity-access-rule-ID>
-
+func (*managedIdentityAccessRuleDeleteCommand) Description() string {
+	return `
    The managed-identity-access-rule delete command deletes a managed identity access rule.
+`
+}
 
-   Use with caution as deleting a managed identity access rule is irreversible!
+func (*managedIdentityAccessRuleDeleteCommand) Example() string {
+	return `
+tharsis managed-identity-access-rule delete TV80ZG...
+`
+}
 
-`, m.meta.BinaryName)
+func (c *managedIdentityAccessRuleDeleteCommand) Flags() *flag.FlagSet {
+	return nil
 }

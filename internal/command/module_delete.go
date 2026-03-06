@@ -1,113 +1,85 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 // moduleDeleteCommand is the top-level structure for the module delete command.
 type moduleDeleteCommand struct {
-	meta *Metadata
+	*BaseCommand
+}
+
+var _ Command = (*moduleDeleteCommand)(nil)
+
+func (c *moduleDeleteCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewModuleDeleteCommandFactory returns a moduleDeleteCommand struct.
-func NewModuleDeleteCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleDeleteCommand{
-			meta: meta,
+func NewModuleDeleteCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleDeleteCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (mdc moduleDeleteCommand) Run(args []string) int {
-	mdc.meta.Logger.Debugf("Starting the 'module delete' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		mdc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *moduleDeleteCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithCommandName("module delete"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := mdc.meta.GetSDKClient()
-	if err != nil {
-		mdc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+	input := &pb.DeleteTerraformModuleRequest{
+		Id: c.arguments[0],
+	}
+
+	c.Logger.Debug("module delete input", "input", input)
+
+	if _, err := c.client.TerraformModulesClient.DeleteTerraformModule(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to delete a module")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return mdc.doModuleDelete(ctx, client, args)
-}
-
-func (mdc moduleDeleteCommand) doModuleDelete(ctx context.Context, client *tharsis.Client, opts []string) int {
-	mdc.meta.Logger.Debugf("will do module delete, %d opts", len(opts))
-
-	// No options to parse.
-	_, cmdArgs, err := optparser.ParseCommandOptions(mdc.meta.BinaryName+" module delete", optparser.OptionDefinitions{}, opts)
-	if err != nil {
-		mdc.meta.Logger.Error(output.FormatError("failed to parse module delete options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		mdc.meta.Logger.Error(output.FormatError("missing module delete path", nil), mdc.HelpModuleDelete())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module delete arguments: %s", cmdArgs)
-		mdc.meta.Logger.Error(output.FormatError(msg, nil), mdc.HelpModuleDelete())
-		return 1
-	}
-
-	modulePath := cmdArgs[0]
-
-	actualPath := trn.ToPath(modulePath)
-	if !isResourcePathValid(mdc.meta, actualPath) {
-		return 1
-	}
-
-	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &actualPath}) // Use extracted path
-	if err != nil {
-		mdc.meta.Logger.Error(output.FormatError("failed to get module", err))
-		return 1
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.DeleteTerraformModuleInput{ID: module.Metadata.ID}
-	mdc.meta.Logger.Debugf("module delete input: %#v", input)
-
-	// Delete the module.
-	err = client.TerraformModule.DeleteModule(ctx, input)
-	if err != nil {
-		mdc.meta.Logger.Error(output.FormatError("failed to delete module", err))
-		return 1
-	}
-
-	// Cannot show the deleted module, but say something.
-	mdc.meta.UI.Output("module delete succeeded.")
-
+	c.UI.Successf("Module deleted successfully!")
 	return 0
 }
 
-func (mdc moduleDeleteCommand) Synopsis() string {
-	return "Delete a module."
+func (*moduleDeleteCommand) Synopsis() string {
+	return "Delete a Terraform module."
 }
 
-func (mdc moduleDeleteCommand) Help() string {
-	return mdc.HelpModuleDelete()
+func (*moduleDeleteCommand) Usage() string {
+	return "tharsis [global options] module delete [options] <id>"
 }
 
-// HelpModuleDelete produces the help string for the 'module delete' command.
-func (mdc moduleDeleteCommand) HelpModuleDelete() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module delete <module-path>
-
-   The module delete command deletes a module.
+func (*moduleDeleteCommand) Description() string {
+	return `
+   The module delete command deletes a Terraform module.
 
    Use with caution as deleting a module is irreversible!
+`
+}
 
-`, mdc.meta.BinaryName)
+func (*moduleDeleteCommand) Example() string {
+	return `
+tharsis module delete trn:terraform_module:ops/my-group/vpc
+`
+}
+
+func (*moduleDeleteCommand) Flags() *flag.FlagSet {
+	return nil
 }

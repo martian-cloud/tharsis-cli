@@ -1,111 +1,100 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// groupRemoveMembershipCommand is the top-level structure for the group remove-membership command.
 type groupRemoveMembershipCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	version *int64
 }
 
 // NewGroupRemoveMembershipCommandFactory returns a groupRemoveMembershipCommand struct.
-func NewGroupRemoveMembershipCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupRemoveMembershipCommand{
-			meta: meta,
+func NewGroupRemoveMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupRemoveMembershipCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (ggc groupRemoveMembershipCommand) Run(args []string) int {
-	ggc.meta.Logger.Debugf("Starting the 'group remove-membership' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		ggc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := ggc.meta.GetSDKClient()
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return ggc.doGroupRemoveMembership(ctx, client, args)
+func (c *groupRemoveMembershipCommand) validate() error {
+	const message = "membership-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (ggc groupRemoveMembershipCommand) doGroupRemoveMembership(ctx context.Context, client *tharsis.Client, opts []string) int {
-	ggc.meta.Logger.Debugf("will do group remove-membership, %d opts", len(opts))
-
-	defs := ggc.buildGroupRemoveMembershipOptionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(ggc.meta.BinaryName+" group remove-membership", defs, opts)
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to parse group remove-membership argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		ggc.meta.Logger.Error(output.FormatError("missing group remove-membership ID", nil), ggc.HelpGroupRemoveMembership())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group remove-membership arguments: %s", cmdArgs)
-		ggc.meta.Logger.Error(output.FormatError(msg, nil), ggc.HelpGroupRemoveMembership())
-		return 1
+func (c *groupRemoveMembershipCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group remove-membership"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	membershipID := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+	input := &pb.DeleteNamespaceMembershipRequest{
+		Id:      c.arguments[0],
+		Version: c.version,
+	}
+
+	c.Logger.Debug("group remove-membership input", "input", input)
+
+	if _, err := c.client.NamespaceMembershipsClient.DeleteNamespaceMembership(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to remove group membership")
 		return 1
 	}
 
-	// Prepare the inputs.
-	input := &sdktypes.DeleteNamespaceMembershipInput{
-		ID: membershipID,
-	}
-	ggc.meta.Logger.Debugf("group remove-membership input: %#v", input)
-
-	// Remove the membership.
-	removedMembership, err := client.NamespaceMembership.DeleteMembership(ctx, input)
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to remove membership", err))
-		return 1
-	}
-
-	return outputNamespaceMembership(ggc.meta, toJSON, removedMembership)
+	c.UI.Output("Group membership removed successfully!", terminal.WithSuccessStyle())
+	return 0
 }
 
-// buildGroupRemoveMembershipOptionDefs returns the defs used by
-// group remove-membership command--of which, there are currently none.
-func (ggc groupRemoveMembershipCommand) buildGroupRemoveMembershipOptionDefs() optparser.OptionDefinitions {
-	return buildJSONOptionDefs(optparser.OptionDefinitions{})
+func (*groupRemoveMembershipCommand) Synopsis() string {
+	return "Remove a group membership."
 }
 
-func (ggc groupRemoveMembershipCommand) Synopsis() string {
-	return "Remove a membership from a group."
-}
-
-func (ggc groupRemoveMembershipCommand) Help() string {
-	return ggc.HelpGroupRemoveMembership()
-}
-
-// HelpGroupRemoveMembership prints the help string for the 'group remove-membership' command.
-func (ggc groupRemoveMembershipCommand) HelpGroupRemoveMembership() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group remove-membership [options] <id>
-
+func (*groupRemoveMembershipCommand) Description() string {
+	return `
    The group remove-membership command removes a membership from a group.
+`
+}
 
-%s
+func (*groupRemoveMembershipCommand) Usage() string {
+	return "tharsis [global options] group remove-membership [options] <membership-id>"
+}
 
-`, ggc.meta.BinaryName, buildHelpText(ggc.buildGroupRemoveMembershipOptionDefs()))
+func (*groupRemoveMembershipCommand) Example() string {
+	return `
+tharsis group remove-membership trn:namespace_membership:ops/Tk1fZ...
+`
+}
+
+func (c *groupRemoveMembershipCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be deleted. In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+
+	return f
 }

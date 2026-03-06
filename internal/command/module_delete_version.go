@@ -1,99 +1,108 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// moduleDeleteVersionCommand is the top-level structure for the module delete-version command.
 type moduleDeleteVersionCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	version *int64
+	force   bool
 }
 
 // NewModuleDeleteVersionCommandFactory returns a moduleDeleteVersionCommand struct.
-func NewModuleDeleteVersionCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleDeleteVersionCommand{
-			meta: meta,
+func NewModuleDeleteVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleDeleteVersionCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (mdc moduleDeleteVersionCommand) Run(args []string) int {
-	mdc.meta.Logger.Debugf("Starting the 'module delete-version' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		mdc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := mdc.meta.GetSDKClient()
-	if err != nil {
-		mdc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return mdc.doModuleDeleteVersion(ctx, client, args)
+func (c *moduleDeleteVersionCommand) validate() error {
+	const message = "version-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (mdc moduleDeleteVersionCommand) doModuleDeleteVersion(ctx context.Context, client *tharsis.Client, opts []string) int {
-	mdc.meta.Logger.Debugf("will do module delete-version, %d opts", len(opts))
+func (c *moduleDeleteVersionCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("module delete-version"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	// No options to parse.
-	_, cmdArgs, err := optparser.ParseCommandOptions(mdc.meta.BinaryName+" module delete-version", optparser.OptionDefinitions{}, opts)
+	input := &pb.DeleteTerraformModuleVersionRequest{
+		Id:      c.arguments[0],
+		Version: c.version,
+	}
+
+	c.Logger.Debug("module delete version input", "input", input)
+
+	_, err := c.client.TerraformModulesClient.DeleteTerraformModuleVersion(c.Context, input)
 	if err != nil {
-		mdc.meta.Logger.Error(output.FormatError("failed to parse module delete-version options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		mdc.meta.Logger.Error(output.FormatError("missing module delete-version ID", nil), mdc.HelpModuleDeleteVersion())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module delete-version arguments: %s", cmdArgs)
-		mdc.meta.Logger.Error(output.FormatError(msg, nil), mdc.HelpModuleDeleteVersion())
+		c.UI.ErrorWithSummary(err, "failed to delete module version")
 		return 1
 	}
 
-	// Prepare the inputs.
-	input := &sdktypes.DeleteTerraformModuleVersionInput{ID: cmdArgs[0]}
-	mdc.meta.Logger.Debugf("module delete input: %#v", input)
-
-	// Delete the module version.
-	err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, input)
-	if err != nil {
-		mdc.meta.Logger.Error(output.FormatError("failed to delete a module version", err))
-		return 1
-	}
-
-	// Cannot show the deleted module version, but say something.
-	mdc.meta.UI.Output("module version delete succeeded.")
-
+	c.UI.Output("Module version deleted successfully!", terminal.WithSuccessStyle())
 	return 0
 }
 
-func (mdc moduleDeleteVersionCommand) Synopsis() string {
+func (*moduleDeleteVersionCommand) Synopsis() string {
 	return "Delete a module version."
 }
 
-func (mdc moduleDeleteVersionCommand) Help() string {
-	return mdc.HelpModuleDeleteVersion()
+func (*moduleDeleteVersionCommand) Description() string {
+	return `
+   The module delete-version command deletes a module version.
+`
 }
 
-// HelpModuleDeleteVersion produces the help string for the 'module delete-version' command.
-func (mdc moduleDeleteVersionCommand) HelpModuleDeleteVersion() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module delete-version <id>
+func (*moduleDeleteVersionCommand) Usage() string {
+	return "tharsis [global options] module delete-version [options] <version-id>"
+}
 
-   The module delete-version command deletes a module version.
+func (*moduleDeleteVersionCommand) Example() string {
+	return `
+tharsis module delete-version trn:terraform_module_version:ops/installer/aws/1.0.0
+`
+}
 
-   Use with caution as deleting a module version is irreversible!
-
-`, mdc.meta.BinaryName)
+func (c *moduleDeleteVersionCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be deleted. "+
+			"In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.force,
+		"force",
+		false,
+		"Force deletion without confirmation.",
+	)
+	return f
 }

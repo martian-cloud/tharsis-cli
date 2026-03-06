@@ -1,232 +1,134 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// groupAddMembershipCommand is the top-level structure for the group add-membership command.
 type groupAddMembershipCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	roleID           string
+	userID           *string
+	serviceAccountID *string
+	teamID           *string
+	toJSON           bool
 }
 
 // NewGroupAddMembershipCommandFactory returns a groupAddMembershipCommand struct.
-func NewGroupAddMembershipCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupAddMembershipCommand{
-			meta: meta,
+func NewGroupAddMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupAddMembershipCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (ggc groupAddMembershipCommand) Run(args []string) int {
-	ggc.meta.Logger.Debugf("Starting the 'group add-membership' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		ggc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *groupAddMembershipCommand) validate() error {
+	const message = "group-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.roleID, validation.Required),
+	)
+}
+
+func (c *groupAddMembershipCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group add-membership"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := ggc.meta.GetSDKClient()
+	input := &pb.CreateNamespaceMembershipRequest{
+		NamespacePath:    c.arguments[0],
+		RoleId:           c.roleID,
+		UserId:           c.userID,
+		ServiceAccountId: c.serviceAccountID,
+		TeamId:           c.teamID,
+	}
+
+	c.Logger.Debug("group add-membership input", "input", input)
+
+	membership, err := c.client.NamespaceMembershipsClient.CreateNamespaceMembership(c.Context, input)
 	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to add group membership")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return ggc.doGroupAddMembership(ctx, client, args)
+	return outputMembership(c.UI, c.toJSON, membership)
 }
 
-func (ggc groupAddMembershipCommand) doGroupAddMembership(ctx context.Context, client *tharsis.Client, opts []string) int {
-	ggc.meta.Logger.Debugf("will do group add-membership, %d opts", len(opts))
-
-	defs := ggc.buildGroupAddMembershipOptionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(ggc.meta.BinaryName+" group add-membership", defs, opts)
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to parse group add-membership argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		ggc.meta.Logger.Error(output.FormatError("missing group add-membership full path", nil), ggc.HelpGroupAddMembership())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group add-membership arguments: %s", cmdArgs)
-		ggc.meta.Logger.Error(output.FormatError(msg, nil), ggc.HelpGroupAddMembership())
-		return 1
-	}
-
-	path := cmdArgs[0]
-	username := getOption("username", "", cmdOpts)[0]
-	serviceAccountID := getOption("service-account-id", "", cmdOpts)[0]
-	teamName := getOption("team-name", "", cmdOpts)[0]
-
-	role := getOption("role", "", cmdOpts)[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(path)
-	if !isNamespacePathValid(ggc.meta, actualPath) {
-		return 1
-	}
-
-	// Query for the group to make sure it exists and is a group.
-	trnID := trn.ToTRN(path, trn.ResourceTypeGroup)
-	getGroupInput := &sdktypes.GetGroupInput{ID: &trnID}
-	_, err = client.Group.GetGroup(ctx, getGroupInput)
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to find group", err))
-		return 1
-	}
-
-	// Prepare the inputs.
-	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
-	actualPath = trn.ToPath(path)
-
-	input := &sdktypes.CreateNamespaceMembershipInput{
-		NamespacePath: actualPath,
-		Role:          role,
-	}
-	if username != "" {
-		input.Username = &username
-	}
-	if serviceAccountID != "" {
-		input.ServiceAccountID = &serviceAccountID
-	}
-	if teamName != "" {
-		input.TeamName = &teamName
-	}
-	ggc.meta.Logger.Debugf("group add-membership input: %#v", input)
-
-	// Add the membership to the group.
-	addedMembership, err := client.NamespaceMembership.AddMembership(ctx, input)
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to add membership to a group", err))
-		return 1
-	}
-
-	return outputNamespaceMembership(ggc.meta, toJSON, addedMembership)
-}
-
-// buildGroupAddMembershipOptionDefs returns the defs used by
-// group add-membership command.
-func (ggc groupAddMembershipCommand) buildGroupAddMembershipOptionDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"username": {
-			Arguments: []string{"Username"},
-			Synopsis:  "Username for new membership for the group.",
-		},
-		"service-account-id": {
-			Arguments: []string{"Service_Account_ID"},
-			Synopsis:  "Service account ID for new membership for the group.",
-		},
-		"team-name": {
-			Arguments: []string{"TeamName"},
-			Synopsis:  "Team name for new membership for the group.",
-		},
-		"role": {
-			Arguments: []string{"Role"},
-			Synopsis:  "Role for new membership.",
-			Required:  true,
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-// outputNamespaceMembership is the final output for the namespace membership operations what want singular output.
-func outputNamespaceMembership(meta *Metadata, toJSON bool, membership *sdktypes.NamespaceMembership) int {
-	if toJSON {
-		buf, err := objectToJSON(membership)
-		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
-			return 1
-		}
-		meta.UI.Output(string(buf))
-	} else {
-		memberType, memberID := combineMemberIDs(membership.UserID, membership.ServiceAccountID, membership.TeamID)
-		tableInput := [][]string{
-			{"id", "role", "member type", "member id"},
-			{membership.Metadata.ID, membership.Role, memberType, memberID},
-		}
-		meta.UI.Output(tableformatter.FormatTable(tableInput))
-	}
-
-	return 0
-}
-
-// outputNamespaceMemberships is the final output for the namespace membership operations what want list output.
-func outputNamespaceMemberships(meta *Metadata, toJSON bool, memberships []sdktypes.NamespaceMembership) int {
-	if toJSON {
-		buf, err := objectToJSON(memberships)
-		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
-			return 1
-		}
-		meta.UI.Output(string(buf))
-	} else {
-		tableInput := [][]string{
-			{"id", "role", "member type", "member id"},
-		}
-		for _, m := range memberships {
-			memberType, memberID := combineMemberIDs(m.UserID, m.ServiceAccountID, m.TeamID)
-			tableInput = append(tableInput,
-				[]string{m.Metadata.ID, m.Role, memberType, memberID},
-			)
-		}
-		meta.UI.Output(tableformatter.FormatTable(tableInput))
-	}
-
-	return 0
-}
-
-// convertMemberIDs converts three member IDs to a member-type string and a single combined member ID string.
-func combineMemberIDs(userID, serviceAccountID, teamID *string) (string, string) {
-	var memberType, combinedID string
-	switch {
-	case userID != nil:
-		combinedID = *userID
-		memberType = "user"
-	case serviceAccountID != nil:
-		combinedID = *serviceAccountID
-		memberType = "service-account"
-	case teamID != nil:
-		combinedID = *teamID
-		memberType = "team"
-	}
-
-	return memberType, combinedID
-}
-
-func (ggc groupAddMembershipCommand) Synopsis() string {
+func (*groupAddMembershipCommand) Synopsis() string {
 	return "Add a membership to a group."
 }
 
-func (ggc groupAddMembershipCommand) Help() string {
-	return ggc.HelpGroupAddMembership()
+func (*groupAddMembershipCommand) Description() string {
+	return `
+   The group add-membership command adds a membership to a group.
+   Exactly one of --user-id, --service-account-id, or --team-id must be specified.
+`
 }
 
-// HelpGroupAddMembership prints the help string for the 'group add-membership' command.
-func (ggc groupAddMembershipCommand) HelpGroupAddMembership() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group add-membership [options] <full_path>
+func (*groupAddMembershipCommand) Usage() string {
+	return "tharsis [global options] group add-membership [options] <group-id>"
+}
 
-   The group add-membership command adds a membership to a group.
+func (*groupAddMembershipCommand) Example() string {
+	return `
+tharsis group add-membership \
+  --role-id trn:role:owner \
+  --user-id trn:user:john.smith \
+  trn:group:top-level/my-group
+`
+}
 
-   Note: Supply exactly one of --username, --service-account-id, and --team-name.
+func (c *groupAddMembershipCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.roleID,
+		"role-id",
+		"",
+		"The role ID for the membership.",
+	)
+	f.Func(
+		"user-id",
+		"The user ID for the membership.",
+		func(s string) error {
+			c.userID = &s
+			return nil
+		},
+	)
+	f.Func(
+		"service-account-id",
+		"The service account ID for the membership.",
+		func(s string) error {
+			c.serviceAccountID = &s
+			return nil
+		},
+	)
+	f.Func(
+		"team-id",
+		"The team ID for the membership.",
+		func(s string) error {
+			c.teamID = &s
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-%s
-
-`, ggc.meta.BinaryName, buildHelpText(ggc.buildGroupAddMembershipOptionDefs()))
+	return f
 }

@@ -1,111 +1,100 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// workspaceRemoveMembershipCommand is the top-level structure for the workspace remove-membership command.
 type workspaceRemoveMembershipCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	version *int64
 }
 
 // NewWorkspaceRemoveMembershipCommandFactory returns a workspaceRemoveMembershipCommand struct.
-func NewWorkspaceRemoveMembershipCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceRemoveMembershipCommand{
-			meta: meta,
+func NewWorkspaceRemoveMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceRemoveMembershipCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (ggc workspaceRemoveMembershipCommand) Run(args []string) int {
-	ggc.meta.Logger.Debugf("Starting the 'workspace remove-membership' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		ggc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := ggc.meta.GetSDKClient()
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return ggc.doWorkspaceRemoveMembership(ctx, client, args)
+func (c *workspaceRemoveMembershipCommand) validate() error {
+	const message = "membership-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (ggc workspaceRemoveMembershipCommand) doWorkspaceRemoveMembership(ctx context.Context, client *tharsis.Client, opts []string) int {
-	ggc.meta.Logger.Debugf("will do workspace remove-membership, %d opts", len(opts))
-
-	defs := ggc.buildWorkspaceRemoveMembershipOptionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(ggc.meta.BinaryName+" workspace remove-membership", defs, opts)
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to parse workspace remove-membership argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		ggc.meta.Logger.Error(output.FormatError("missing workspace remove-membership ID", nil), ggc.HelpWorkspaceRemoveMembership())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace remove-membership arguments: %s", cmdArgs)
-		ggc.meta.Logger.Error(output.FormatError(msg, nil), ggc.HelpWorkspaceRemoveMembership())
-		return 1
+func (c *workspaceRemoveMembershipCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace remove-membership"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	membershipID := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+	input := &pb.DeleteNamespaceMembershipRequest{
+		Id:      c.arguments[0],
+		Version: c.version,
+	}
+
+	c.Logger.Debug("workspace remove-membership input", "input", input)
+
+	if _, err := c.client.NamespaceMembershipsClient.DeleteNamespaceMembership(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to remove workspace membership")
 		return 1
 	}
 
-	// Prepare the inputs.
-	input := &sdktypes.DeleteNamespaceMembershipInput{
-		ID: membershipID,
-	}
-	ggc.meta.Logger.Debugf("workspace remove-membership input: %#v", input)
-
-	// Remove the membership.
-	removedMembership, err := client.NamespaceMembership.DeleteMembership(ctx, input)
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to remove membership", err))
-		return 1
-	}
-
-	return outputNamespaceMembership(ggc.meta, toJSON, removedMembership)
+	c.UI.Output("Workspace membership removed successfully!", terminal.WithSuccessStyle())
+	return 0
 }
 
-// buildWorkspaceRemoveMembershipOptionDefs returns the defs used by
-// workspace remove-membership command--of which, there are currently none.
-func (ggc workspaceRemoveMembershipCommand) buildWorkspaceRemoveMembershipOptionDefs() optparser.OptionDefinitions {
-	return buildJSONOptionDefs(optparser.OptionDefinitions{})
+func (*workspaceRemoveMembershipCommand) Synopsis() string {
+	return "Remove a workspace membership."
 }
 
-func (ggc workspaceRemoveMembershipCommand) Synopsis() string {
-	return "Remove a membership from a workspace."
-}
-
-func (ggc workspaceRemoveMembershipCommand) Help() string {
-	return ggc.HelpWorkspaceRemoveMembership()
-}
-
-// HelpWorkspaceRemoveMembership prints the help string for the 'workspace remove-membership' command.
-func (ggc workspaceRemoveMembershipCommand) HelpWorkspaceRemoveMembership() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace remove-membership [options] <id>
-
+func (*workspaceRemoveMembershipCommand) Description() string {
+	return `
    The workspace remove-membership command removes a membership from a workspace.
+`
+}
 
-%s
+func (*workspaceRemoveMembershipCommand) Usage() string {
+	return "tharsis [global options] workspace remove-membership [options] <membership-id>"
+}
 
-`, ggc.meta.BinaryName, buildHelpText(ggc.buildWorkspaceRemoveMembershipOptionDefs()))
+func (*workspaceRemoveMembershipCommand) Example() string {
+	return `
+tharsis workspace remove-membership trn:namespace_membership:ops/my-workspace/Tk1fZ...
+`
+}
+
+func (c *workspaceRemoveMembershipCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be deleted. In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+
+	return f
 }

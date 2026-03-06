@@ -1,144 +1,165 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// groupGetTerraformVarCommand is the top-level structure for the group get-terraform-var command.
 type groupGetTerraformVarCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	key           string
+	showSensitive bool
+	toJSON        bool
 }
 
 // NewGroupGetTerraformVarCommandFactory returns a groupGetTerraformVarCommand struct.
-func NewGroupGetTerraformVarCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupGetTerraformVarCommand{
-			meta: meta,
+func NewGroupGetTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupGetTerraformVarCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (ggv groupGetTerraformVarCommand) Run(args []string) int {
-	ggv.meta.Logger.Debugf("Starting the 'group get-terraform-var' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		ggv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := ggv.meta.GetSDKClient()
-	if err != nil {
-		ggv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return ggv.doGroupGetTerraformVar(ctx, client, args)
+func (c *groupGetTerraformVarCommand) validate() error {
+	const message = "group-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.key, validation.Required),
+	)
 }
 
-func (ggv groupGetTerraformVarCommand) doGroupGetTerraformVar(ctx context.Context, client *tharsis.Client, opts []string) int {
-	ggv.meta.Logger.Debugf("will do group get-terraform-var, %d opts", len(opts))
+func (c *groupGetTerraformVarCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group get-terraform-var"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := ggv.buildGroupGetTerraformVarDefs()
-
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(ggv.meta.BinaryName+" group get-terraform-var", defs, opts)
+	// Get group to retrieve full path
+	group, err := c.client.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
 	if err != nil {
-		ggv.meta.Logger.Error(output.FormatError("failed to parse group get-terraform-var options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		ggv.meta.Logger.Error(output.FormatError("missing group get-terraform-var group path", nil), ggv.HelpGroupGetTerraformVar())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group get-terraform-var arguments: %s", cmdArgs)
-		ggv.meta.Logger.Error(output.FormatError(msg, nil), ggv.HelpGroupGetTerraformVar())
+		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
 	}
 
-	namespacePath := cmdArgs[0]
-	key := getOption("key", "", cmdOpts)[0]
+	// Build TRN: trn:variable:namespace-path/terraform/key
+	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, "terraform", c.key)
 
-	if key == "" {
-		ggv.meta.Logger.Error(output.FormatError("missing required --key option", nil), ggv.HelpGroupGetTerraformVar())
-		return 1
+	input := &pb.GetNamespaceVariableByIDRequest{
+		Id: variableTRN,
 	}
 
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	c.Logger.Debug("group get-terraform-var input", "input", input)
+
+	variable, err := c.client.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, input)
 	if err != nil {
-		ggv.meta.UI.Error(output.FormatError("failed to parse boolean value for --json", err))
+		c.UI.ErrorWithSummary(err, "failed to get terraform variable")
 		return 1
 	}
 
-	showSensitive, err := getBoolOptionValue("show-sensitive", "false", cmdOpts)
-	if err != nil {
-		ggv.meta.UI.Error(output.FormatError("failed to parse boolean value for --show-sensitive", err))
-		return 1
+	// If showing sensitive value, fetch the variable version
+	if c.showSensitive && variable.Sensitive {
+		versionInput := &pb.GetNamespaceVariableVersionByIDRequest{
+			Id:                    variable.LatestVersionId,
+			IncludeSensitiveValue: true,
+		}
+
+		version, err := c.client.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get variable version")
+			return 1
+		}
+
+		// Set the value from the version
+		variable.Value = version.Value
 	}
 
-	actualPath := trn.ToPath(namespacePath)
-	if !isNamespacePathValid(ggv.meta, actualPath) {
-		return 1
-	}
-
-	if _, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{
-		Path: &actualPath,
-	}); err != nil {
-		ggv.meta.Logger.Error(output.FormatError("failed to get group", err))
-		return 1
-	}
-
-	variable, err := getTerraformVariable(ctx, ggv.meta, client, namespacePath, key, showSensitive)
-	if err != nil {
-		ggv.meta.Logger.Error(output.FormatError("failed to get variable", err))
-		return 1
-	}
-
-	return outputNamespaceVariable(ggv.meta, toJSON, variable)
+	return outputNamespaceVariable(c.UI, c.toJSON, c.showSensitive, variable)
 }
 
-func (ggv groupGetTerraformVarCommand) buildGroupGetTerraformVarDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"key": {
-			Arguments: []string{"Variable_Key"},
-			Synopsis:  "The key/name of the terraform variable.",
-			Required:  true,
-		},
-		"show-sensitive": {
-			Arguments: []string{},
-			Synopsis:  "Show the actual value of sensitive variables (requires appropriate permissions).",
-		},
-		"json": {
-			Arguments: []string{},
-			Synopsis:  "Output in JSON format.",
-		},
+func (*groupGetTerraformVarCommand) Synopsis() string {
+	return "Get a terraform variable for a group."
+}
+
+func (*groupGetTerraformVarCommand) Description() string {
+	return `
+   The group get-terraform-var command retrieves a terraform variable for a group.
+`
+}
+
+func (*groupGetTerraformVarCommand) Usage() string {
+	return "tharsis [global options] group get-terraform-var [options] <group-id>"
+}
+
+func (*groupGetTerraformVarCommand) Example() string {
+	return `
+tharsis group get-terraform-var \
+  --key region \
+  trn:group:ops/my-group
+`
+}
+
+func (c *groupGetTerraformVarCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.key,
+		"key",
+		"",
+		"Variable key.",
+	)
+	f.BoolVar(
+		&c.showSensitive,
+		"show-sensitive",
+		false,
+		"Show the actual value of sensitive variables (requires appropriate permissions).",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
+
+	return f
+}
+
+func outputNamespaceVariable(ui terminal.UI, toJSON bool, showSensitive bool, variable *pb.NamespaceVariable) int {
+	if toJSON {
+		if err := ui.JSON(variable); err != nil {
+			ui.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+	} else {
+		displayValue := ptr.ToString(variable.Value)
+		if variable.Sensitive && !showSensitive {
+			displayValue = "[SENSITIVE]"
+		}
+
+		t := terminal.NewTable("key", "value", "namespace_path", "sensitive")
+		t.Rich([]string{
+			variable.Key,
+			displayValue,
+			variable.NamespacePath,
+			fmt.Sprintf("%t", variable.Sensitive),
+		}, nil)
+
+		ui.Table(t)
 	}
-}
 
-func (ggv groupGetTerraformVarCommand) Synopsis() string {
-	return "Get a single terraform variable from a group."
-}
-
-func (ggv groupGetTerraformVarCommand) Help() string {
-	return ggv.HelpGroupGetTerraformVar()
-}
-
-// HelpGroupGetTerraformVar produces the help string for the 'group get-terraform-var' command.
-func (ggv groupGetTerraformVarCommand) HelpGroupGetTerraformVar() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group get-terraform-var [options] <group>
-
-   The group get-terraform-var command retrieves a single terraform
-   variable from a group by its key.
-
-%s
-
-`, ggv.meta.BinaryName, buildHelpText(ggv.buildGroupGetTerraformVarDefs()))
+	return 0
 }

@@ -1,188 +1,195 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// groupListCommand is the top-level structure for the group list command.
 type groupListCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	limit    *int32
+	cursor   *string
+	search   *string
+	parentID *string
+	sortBy   *pb.GroupSortableField
+	toJSON   bool
 }
 
 // NewGroupListCommandFactory returns a groupListCommand struct.
-func NewGroupListCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupListCommand{
-			meta: meta,
+func NewGroupListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupListCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (glc groupListCommand) Run(args []string) int {
-	glc.meta.Logger.Debugf("Starting the 'group list' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		glc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := glc.meta.GetSDKClient()
-	if err != nil {
-		glc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return glc.doGroupList(ctx, client, args)
+func (c *groupListCommand) validate() error {
+	return validation.ValidateStruct(c,
+		validation.Field(&c.limit, validation.Min(0), validation.Max(100), validation.When(c.limit != nil)),
+		validation.Field(&c.arguments, validation.Empty),
+	)
 }
 
-func (glc groupListCommand) doGroupList(ctx context.Context, client *tharsis.Client, opts []string) int {
-	glc.meta.Logger.Debugf("will do group list, %d opts: %#v", len(opts), opts)
-
-	defs := glc.buildGroupListDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(glc.meta.BinaryName+" group list", defs, opts)
-	if err != nil {
-		glc.meta.Logger.Error(output.FormatError("failed to parse group list options", err))
-		return 1
-	}
-	if len(cmdArgs) > 0 {
-		msg := fmt.Sprintf("excessive group list arguments: %s", cmdArgs)
-		glc.meta.Logger.Error(output.FormatError(msg, nil), glc.HelpGroupList())
-		return 1
+func (c *groupListCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group list"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	// Extract option values.
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		glc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	cursor := getOption("cursor", "", cmdOpts)[0]
-	limit, err := strconv.ParseInt(getOption("limit", "100", cmdOpts)[0], 10, 64) // 100 is the maximum allowed by GraphQL
-	if err != nil {
-		msg := fmt.Sprintf("invalid limit option value: %s", cmdOpts["limit"])
-		glc.meta.Logger.Error(output.FormatError(msg, nil))
-		return 1
-	}
-	limit32 := int32(limit)
-	filterPath := getOption("parent-path", "", cmdOpts)[0]
-
-	if filterPath != "" && !isNamespacePathValid(glc.meta, filterPath) {
-		return 1
+	if c.limit == nil {
+		c.limit = ptr.Int32(defaultPaginationLimit)
 	}
 
-	// Leniently default to ascending order unless instructed otherwise.
-	sortOrder := sdktypes.GroupSortableFieldFullPathAsc
-	if strings.HasSuffix(strings.ToLower(getOption("sort-order", "", cmdOpts)[0]), "desc") {
-		sortOrder = sdktypes.GroupSortableFieldFullPathDesc
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.GetGroupsInput{
-		Sort: &sortOrder,
-		PaginationOptions: &sdktypes.PaginationOptions{
-			Cursor: &cursor,
-			Limit:  &limit32,
+	input := &pb.GetGroupsRequest{
+		Sort: c.sortBy,
+		PaginationOptions: &pb.PaginationOptions{
+			First: c.limit,
+			After: c.cursor,
 		},
-		Filter: &sdktypes.GroupFilter{
-			ParentPath: &filterPath,
-		},
+		Search:   c.search,
+		ParentId: c.parentID,
 	}
-	if cursor == "" {
-		input.PaginationOptions.Cursor = nil
-	}
-	if filterPath == "" {
-		// If not filtering, must send nil.
-		input.Filter = nil
-	}
-	glc.meta.Logger.Debugf("group list input: %#v", input)
 
-	// Get the groups.
-	groupsOutput, err := client.Group.GetGroups(ctx, input)
+	c.Logger.Debug("group list input", "input", input)
+
+	result, err := c.client.GroupsClient.GetGroups(c.Context, input)
 	if err != nil {
-		glc.meta.Logger.Error(output.FormatError("failed to get a list of groups", err))
+		c.UI.ErrorWithSummary(err, "failed to get a list of groups")
 		return 1
 	}
 
-	if toJSON {
-		buf, err := objectToJSON(groupsOutput)
-		if err != nil {
-			glc.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+	if c.toJSON {
+		if err := c.UI.JSON(result); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
 		}
-		glc.meta.UI.Output(string(buf))
 	} else {
-		// Format the output.
-		tableInput := make([][]string, len(groupsOutput.Groups)+1)
-		tableInput[0] = []string{"id", "name", "description", "full path"}
-		for ix, group := range groupsOutput.Groups {
-			tableInput[ix+1] = []string{group.Metadata.ID, group.Name, group.Description, group.FullPath}
+		t := terminal.NewTable("id", "name", "description", "full_path")
+
+		for _, group := range result.Groups {
+			t.Rich([]string{
+				group.Metadata.Id,
+				group.Name,
+				group.Description,
+				group.FullPath,
+			}, nil)
 		}
-		glc.meta.UI.Output(tableformatter.FormatTable(tableInput))
-		//
-		// Must return the new cursor at the end of the list of groups.
-		glc.meta.UI.Output(fmt.Sprintf("has next page: %v", groupsOutput.PageInfo.HasNextPage))
-		if groupsOutput.PageInfo.HasNextPage {
-			// Show the next cursor _ONLY_ if there is a next page.
-			glc.meta.UI.Output(fmt.Sprintf("next cursor: %s", groupsOutput.PageInfo.Cursor))
+
+		c.UI.Table(t)
+		namedValues := []terminal.NamedValue{
+			{Name: "Total count", Value: result.GetPageInfo().TotalCount},
+			{Name: "Has Next Page", Value: result.GetPageInfo().HasNextPage},
 		}
+		if result.GetPageInfo().EndCursor != nil {
+			namedValues = append(namedValues, terminal.NamedValue{
+				Name:  "Next cursor",
+				Value: result.GetPageInfo().GetEndCursor(),
+			})
+		}
+
+		c.UI.NamedValues(namedValues)
 	}
 
 	return 0
 }
 
-func (glc groupListCommand) buildGroupListDefs() optparser.OptionDefinitions {
-	defs := buildPaginationOptionDefs()
-
-	defs["parent-path"] = &optparser.OptionDefinition{
-		Arguments: []string{"Parent_Path"},
-		Synopsis:  "Filter to only direct sub-groups of this parent group.",
-	}
-
-	return buildJSONOptionDefs(defs)
+func (*groupListCommand) Synopsis() string {
+	return "Retrieve a paginated list of groups."
 }
 
-func (glc groupListCommand) Synopsis() string {
-	return "List groups."
-}
-
-func (glc groupListCommand) Help() string {
-	return glc.HelpGroupList()
-}
-
-// HelpGroupList returns the help string for the 'group list' command.
-func (glc groupListCommand) HelpGroupList() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group list [options]
-
+func (*groupListCommand) Description() string {
+	return `
    The group list command prints information about (likely
    multiple) groups. Supports pagination, filtering and
    sorting the output.
+`
+}
 
-   Example:
+func (*groupListCommand) Usage() string {
+	return "tharsis [global options] group list [options]"
+}
 
-   %s group list \
-      --parent-path top-level/bottom-level \
-      --limit 5 \
-      --json
+func (*groupListCommand) Example() string {
+	return `
+tharsis group list \
+  --parent-id trn:group:top-level/bottom-level \
+  --sort-by FULL_PATH_ASC \
+  --limit 5 \
+  --json
+`
+}
 
-   Above command will only show five subgroups under
-   top-level/bottom-level parent groups in JSON format.
-
-%s
-
-`,
-		glc.meta.BinaryName,
-		glc.meta.BinaryName,
-		buildHelpText(glc.buildGroupListDefs()),
+func (c *groupListCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"cursor",
+		"The cursor string for manual pagination.",
+		func(s string) error {
+			c.cursor = &s
+			return nil
+		},
 	)
+	f.Func(
+		"limit",
+		"Maximum number of result elements to return. Defaults to 100.",
+		func(s string) error {
+			i, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return err
+			}
+			c.limit = ptr.Int32(int32(i))
+			return nil
+		},
+	)
+	f.Func(
+		"sort-by",
+		"Sort by this field (e.g., UPDATED_AT_ASC, UPDATED_AT_DESC, FULL_PATH_ASC, FULL_PATH_DESC).",
+		func(s string) error {
+			value, ok := pb.GroupSortableField_value[strings.ToUpper(s)]
+			if !ok {
+				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, maps.Keys(pb.GroupSortableField_value))
+			}
+			c.sortBy = pb.GroupSortableField(value).Enum()
+			return nil
+		},
+	)
+	f.Func(
+		"search",
+		"Filter to only groups containing this substring in their path.",
+		func(s string) error {
+			c.search = &s
+			return nil
+		},
+	)
+	f.Func(
+		"parent-id",
+		"Filter to only direct sub-groups of this parent group.",
+		func(s string) error {
+			c.parentID = &s
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
 }

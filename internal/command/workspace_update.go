@@ -1,190 +1,186 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
+	"strconv"
+	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 // workspaceUpdateCommand is the top-level structure for the workspace update command.
 type workspaceUpdateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	description        *string
+	terraformVersion   *string
+	maxJobDuration     *int32
+	preventDestroyPlan *bool
+	version            *int64
+	labels             map[string]string
+	toJSON             bool
+}
+
+var _ Command = (*workspaceUpdateCommand)(nil)
+
+func (c *workspaceUpdateCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewWorkspaceUpdateCommandFactory returns a workspaceUpdateCommand struct.
-func NewWorkspaceUpdateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceUpdateCommand{
-			meta: meta,
+func NewWorkspaceUpdateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceUpdateCommand{
+			BaseCommand: baseCommand,
+			labels:      make(map[string]string),
 		}, nil
 	}
 }
 
-func (wuc workspaceUpdateCommand) Run(args []string) int {
-	wuc.meta.Logger.Debugf("Starting the 'workspace update' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wuc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *workspaceUpdateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace update"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := wuc.meta.GetSDKClient()
+	workspaceID := c.arguments[0]
+
+	input := &pb.UpdateWorkspaceRequest{
+		Id:                 workspaceID,
+		Description:        c.description,
+		TerraformVersion:   c.terraformVersion,
+		MaxJobDuration:     c.maxJobDuration,
+		PreventDestroyPlan: c.preventDestroyPlan,
+		Version:            c.version,
+		Labels:             c.labels,
+	}
+
+	c.Logger.Debug("workspace update input", "input", input)
+
+	updatedWorkspace, err := c.client.WorkspacesClient.UpdateWorkspace(c.Context, input)
 	if err != nil {
-		wuc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to update a workspace")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return wuc.doWorkspaceUpdate(ctx, client, args)
+	return outputWorkspace(c.UI, c.toJSON, updatedWorkspace)
 }
 
-func (wuc workspaceUpdateCommand) doWorkspaceUpdate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wuc.meta.Logger.Debugf("will do workspace update, %d opts", len(opts))
-
-	defs := buildCommonUpdateOptionDefs("workspace")
-	buildCommonWorkspaceDefs(defs)
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wuc.meta.BinaryName+" workspace update", defs, opts)
-	if err != nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to parse workspace update options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wuc.meta.Logger.Error(output.FormatError("missing workspace update full path", nil), wuc.HelpWorkspaceUpdate())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace update arguments: %s", cmdArgs)
-		wuc.meta.Logger.Error(output.FormatError(msg, nil), wuc.HelpWorkspaceUpdate())
-		return 1
-	}
-
-	path := cmdArgs[0]
-	description := getOption("description", "", cmdOpts)[0]
-	maxJobDuration := getOption("max-job-duration", "720", cmdOpts)[0]
-	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
-	preventDestroyPlan, err := getBoolOptionValue("prevent-destroy-plan", "false", cmdOpts)
-	if err != nil {
-		wuc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		wuc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	labels, err := parseLabels(cmdOpts)
-	if err != nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to parse labels", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(path)
-	if !isNamespacePathValid(wuc.meta, actualPath) {
-		return 1
-	}
-
-	// Convert maxJobDuration to an int.
-	var jobDuration *int32
-	duration, pErr := parseMaximumJobDuration(maxJobDuration)
-	if pErr != nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to parse max job duration", pErr))
-		return 1
-	}
-	jobDuration = &duration
-
-	input := &sdktypes.UpdateWorkspaceInput{
-		Description:        description,
-		MaxJobDuration:     jobDuration,
-		PreventDestroyPlan: &preventDestroyPlan,
-		Labels:             labels,
-	}
-
-	// Convert path to TRN and use ID field
-	trnID := trn.ToTRN(path, trn.ResourceTypeWorkspace)
-	input.ID = &trnID
-
-	if terraformVersion != "" {
-		input.TerraformVersion = &terraformVersion
-	}
-
-	wuc.meta.Logger.Debugf("workspace update input: %#v", input)
-
-	updatedWorkspace, err := client.Workspaces.UpdateWorkspace(ctx, input)
-	if err != nil {
-		wuc.meta.Logger.Error(output.FormatError("failed to update a workspace", err))
-		return 1
-	}
-
-	return outputWorkspace(wuc.meta, toJSON, updatedWorkspace)
-}
-
-// buildCommonUpdateOptionDefs returns the common defs used by
-// workspace and group update commands.
-func buildCommonUpdateOptionDefs(synopsis string) optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"description": {
-			Arguments: []string{"Description"},
-			Synopsis:  fmt.Sprintf("New description for the %s.", synopsis),
-		},
-		"terraform-version": {
-			Arguments: []string{"Terraform_Version"},
-			Synopsis:  fmt.Sprintf("The default Terraform CLI version for the new %s.", synopsis),
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-// buildCommonWorkspaceDefs contains common defs used by multiple workspace commands.
-func buildCommonWorkspaceDefs(defs optparser.OptionDefinitions) {
-	maxJobDef := optparser.OptionDefinition{
-		Arguments: []string{"Max_Job_Duration"},
-		Synopsis:  "The amount of minutes before a job is gracefully canceled (Default 720).",
-	}
-
-	defs["max-job-duration"] = &maxJobDef
-
-	defs["label"] = &optparser.OptionDefinition{
-		Arguments: []string{"Label"},
-		Synopsis:  "Labels for the new workspace (key=value).",
-	}
-
-	// The --prevent-destroy-plan option should be available only for workspace create and update.
-	preventDestroyPlanDef := optparser.OptionDefinition{
-		Arguments: []string{},
-		Synopsis:  "boolean value--whether a run/plan will be prevented from destroying deployed resources.",
-	}
-	defs["prevent-destroy-plan"] = &preventDestroyPlanDef
-}
-
-func (wuc workspaceUpdateCommand) Synopsis() string {
+func (*workspaceUpdateCommand) Synopsis() string {
 	return "Update a workspace."
 }
 
-func (wuc workspaceUpdateCommand) Help() string {
-	return wuc.HelpWorkspaceUpdate()
+func (*workspaceUpdateCommand) Usage() string {
+	return "tharsis [global options] workspace update [options] <id>"
 }
 
-// HelpWorkspaceUpdate produces the help string for the 'workspace update' command.
-func (wuc workspaceUpdateCommand) HelpWorkspaceUpdate() string {
-	defs := buildCommonUpdateOptionDefs("workspace")
-	buildCommonWorkspaceDefs(defs)
-
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace update [options] <full_path>
-
+func (*workspaceUpdateCommand) Description() string {
+	return `
    The workspace update command updates a workspace.
    Currently, it supports updating the description and the
    maximum job duration. Shows final output as JSON, if
    specified.
+`
+}
 
-%s
+func (*workspaceUpdateCommand) Example() string {
+	return `
+tharsis workspace update \
+  --description "Updated production workspace" \
+  --terraform-version "1.6.0" \
+  --max-job-duration 120 \
+  --prevent-destroy-plan true \
+  trn:workspace:ops/my-group/my-workspace
+`
+}
 
-`, wuc.meta.BinaryName, buildHelpText(defs))
+func (c *workspaceUpdateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"description",
+		"Description for the workspace.",
+		func(s string) error {
+			c.description = &s
+			return nil
+		},
+	)
+	f.Func(
+		"terraform-version",
+		"The default Terraform CLI version for the workspace.",
+		func(s string) error {
+			c.terraformVersion = &s
+			return nil
+		},
+	)
+	f.Func(
+		"max-job-duration",
+		"The amount of minutes before a job is gracefully canceled.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return err
+			}
+			c.maxJobDuration = ptr.Int32(int32(v))
+			return nil
+		},
+	)
+	f.Func(
+		"prevent-destroy-plan",
+		"Whether a run/plan will be prevented from destroying deployed resources.",
+		func(s string) error {
+			v, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+			c.preventDestroyPlan = &v
+			return nil
+		},
+	)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be updated. "+
+			"In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+	f.Func(
+		"label",
+		"Labels for the workspace (key=value). Can be specified multiple times.",
+		func(s string) error {
+			parts := strings.Split(s, "=")
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return fmt.Errorf("label key and value cannot be empty")
+			}
+			c.labels[parts[0]] = parts[1]
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
 }

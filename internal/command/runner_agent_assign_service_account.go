@@ -1,109 +1,99 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// runnerAgentAssignServiceAccountCommand is the top-level structure for the runner-agent assign-service-account command.
 type runnerAgentAssignServiceAccountCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	runnerID         string
+	serviceAccountID string
 }
 
 // NewRunnerAgentAssignServiceAccountCommandFactory returns a runnerAgentAssignServiceAccountCommand struct.
-func NewRunnerAgentAssignServiceAccountCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return runnerAgentAssignServiceAccountCommand{
-			meta: meta,
+func NewRunnerAgentAssignServiceAccountCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &runnerAgentAssignServiceAccountCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (rac runnerAgentAssignServiceAccountCommand) Run(args []string) int {
-	rac.meta.Logger.Debugf("Starting the 'runner-agent assign-service-account' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		rac.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := rac.meta.GetSDKClient()
-	if err != nil {
-		rac.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return rac.doRunnerAgentAssignServiceAccount(ctx, client, args)
+func (c *runnerAgentAssignServiceAccountCommand) validate() error {
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments, validation.Empty),
+		validation.Field(&c.runnerID, validation.Required),
+		validation.Field(&c.serviceAccountID, validation.Required),
+	)
 }
 
-func (rac runnerAgentAssignServiceAccountCommand) doRunnerAgentAssignServiceAccount(ctx context.Context, client *tharsis.Client, opts []string) int {
-	rac.meta.Logger.Debugf("will do runner-agent assign-service-account, %d opts", len(opts))
-
-	_, cmdArgs, err := optparser.ParseCommandOptions(rac.meta.BinaryName+" runner-agent assign-service-account", optparser.OptionDefinitions{}, opts)
-	if err != nil {
-		rac.meta.Logger.Error(output.FormatError("failed to parse runner-agent assign-service-account options", err))
-		return 1
-	}
-	if len(cmdArgs) < 2 {
-		rac.meta.Logger.Error(output.FormatError("missing runner-agent assign-service-account resource paths", nil), rac.HelpRunnerAgentAssignServiceAccount())
-		return 1
-	}
-	if len(cmdArgs) > 2 {
-		msg := fmt.Sprintf("excessive runner-agent assign-service-account arguments: %s", cmdArgs)
-		rac.meta.Logger.Error(output.FormatError(msg, nil), rac.HelpRunnerAgentAssignServiceAccount())
-		return 1
+func (c *runnerAgentAssignServiceAccountCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("runner-agent assign-service-account"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	// Validate both resource paths.
-	for _, path := range cmdArgs {
-		actualPath := trn.ToPath(path)
-		if !isResourcePathValid(rac.meta, actualPath) {
-			return 1
-		}
+	input := &pb.AssignServiceAccountToRunnerRequest{
+		RunnerId:         c.runnerID,
+		ServiceAccountId: c.serviceAccountID,
 	}
 
-	// Prepare the inputs.
-	input := &sdktypes.AssignServiceAccountToRunnerInput{
-		ServiceAccountPath: cmdArgs[0],
-		RunnerPath:         cmdArgs[1],
-	}
-	rac.meta.Logger.Debugf("runner-agent assign-service-account input: %#v", input)
+	c.Logger.Debug("runner-agent assign-service-account input", "input", input)
 
-	// Assign the service account to runner agent.
-	if err = client.RunnerAgent.AssignServiceAccountToRunnerAgent(ctx, input); err != nil {
-		rac.meta.Logger.Error(output.FormatError("failed to assign service account to runner agent", err))
+	if _, err := c.client.RunnersClient.AssignServiceAccountToRunner(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to assign service account to runner agent")
 		return 1
 	}
 
-	// Cannot show the assigned service account, but say something.
-	rac.meta.UI.Output("service account assigned to runner agent successfully.")
-
+	c.UI.Successf("Service account %s assigned to runner agent successfully", c.serviceAccountID)
 	return 0
 }
 
-func (rac runnerAgentAssignServiceAccountCommand) Synopsis() string {
+func (*runnerAgentAssignServiceAccountCommand) Synopsis() string {
 	return "Assign a service account to a runner agent."
 }
 
-func (rac runnerAgentAssignServiceAccountCommand) Help() string {
-	return rac.HelpRunnerAgentAssignServiceAccount()
+func (*runnerAgentAssignServiceAccountCommand) Description() string {
+	return `
+   The runner-agent assign-service-account command assigns a service account to a runner agent.
+`
 }
 
-// HelpRunnerAgentAssignServiceAccount prints the help string for the 'runner-agent assign-service-account' command.
-func (rac runnerAgentAssignServiceAccountCommand) HelpRunnerAgentAssignServiceAccount() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] runner-agent assign-service-account <service_account_path> <runner_path>
+func (*runnerAgentAssignServiceAccountCommand) Usage() string {
+	return "tharsis [global options] runner-agent assign-service-account [options]"
+}
 
-   The runner-agent assign-service-account command assigns
-   a service account to a runner agent. Service accounts
-   allow a runner to interact with the Tharsis API.
+func (*runnerAgentAssignServiceAccountCommand) Example() string {
+	return `
+tharsis runner-agent assign-service-account \
+  --runner-id trn:runner:ops/my-runner \
+  --service-account-id trn:service_account:ops/my-sa
+`
+}
 
-`, rac.meta.BinaryName)
+func (c *runnerAgentAssignServiceAccountCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.runnerID,
+		"runner-id",
+		"",
+		"The ID of the runner agent.",
+	)
+	f.StringVar(
+		&c.serviceAccountID,
+		"service-account-id",
+		"",
+		"The ID of the service account to assign.",
+	)
+
+	return f
 }

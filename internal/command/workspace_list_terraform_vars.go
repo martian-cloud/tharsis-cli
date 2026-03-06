@@ -1,134 +1,136 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"time"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// workspaceListTerraformVarsCommand is the top-level structure for the workspace list-terraform-vars command.
 type workspaceListTerraformVarsCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	showSensitive bool
+	toJSON        bool
 }
 
 // NewWorkspaceListTerraformVarsCommandFactory returns a workspaceListTerraformVarsCommand struct.
-func NewWorkspaceListTerraformVarsCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceListTerraformVarsCommand{
-			meta: meta,
+func NewWorkspaceListTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceListTerraformVarsCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (wltv workspaceListTerraformVarsCommand) Run(args []string) int {
-	wltv.meta.Logger.Debugf("Starting the 'workspace list-terraform-vars' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wltv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := wltv.meta.GetSDKClient()
-	if err != nil {
-		wltv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return wltv.doWorkspaceListTerraformVars(ctx, client, args)
+func (c *workspaceListTerraformVarsCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (wltv workspaceListTerraformVarsCommand) doWorkspaceListTerraformVars(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wltv.meta.Logger.Debugf("will do workspace list-terraform-vars, %d opts", len(opts))
+func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace list-terraform-vars"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := wltv.buildWorkspaceListTerraformVarsDefs()
-
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wltv.meta.BinaryName+" workspace list-terraform-vars", defs, opts)
+	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
-		wltv.meta.Logger.Error(output.FormatError("failed to parse workspace list-terraform-vars options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wltv.meta.Logger.Error(output.FormatError("missing workspace list-terraform-vars workspace path", nil), wltv.HelpWorkspaceListTerraformVars())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace list-terraform-vars arguments: %s", cmdArgs)
-		wltv.meta.Logger.Error(output.FormatError(msg, nil), wltv.HelpWorkspaceListTerraformVars())
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
-	namespacePath := cmdArgs[0]
+	input := &pb.GetNamespaceVariablesRequest{
+		NamespacePath: workspace.FullPath,
+	}
 
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	c.Logger.Debug("workspace list-terraform-vars input", "input", input)
+
+	result, err := c.client.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
 	if err != nil {
-		wltv.meta.UI.Error(output.FormatError("failed to parse boolean value for --json", err))
+		c.UI.ErrorWithSummary(err, "failed to list terraform variables")
 		return 1
 	}
 
-	showSensitive, err := getBoolOptionValue("show-sensitive", "false", cmdOpts)
-	if err != nil {
-		wltv.meta.UI.Error(output.FormatError("failed to parse boolean value for --show-sensitive", err))
-		return 1
+	// Filter to only terraform variables
+	var terraformVars []*pb.NamespaceVariable
+	for _, v := range result.Variables {
+		if v.Category == "terraform" {
+			terraformVars = append(terraformVars, v)
+		}
 	}
 
-	actualPath := trn.ToPath(namespacePath)
-	if !isNamespacePathValid(wltv.meta, actualPath) {
-		return 1
-	}
-	// Prepare the inputs - convert path to TRN and use ID field
-	trnID := trn.ToTRN(namespacePath, trn.ResourceTypeWorkspace)
-	input := &sdktypes.GetWorkspaceInput{ID: &trnID}
+	// Fetch sensitive values if requested
+	if c.showSensitive {
+		for _, v := range terraformVars {
+			if v.Sensitive && v.LatestVersionId != "" {
+				versionInput := &pb.GetNamespaceVariableVersionByIDRequest{
+					Id:                    v.LatestVersionId,
+					IncludeSensitiveValue: true,
+				}
 
-	if _, err = client.Workspaces.GetWorkspace(ctx, input); err != nil {
-		wltv.meta.Logger.Error(output.FormatError("failed to get workspace", err))
-		return 1
+				version, err := c.client.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
+				if err != nil {
+					c.UI.ErrorWithSummary(err, "failed to get variable version")
+					return 1
+				}
+
+				v.Value = version.Value
+				// Rate limit to avoid overwhelming the API
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
 	}
 
-	terraformVars, err := listTerraformVariables(ctx, wltv.meta, client, actualPath, showSensitive)
-	if err != nil {
-		wltv.meta.Logger.Error(output.FormatError("failed to list variables", err))
-		return 1
-	}
-
-	return outputNamespaceVariables(wltv.meta, toJSON, terraformVars)
+	return outputNamespaceVariables(c.UI, c.toJSON, c.showSensitive, terraformVars)
 }
 
-func (wltv workspaceListTerraformVarsCommand) buildWorkspaceListTerraformVarsDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"show-sensitive": {
-			Arguments: []string{},
-			Synopsis:  "Show the actual values of sensitive variables (requires appropriate permissions).",
-		},
-		"json": {
-			Arguments: []string{},
-			Synopsis:  "Output in JSON format.",
-		},
-	}
-}
-
-func (wltv workspaceListTerraformVarsCommand) Synopsis() string {
+func (*workspaceListTerraformVarsCommand) Synopsis() string {
 	return "List all terraform variables in a workspace."
 }
 
-func (wltv workspaceListTerraformVarsCommand) Help() string {
-	return wltv.HelpWorkspaceListTerraformVars()
+func (*workspaceListTerraformVarsCommand) Description() string {
+	return `
+   The workspace list-terraform-vars command retrieves all terraform
+   variables from a workspace and its parent workspaces.
+`
 }
 
-// HelpWorkspaceListTerraformVars produces the help string for the 'workspace list-terraform-vars' command.
-func (wltv workspaceListTerraformVarsCommand) HelpWorkspaceListTerraformVars() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace list-terraform-vars [options] <workspace>
+func (*workspaceListTerraformVarsCommand) Usage() string {
+	return "tharsis [global options] workspace list-terraform-vars [options] <workspace-id>"
+}
 
-   The workspace list-terraform-vars command retrieves all terraform
-   variables from a workspace and its parent groups.
+func (*workspaceListTerraformVarsCommand) Example() string {
+	return `
+tharsis workspace list-terraform-vars --show-sensitive trn:workspace:ops/my-workspace
+`
+}
 
-%s
+func (c *workspaceListTerraformVarsCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.showSensitive,
+		"show-sensitive",
+		false,
+		"Show the actual values of sensitive variables (requires appropriate permissions).",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-`, wltv.meta.BinaryName, buildHelpText(wltv.buildWorkspaceListTerraformVarsDefs()))
+	return f
 }

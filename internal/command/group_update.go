@@ -1,118 +1,126 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 // groupUpdateCommand is the top-level structure for the group update command.
 type groupUpdateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	description *string
+	version     *int64
+	toJSON      bool
+}
+
+var _ Command = (*groupUpdateCommand)(nil)
+
+func (c *groupUpdateCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewGroupUpdateCommandFactory returns a groupUpdateCommand struct.
-func NewGroupUpdateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupUpdateCommand{
-			meta: meta,
+func NewGroupUpdateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupUpdateCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (guc groupUpdateCommand) Run(args []string) int {
-	guc.meta.Logger.Debugf("Starting the 'group update' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		guc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *groupUpdateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group update"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := guc.meta.GetSDKClient()
+	groupID := c.arguments[0]
+
+	input := &pb.UpdateGroupRequest{
+		Id:          groupID,
+		Description: c.description,
+		Version:     c.version,
+	}
+
+	c.Logger.Debug("group update input", "input", input)
+
+	updatedGroup, err := c.client.GroupsClient.UpdateGroup(c.Context, input)
 	if err != nil {
-		guc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to update a group")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return guc.doGroupUpdate(ctx, client, args)
+	return outputGroup(c.UI, c.toJSON, updatedGroup)
 }
 
-func (guc groupUpdateCommand) doGroupUpdate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	guc.meta.Logger.Debugf("will do group update, %d opts", len(opts))
-
-	defs := buildCommonUpdateOptionDefs("group")
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(guc.meta.BinaryName+" group update", defs, opts)
-	if err != nil {
-		guc.meta.Logger.Error(output.FormatError("failed to parse group update options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		guc.meta.Logger.Error(output.FormatError("missing group update full path", nil), guc.HelpGroupUpdate())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group update arguments: %s", cmdArgs)
-		guc.meta.Logger.Error(output.FormatError(msg, nil), guc.HelpGroupUpdate())
-		return 1
-	}
-
-	path := cmdArgs[0]
-	description := getOption("description", "", cmdOpts)[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		guc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(path)
-	if !isNamespacePathValid(guc.meta, actualPath) {
-		return 1
-	}
-
-	// Extract path from TRN if needed - GroupPath field expects paths, not TRNs
-	actualPath = trn.ToPath(path)
-
-	input := &sdktypes.UpdateGroupInput{
-		GroupPath:   &actualPath,
-		Description: description,
-	}
-	guc.meta.Logger.Debugf("group update input: %#v", input)
-
-	// Update the group.
-	updatedGroup, err := client.Group.UpdateGroup(ctx, input)
-	if err != nil {
-		guc.meta.Logger.Error(output.FormatError("failed to update a group", err))
-		return 1
-	}
-
-	return outputGroup(guc.meta, toJSON, updatedGroup)
-}
-
-func (guc groupUpdateCommand) Synopsis() string {
+func (*groupUpdateCommand) Synopsis() string {
 	return "Update a group."
 }
 
-func (guc groupUpdateCommand) Help() string {
-	return guc.HelpGroupUpdate()
+func (*groupUpdateCommand) Usage() string {
+	return "tharsis [global options] group update [options] <id>"
 }
 
-// HelpGroupUpdate produces the help string for the 'group update' command.
-func (guc groupUpdateCommand) HelpGroupUpdate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group update [options] <full_path>
-
+func (*groupUpdateCommand) Description() string {
+	return `
    The group update command updates a group. Currently, it
    supports updating the description. Shows final output
    as JSON, if specified.
+`
+}
 
-%s
+func (*groupUpdateCommand) Example() string {
+	return `
+tharsis group update \
+  --description "Updated operations group" \
+  trn:group:ops/my-group
+`
+}
 
-`, guc.meta.BinaryName, buildHelpText(buildCommonUpdateOptionDefs("group")))
+func (c *groupUpdateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"description",
+		"Description for the group.",
+		func(s string) error {
+			c.description = &s
+			return nil
+		},
+	)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be updated. "+
+			"In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
 }
