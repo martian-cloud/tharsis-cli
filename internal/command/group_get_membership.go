@@ -51,7 +51,7 @@ func (c *groupGetMembershipCommand) Run(args []string) int {
 
 	c.Logger.Debug("group get-membership input", "input", input)
 
-	membership, err := c.client.NamespaceMembershipsClient.GetNamespaceMembershipByID(c.Context, input)
+	membership, err := c.grpcClient.NamespaceMembershipsClient.GetNamespaceMembershipByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group membership")
 		return 1

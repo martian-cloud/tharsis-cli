@@ -49,7 +49,7 @@ func (c *runnerAgentGetCommand) Run(args []string) int {
 		return code
 	}
 
-	runner, err := c.client.RunnersClient.GetRunnerByID(c.Context, &pb.GetRunnerByIDRequest{Id: c.arguments[0]})
+	runner, err := c.grpcClient.RunnersClient.GetRunnerByID(c.Context, &pb.GetRunnerByIDRequest{Id: c.arguments[0]})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get runner agent")
 		return 1

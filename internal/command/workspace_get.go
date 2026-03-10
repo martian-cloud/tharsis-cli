@@ -53,7 +53,7 @@ func (c *workspaceGetCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace get input", "input", input)
 
-	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, input)
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1

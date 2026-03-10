@@ -447,8 +447,8 @@ func WithUI(u terminal.UI) SSOOption {
 	}
 }
 
-// WithClient sets the gRPC client for fetching auth settings.
-func WithClient(grpcClient *client.Client) SSOOption {
+// WithGRPCClient sets the gRPC client for fetching auth settings.
+func WithGRPCClient(grpcClient *client.Client) SSOOption {
 	return func(c *SSOClient) {
 		c.grpcClient = grpcClient
 	}

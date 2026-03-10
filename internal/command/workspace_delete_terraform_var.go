@@ -48,7 +48,7 @@ func (c *workspaceDeleteTerraformVarCommand) Run(args []string) int {
 	}
 
 	// Get workspace to retrieve full path
-	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
@@ -64,7 +64,7 @@ func (c *workspaceDeleteTerraformVarCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace delete-terraform-var input", "input", deleteInput)
 
-	if _, err = c.client.NamespaceVariablesClient.DeleteNamespaceVariable(c.Context, deleteInput); err != nil {
+	if _, err = c.grpcClient.NamespaceVariablesClient.DeleteNamespaceVariable(c.Context, deleteInput); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete terraform variable")
 		return 1
 	}

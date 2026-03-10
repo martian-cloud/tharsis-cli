@@ -75,7 +75,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Run(args []string) int {
 
 	c.Logger.Debug("managed identity access rule create input", "input", input)
 
-	createdRule, err := c.client.ManagedIdentitiesClient.CreateManagedIdentityAccessRule(c.Context, input)
+	createdRule, err := c.grpcClient.ManagedIdentitiesClient.CreateManagedIdentityAccessRule(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a managed identity access rule")
 		return 1

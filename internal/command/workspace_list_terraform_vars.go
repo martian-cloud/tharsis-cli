@@ -45,7 +45,7 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 		return code
 	}
 
-	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
@@ -57,7 +57,7 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace list-terraform-vars input", "input", input)
 
-	result, err := c.client.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
+	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to list terraform variables")
 		return 1
@@ -80,7 +80,7 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 					IncludeSensitiveValue: true,
 				}
 
-				version, err := c.client.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
+				version, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
 				if err != nil {
 					c.UI.ErrorWithSummary(err, "failed to get variable version")
 					return 1

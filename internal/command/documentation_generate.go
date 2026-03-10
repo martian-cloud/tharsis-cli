@@ -5,6 +5,7 @@ package command
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -19,7 +20,7 @@ const markdownTemplateForCommandList = `
 
 Currently, the following commands are available:
 
-` + "```" + `
+` + "```bash" + `
 {{block "list" .}}{{range .}}{{printf "%s   %s\n" .Name .Synopsis}}{{end}}{{end}}` + "```" + `{{"\n"}}{{"\n"}}
 `
 
@@ -27,18 +28,19 @@ Currently, the following commands are available:
 const markdownTemplateForCommandDetails = `
 {{define "DetailElement"}}
 {{if .IsSubcommand}}---{{"\n"}}{{"\n"}}#### {{.Name}}
-{{else}}***{{"\n"}}{{"\n"}}### Command: {{.Name}}{{end}}{{"\n"}}{{"\n"}}
+{{else}}---{{"\n"}}{{"\n"}}## {{.Name}}{{end}}{{"\n"}}{{"\n"}}
 
-##### {{.Synopsis}}{{"\n"}}{{"\n"}}
+{{.Synopsis}}{{"\n"}}{{"\n"}}
 
 {{if .HasSubcommands}}
-**Subcommands:**{{"\n"}}{{"\n"}}` + "```" + `{{"\n"}}
-{{range .Subcommands}}{{printf "%s   %s\n" .Name .Synopsis}}{{end}}` + "```" + `{{"\n"}}{{"\n"}}
+:::info Subcommands{{"\n"}}
+{{range .Subcommands}}` + "- `" + `{{.Name}}` + "`" + ` - {{.Synopsis}}{{"\n"}}{{end}}
+:::{{"\n"}}{{"\n"}}
 {{end}}
 
 {{if .UsageLine}}
-` + "```" + `{{"\n"}}
-Usage: {{.UsageLine}}{{"\n"}}
+` + "```bash" + `{{"\n"}}
+{{.UsageLine}}{{"\n"}}
 ` + "```" + `{{"\n"}}
 {{"\n"}}{{end}}
 
@@ -47,16 +49,18 @@ Usage: {{.UsageLine}}{{"\n"}}
 {{if .Flags}}
 {{with .Flags}}
 <details>{{"\n"}}
-<summary>Expand options</summary>{{"\n"}}{{"\n"}}
-{{range .}}{{printf "- ` + "`" + `--%s` + "`" + `: %s\n\n" .Name .Description}}{{end}}{{end}}
+<summary>Options</summary>{{"\n"}}{{"\n"}}
+{{range .}}` + "- `" + `--{{.Name}}` + "`" + ` - {{.Description}}{{"\n\n"}}{{end}}{{end}}
 </details>
 {{"\n"}}{{"\n"}}
 {{end}}
 
-{{if .Example}}##### Example:{{"\n"}}{{"\n"}}
-` + "```" + `{{"\n"}}
+{{if .Example}}
+:::note Example{{"\n"}}
+` + "```bash" + `{{"\n"}}
 {{.Example}}{{"\n"}}
 ` + "```" + `{{"\n"}}
+:::{{"\n"}}
 {{"\n"}}{{end}}
 
 {{end}}
@@ -92,7 +96,7 @@ var _ Command = (*documentationGenerateCommand)(nil)
 type documentationGenerateCommand struct {
 	*BaseCommand
 
-	outputFilename string
+	outputFilename *string
 	allCommands    map[string]Factory
 }
 
@@ -123,151 +127,29 @@ func (c *documentationGenerateCommand) Run(args []string) int {
 		return code
 	}
 
-	oFile := os.Stdout
-	if c.outputFilename != "" {
-		var err error
-		oFile, err = os.Create(c.outputFilename)
+	generator, err := newMarkdownGenerator()
+	if err != nil {
+		c.Logger.Error(fmt.Sprintf("Failed to create generator: %s", err))
+		return 1
+	}
+
+	writer := os.Stdout
+	if c.outputFilename != nil {
+		file, err := os.Create(*c.outputFilename)
 		if err != nil {
 			c.Logger.Error(fmt.Sprintf("Failed to create output file: %s", err))
 			return 1
 		}
+		defer file.Close()
+		writer = file
 	}
 
-	// If a preamble is desired, it could be added or copied in at this point.
-
-	commandNames := make([]string, 0, len(c.allCommands))
-	for name := range c.allCommands {
-		commandNames = append(commandNames, name)
-	}
-	sort.Strings(commandNames)
-
-	// Run the factories to cache the commands.
-	commands := make(map[string]Command, len(c.allCommands))
-	for _, name := range commandNames {
-		command, err := c.allCommands[name]()
-		if err != nil {
-			c.Logger.Error(fmt.Sprintf("Failed to create command: %s", name))
-			return 1
-		}
-
-		commands[name] = command
-	}
-
-	// One line per command.
-	commandList := make([]markdownCommandListElem, 0, len(commandNames))
-	longestName := 0
-	for _, name := range commandNames {
-		if len(name) > longestName {
-			longestName = len(name)
-		}
-	}
-	formatString := fmt.Sprintf("%%-%ds", longestName) // This is used a few paragraphs below, as well.
-	for _, name := range commandNames {
-		// Don't add subcommands to the summary list.
-		if !strings.Contains(name, " ") {
-			commandList = append(commandList, markdownCommandListElem{
-				Name:     fmt.Sprintf(formatString, name),
-				Synopsis: commands[name].Synopsis(),
-			})
-		}
-	}
-
-	listTemplate, err := template.New("command-list").Parse(strings.TrimSpace(markdownTemplateForCommandList))
-	if err != nil {
-		c.Logger.Error(fmt.Sprintf("Failed to parse command list template: %s", err))
+	if err := generator.Generate(writer, c.allCommands); err != nil {
+		c.Logger.Error(fmt.Sprintf("Failed to generate documentation: %s", err))
 		return 1
 	}
-
-	if eErr := listTemplate.Execute(oFile, commandList); eErr != nil {
-		c.Logger.Error(fmt.Sprintf("Failed to execute command list template: %s", eErr))
-		return 1
-	}
-
-	// If a middle section is desired (general comments about command syntax, etc.), it could be added or copied in at this point.
-
-	// Scan to determine which commands have subcommands.
-	isSubcommand := make(map[string]bool, len(c.allCommands))
-	hasSubcommands := make(map[string]bool, len(c.allCommands))
-	subCommands := make(map[string][]markdownCommandListElem, len(c.allCommands))
-	for _, name := range commandNames {
-		if strings.Contains(name, " ") {
-			isSubcommand[name] = true
-			nameParts := strings.Split(name, " ")
-
-			// Determine the parent name by removing the last part
-			// For "project variable-set create", parent is "project variable-set"
-			// For "project create", parent is "project"
-			parentName := strings.Join(nameParts[:len(nameParts)-1], " ")
-			subName := nameParts[len(nameParts)-1]
-
-			if _, ok := c.allCommands[parentName]; ok {
-				hasSubcommands[parentName] = true
-			}
-
-			if _, ok := subCommands[parentName]; !ok {
-				subCommands[parentName] = make([]markdownCommandListElem, 0)
-			}
-			subCommands[parentName] = append(subCommands[parentName], markdownCommandListElem{
-				Name:     fmt.Sprintf(formatString, subName),
-				Synopsis: commands[name].Synopsis(),
-			})
-		}
-	}
-
-	// One section per command.
-	commandDetailList := make([]markdownCommandDetail, 0, len(commandNames))
-	for _, name := range commandNames {
-		command := commands[name]
-		listElem := markdownCommandDetail{
-			Name:           name,
-			Synopsis:       command.Synopsis(),
-			UsageLine:      strings.TrimSpace(command.Usage()),
-			Description:    c.sanitizeForMarkdown(strings.TrimSuffix(strings.TrimPrefix(command.Description(), "\n"), "\n")),
-			Example:        strings.TrimSpace(command.Example()),
-			Flags:          make([]markdownFlag, 0),
-			IsSubcommand:   isSubcommand[name],
-			HasSubcommands: hasSubcommands[name],
-			Subcommands:    subCommands[name],
-		}
-
-		// Get all the flags in proper order.
-		flagSet := command.Flags()
-		if flagSet != nil {
-			flagSet.VisitAll(func(f *flag.Flag) {
-				listElem.Flags = append(listElem.Flags, markdownFlag{
-					Name:        f.Name,
-					Description: f.Usage,
-				})
-			})
-		}
-
-		commandDetailList = append(commandDetailList, listElem)
-	}
-
-	detailTemplate, err := template.New("command-detail").Parse(strings.Replace(markdownTemplateForCommandDetails, "\n", "", -1))
-	if err != nil {
-		c.Logger.Error(fmt.Sprintf("Failed to parse command details template: %s", err))
-		return 1
-	}
-
-	if eErr := detailTemplate.Execute(oFile, commandDetailList); eErr != nil {
-		c.Logger.Error(fmt.Sprintf("Failed to execute command details template: %s", eErr))
-		return 1
-	}
-
-	// If a FAQ or other material should follow the command descriptions, it could be added or copied in at this point.
 
 	return 0
-}
-
-// sanitizeForMarkdown escapes brackets to hide them from the Markdown interpreter.
-func (c *documentationGenerateCommand) sanitizeForMarkdown(s string) string {
-	s = strings.Replace(s, "[", "\\[", -1)
-	s = strings.Replace(s, "]", "\\]", -1)
-	s = strings.Replace(s, "<", "\\<", -1)
-	s = strings.Replace(s, ">", "\\>", -1)
-
-	return s
 }
 
 func (c *documentationGenerateCommand) Synopsis() string {
@@ -293,12 +175,197 @@ tharsis documentation generate
 
 func (c *documentationGenerateCommand) Flags() *flag.FlagSet {
 	f := flag.NewFlagSet("command options", flag.ContinueOnError)
-	f.StringVar(
-		&c.outputFilename,
+	f.Func(
 		"output",
-		"",
 		"The output filename.",
+		func(s string) error {
+			c.outputFilename = &s
+			return nil
+		},
 	)
 
 	return f
+}
+
+// markdownGenerator handles markdown documentation generation
+type markdownGenerator struct {
+	listTemplate   *template.Template
+	detailTemplate *template.Template
+}
+
+func newMarkdownGenerator() (*markdownGenerator, error) {
+	listTmpl, err := template.New("command-list").Parse(strings.TrimSpace(markdownTemplateForCommandList))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse command list template: %w", err)
+	}
+
+	detailTmpl, err := template.New("command-detail").Parse(strings.ReplaceAll(markdownTemplateForCommandDetails, "\n", ""))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse command details template: %w", err)
+	}
+
+	return &markdownGenerator{
+		listTemplate:   listTmpl,
+		detailTemplate: detailTmpl,
+	}, nil
+}
+
+func (g *markdownGenerator) Generate(writer io.Writer, allCommands map[string]Factory) error {
+	commands, err := g.instantiateCommands(allCommands)
+	if err != nil {
+		return err
+	}
+
+	list := g.buildCommandList(commands)
+	if err := g.listTemplate.Execute(writer, list); err != nil {
+		return fmt.Errorf("failed to execute command list template: %w", err)
+	}
+
+	details := g.buildCommandDetails(commands)
+	if err := g.detailTemplate.Execute(writer, details); err != nil {
+		return fmt.Errorf("failed to execute command details template: %w", err)
+	}
+
+	return nil
+}
+
+func (g *markdownGenerator) instantiateCommands(allCommands map[string]Factory) (map[string]Command, error) {
+	commandNames := make([]string, 0, len(allCommands))
+	for name := range allCommands {
+		commandNames = append(commandNames, name)
+	}
+	sort.Strings(commandNames)
+
+	commands := make(map[string]Command, len(allCommands))
+	for _, name := range commandNames {
+		command, err := allCommands[name]()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create command %s: %w", name, err)
+		}
+		commands[name] = command
+	}
+
+	return commands, nil
+}
+
+func (g *markdownGenerator) buildCommandList(commands map[string]Command) []markdownCommandListElem {
+	commandNames := g.getSortedCommandNames(commands)
+	longestName := g.getLongestNameLength(commandNames)
+	formatString := fmt.Sprintf("%%-%ds", longestName)
+
+	list := make([]markdownCommandListElem, 0)
+	for _, name := range commandNames {
+		// Don't add subcommands to the summary list
+		if !strings.Contains(name, " ") {
+			list = append(list, markdownCommandListElem{
+				Name:     fmt.Sprintf(formatString, name),
+				Synopsis: commands[name].Synopsis(),
+			})
+		}
+	}
+
+	return list
+}
+
+func (g *markdownGenerator) buildCommandDetails(commands map[string]Command) []markdownCommandDetail {
+	commandNames := g.getSortedCommandNames(commands)
+	longestName := g.getLongestNameLength(commandNames)
+	formatString := fmt.Sprintf("%%-%ds", longestName)
+
+	isSubcommand, hasSubcommands, subCommands := g.analyzeSubcommands(commands, commandNames, formatString)
+
+	details := make([]markdownCommandDetail, 0, len(commandNames))
+	for _, name := range commandNames {
+		command := commands[name]
+		detail := markdownCommandDetail{
+			Name:           name,
+			Synopsis:       command.Synopsis(),
+			UsageLine:      strings.TrimSpace(command.Usage()),
+			Description:    sanitizeForMarkdown(strings.TrimSuffix(strings.TrimPrefix(command.Description(), "\n"), "\n")),
+			Example:        strings.TrimSpace(command.Example()),
+			Flags:          extractFlags(command),
+			IsSubcommand:   isSubcommand[name],
+			HasSubcommands: hasSubcommands[name],
+			Subcommands:    subCommands[name],
+		}
+		details = append(details, detail)
+	}
+
+	return details
+}
+
+func (g *markdownGenerator) analyzeSubcommands(commands map[string]Command, commandNames []string, formatString string) (
+	map[string]bool,
+	map[string]bool,
+	map[string][]markdownCommandListElem,
+) {
+	isSubcommand := make(map[string]bool)
+	hasSubcommands := make(map[string]bool)
+	subCommands := make(map[string][]markdownCommandListElem)
+
+	for _, name := range commandNames {
+		idx := strings.LastIndex(name, " ")
+		if idx == -1 {
+			continue
+		}
+
+		isSubcommand[name] = true
+		parentName := name[:idx]
+		subName := name[idx+1:]
+
+		if _, exists := commands[parentName]; exists {
+			hasSubcommands[parentName] = true
+		}
+
+		if _, ok := subCommands[parentName]; !ok {
+			subCommands[parentName] = make([]markdownCommandListElem, 0)
+		}
+		subCommands[parentName] = append(subCommands[parentName], markdownCommandListElem{
+			Name:     fmt.Sprintf(formatString, subName),
+			Synopsis: commands[name].Synopsis(),
+		})
+	}
+
+	return isSubcommand, hasSubcommands, subCommands
+}
+
+func (g *markdownGenerator) getSortedCommandNames(commands map[string]Command) []string {
+	names := make([]string, 0, len(commands))
+	for name := range commands {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (g *markdownGenerator) getLongestNameLength(names []string) int {
+	longest := 0
+	for _, name := range names {
+		if len(name) > longest {
+			longest = len(name)
+		}
+	}
+	return longest
+}
+
+func extractFlags(command Command) []markdownFlag {
+	flags := make([]markdownFlag, 0)
+	flagSet := command.Flags()
+	if flagSet != nil {
+		flagSet.VisitAll(func(f *flag.Flag) {
+			flags = append(flags, markdownFlag{
+				Name:        f.Name,
+				Description: f.Usage,
+			})
+		})
+	}
+	return flags
+}
+
+func sanitizeForMarkdown(s string) string {
+	s = strings.ReplaceAll(s, "[", "\\[")
+	s = strings.ReplaceAll(s, "]", "\\]")
+	s = strings.ReplaceAll(s, "<", "\\<")
+	s = strings.ReplaceAll(s, ">", "\\>")
+	return s
 }

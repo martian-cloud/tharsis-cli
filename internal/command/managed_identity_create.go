@@ -80,7 +80,7 @@ func (c *managedIdentityCreateCommand) Run(args []string) int {
 
 	c.Logger.Debug("managed identity create input", "input", input)
 
-	createdIdentity, err := c.client.ManagedIdentitiesClient.CreateManagedIdentity(c.Context, input)
+	createdIdentity, err := c.grpcClient.ManagedIdentitiesClient.CreateManagedIdentity(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a managed identity")
 		return 1

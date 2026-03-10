@@ -117,7 +117,7 @@ type BaseCommand struct {
 	Logger               hclog.Logger
 	UI                   terminal.UI
 	HTTPClient           *http.Client
-	client               *client.Client
+	grpcClient           *client.Client
 	Version              string
 	DisplayTitle         string
 	BinaryName           string
@@ -202,7 +202,7 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 			return 1
 		}
 
-		c.client = client
+		c.grpcClient = client
 	}
 
 	return 0
@@ -239,8 +239,8 @@ func (c *BaseCommand) Close() error {
 	if closer, ok := c.UI.(io.Closer); ok {
 		errs = append(errs, closer.Close())
 	}
-	if c.client != nil {
-		errs = append(errs, c.client.Close())
+	if c.grpcClient != nil {
+		errs = append(errs, c.grpcClient.Close())
 	}
 
 	return errors.Join(errs...)

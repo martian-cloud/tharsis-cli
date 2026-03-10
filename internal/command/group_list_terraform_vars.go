@@ -48,7 +48,7 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 		return code
 	}
 
-	group, err := c.client.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
@@ -60,7 +60,7 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 
 	c.Logger.Debug("group list-terraform-vars input", "input", input)
 
-	result, err := c.client.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
+	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to list terraform variables")
 		return 1
@@ -83,7 +83,7 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 					IncludeSensitiveValue: true,
 				}
 
-				version, err := c.client.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
+				version, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
 				if err != nil {
 					c.UI.ErrorWithSummary(err, "failed to get variable version")
 					return 1

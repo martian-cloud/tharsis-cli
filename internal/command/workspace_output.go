@@ -66,7 +66,7 @@ func (c *workspaceOutputsCommand) Run(args []string) int {
 		return code
 	}
 
-	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
 		Id: c.arguments[0],
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func (c *workspaceOutputsCommand) Run(args []string) int {
 		return 1
 	}
 
-	result, err := c.client.StateVersionsClient.GetStateVersionOutputs(c.Context, &pb.GetStateVersionOutputsRequest{
+	result, err := c.grpcClient.StateVersionsClient.GetStateVersionOutputs(c.Context, &pb.GetStateVersionOutputsRequest{
 		StateVersionId: workspace.CurrentStateVersionId,
 	})
 	if err != nil {

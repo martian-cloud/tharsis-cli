@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 const (
@@ -34,7 +35,7 @@ type getJobLogsOutput struct {
 }
 
 // GetJobLogs returns an MCP tool for retrieving job logs.
-func getJobLogs(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getJobLogsInput, getJobLogsOutput]) {
+func getJobLogs(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getJobLogsInput, *getJobLogsOutput]) {
 	tool := mcp.Tool{
 		Name:        "get_job_logs",
 		Description: "Retrieve logs from a Terraform job. Get the job ID from get_run response (plan_job_id or apply_job_id). Returns a limited number of bytes for efficiency. Use start parameter to paginate through logs. Check has_more in response to determine if additional pages exist.",
@@ -44,34 +45,25 @@ func getJobLogs(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getJobLogsInput, 
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input getJobLogsInput) (*mcp.CallToolResult, getJobLogsOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, getJobLogsOutput{}, fmt.Errorf("failed to get tharsis client: %w", err)
-		}
-
-		// Set defaults
-		start := int32(0)
-		if input.Start != nil {
-			start = int32(*input.Start)
-		}
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *getJobLogsInput) (*mcp.CallToolResult, *getJobLogsOutput, error) {
+		start := int32(ptr.ToInt(input.Start))
 		limit := int32(defaultLogLimit)
 		if input.Limit != nil {
 			if *input.Limit > maxLogLimit {
-				return nil, getJobLogsOutput{}, fmt.Errorf("limit %d exceeds maximum allowed limit of %d bytes", *input.Limit, maxLogLimit)
+				return nil, nil, fmt.Errorf("limit %d exceeds maximum allowed limit of %d bytes", *input.Limit, maxLogLimit)
 			}
 			limit = int32(*input.Limit)
 		}
 
 		// Request one extra byte to detect if there's more data
 		requestLimit := limit + 1
-		logsResp, err := client.Jobs().GetJobLogs(ctx, &sdktypes.GetJobLogsInput{
-			JobID: input.JobID,
-			Start: start,
-			Limit: &requestLimit,
+		logsResp, err := tc.grpcClient.JobsClient.GetJobLogs(ctx, &pb.GetJobLogsRequest{
+			JobId:       input.JobID,
+			StartOffset: start,
+			Limit:       requestLimit,
 		})
 		if err != nil {
-			return nil, getJobLogsOutput{}, fmt.Errorf("failed to get logs for job %q: %w", input.JobID, err)
+			return nil, nil, fmt.Errorf("failed to get logs for job %q: %w", input.JobID, err)
 		}
 
 		// If we got more than limit, there's more data available
@@ -81,7 +73,7 @@ func getJobLogs(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getJobLogsInput, 
 			logs = logs[:limit]
 		}
 
-		return nil, getJobLogsOutput{
+		return nil, &getJobLogsOutput{
 			JobID:   input.JobID,
 			Logs:    logs,
 			Start:   int(start),

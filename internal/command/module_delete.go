@@ -49,7 +49,7 @@ func (c *moduleDeleteCommand) Run(args []string) int {
 
 	c.Logger.Debug("module delete input", "input", input)
 
-	if _, err := c.client.TerraformModulesClient.DeleteTerraformModule(c.Context, input); err != nil {
+	if _, err := c.grpcClient.TerraformModulesClient.DeleteTerraformModule(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete a module")
 		return 1
 	}

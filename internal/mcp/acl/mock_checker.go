@@ -5,8 +5,10 @@ package acl
 import (
 	context "context"
 
+	client "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+
 	mock "github.com/stretchr/testify/mock"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+
 	trn "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -15,17 +17,17 @@ type MockChecker struct {
 	mock.Mock
 }
 
-// Authorize provides a mock function with given fields: ctx, client, identifier, resType
-func (_m *MockChecker) Authorize(ctx context.Context, client tharsis.Client, identifier string, resType trn.ResourceType) error {
-	ret := _m.Called(ctx, client, identifier, resType)
+// Authorize provides a mock function with given fields: ctx, _a1, identifier, resType
+func (_m *MockChecker) Authorize(ctx context.Context, _a1 *client.Client, identifier string, resType trn.ResourceType) error {
+	ret := _m.Called(ctx, _a1, identifier, resType)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Authorize")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, tharsis.Client, string, trn.ResourceType) error); ok {
-		r0 = rf(ctx, client, identifier, resType)
+	if rf, ok := ret.Get(0).(func(context.Context, *client.Client, string, trn.ResourceType) error); ok {
+		r0 = rf(ctx, _a1, identifier, resType)
 	} else {
 		r0 = ret.Error(0)
 	}

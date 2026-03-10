@@ -72,7 +72,7 @@ func (c *terraformProviderMirrorListPlatformsCommand) Run(args []string) int {
 
 	c.Logger.Debug("terraform-provider-mirror list-platforms input", "input", input)
 
-	result, err := c.client.TerraformProviderMirrorsClient.GetTerraformProviderPlatformMirrors(c.Context, input)
+	result, err := c.grpcClient.TerraformProviderMirrorsClient.GetTerraformProviderPlatformMirrors(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of provider platform mirrors")
 		return 1

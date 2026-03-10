@@ -51,7 +51,7 @@ func (c *moduleGetVersionCommand) Run(args []string) int {
 
 	c.Logger.Debug("module get version input", "input", input)
 
-	version, err := c.client.TerraformModulesClient.GetTerraformModuleVersionByID(c.Context, input)
+	version, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleVersionByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get module version")
 		return 1

@@ -53,7 +53,7 @@ func (c *groupGetCommand) Run(args []string) int {
 
 	c.Logger.Debug("group get input", "input", input)
 
-	group, err := c.client.GroupsClient.GetGroupByID(c.Context, input)
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1

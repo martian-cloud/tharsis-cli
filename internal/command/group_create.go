@@ -59,7 +59,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 		if c.parentGroupID != nil {
 			c.Logger.Debug("getting parent group", "value", *c.parentGroupID)
 
-			group, err := c.client.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: *c.parentGroupID})
+			group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: *c.parentGroupID})
 			if err != nil {
 				c.UI.ErrorWithSummary(err, "failed to get parent group")
 				return 1
@@ -72,7 +72,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 
 		c.Logger.Debug("checking if group exists", "value", checkID)
 
-		existingGroup, err := c.client.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: checkID})
+		existingGroup, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: checkID})
 		if err != nil && status.Code(err) != codes.NotFound {
 			c.UI.ErrorWithSummary(err, "failed to check group")
 			return 1
@@ -92,7 +92,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 
 	c.Logger.Debug("group create input", "input", input)
 
-	createdGroup, err := c.client.GroupsClient.CreateGroup(c.Context, input)
+	createdGroup, err := c.grpcClient.GroupsClient.CreateGroup(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a group")
 		return 1

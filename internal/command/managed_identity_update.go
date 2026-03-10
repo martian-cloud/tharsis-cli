@@ -57,7 +57,7 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 
 	var data *string
 	if c.updateIdentityData {
-		identity, err := c.client.ManagedIdentitiesClient.GetManagedIdentityByID(c.Context, &pb.GetManagedIdentityByIDRequest{Id: managedIdentityID})
+		identity, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityByID(c.Context, &pb.GetManagedIdentityByIDRequest{Id: managedIdentityID})
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get managed identity")
 			return 1
@@ -96,7 +96,7 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 
 	c.Logger.Debug("managed identity update input", "input", input)
 
-	updatedIdentity, err := c.client.ManagedIdentitiesClient.UpdateManagedIdentity(c.Context, input)
+	updatedIdentity, err := c.grpcClient.ManagedIdentitiesClient.UpdateManagedIdentity(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update a managed identity")
 		return 1

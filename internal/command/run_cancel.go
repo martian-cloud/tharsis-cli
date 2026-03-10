@@ -46,7 +46,7 @@ func (c *runCancelCommand) Run(args []string) int {
 	runID := c.arguments[0]
 
 	// Subscribe to run events
-	stream, err := c.client.RunsClient.SubscribeToRunEvents(c.Context, &pb.SubscribeToRunEventsRequest{
+	stream, err := c.grpcClient.RunsClient.SubscribeToRunEvents(c.Context, &pb.SubscribeToRunEventsRequest{
 		RunId: &runID,
 	})
 	if err != nil {
@@ -61,7 +61,7 @@ func (c *runCancelCommand) Run(args []string) int {
 
 	c.Logger.Debug("run cancel input", "input", input)
 
-	if _, err = c.client.RunsClient.CancelRun(c.Context, input); err != nil {
+	if _, err = c.grpcClient.RunsClient.CancelRun(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to cancel run")
 		return 1
 	}

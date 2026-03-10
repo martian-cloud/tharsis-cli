@@ -62,7 +62,7 @@ func (c *loginCommand) Run(args []string) int {
 		currentSettings.CurrentProfile.Endpoint,
 		auth.WithLogger(c.Logger),
 		auth.WithUI(c.UI),
-		auth.WithClient(c.client),
+		auth.WithGRPCClient(c.grpcClient),
 	)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create SSO client")

@@ -59,7 +59,7 @@ func (c *groupUpdateCommand) Run(args []string) int {
 
 	c.Logger.Debug("group update input", "input", input)
 
-	updatedGroup, err := c.client.GroupsClient.UpdateGroup(c.Context, input)
+	updatedGroup, err := c.grpcClient.GroupsClient.UpdateGroup(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update a group")
 		return 1

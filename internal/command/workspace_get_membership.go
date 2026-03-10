@@ -49,7 +49,7 @@ func (c *workspaceGetMembershipCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace get-membership input", "input", input)
 
-	membership, err := c.client.NamespaceMembershipsClient.GetNamespaceMembershipByID(c.Context, input)
+	membership, err := c.grpcClient.NamespaceMembershipsClient.GetNamespaceMembershipByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace membership")
 		return 1

@@ -27,7 +27,7 @@ const (
 // Manager provides high-level run management operations
 type Manager struct {
 	grpcClient *client.Client
-	restClient *tfe.RESTClient
+	tfeClient  tfe.RESTClient
 	logger     hclog.Logger
 	ui         terminal.UI
 }
@@ -58,13 +58,18 @@ func NewManager(
 	endpoint string,
 	logger hclog.Logger,
 	ui terminal.UI,
-) *Manager {
+) (*Manager, error) {
+	tfeClient, err := tfe.NewRESTClient(endpoint, tokenGetter, httpClient)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Manager{
 		grpcClient: grpcClient,
-		restClient: tfe.NewClient(endpoint, tokenGetter, httpClient),
+		tfeClient:  tfeClient,
 		logger:     logger,
 		ui:         ui,
-	}
+	}, nil
 }
 
 // CreateRun creates and executes a run
@@ -142,7 +147,7 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 	m.logger.Debug("created run", "run_id", createdRun.Metadata.Id)
 
 	// Get the job for the plan
-	job, err := m.grpcClient.RunsClient.GetLatestJobForPlan(ctx, &pb.GetLatestJobForPlanRequest{
+	job, err := m.grpcClient.JobsClient.GetLatestJobForPlan(ctx, &pb.GetLatestJobForPlanRequest{
 		PlanId: createdRun.PlanId,
 	})
 	if err != nil {
@@ -180,7 +185,7 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 	}
 
 	// Get the job for the apply
-	job, err := m.grpcClient.RunsClient.GetLatestJobForApply(ctx, &pb.GetLatestJobForApplyRequest{
+	job, err := m.grpcClient.JobsClient.GetLatestJobForApply(ctx, &pb.GetLatestJobForApplyRequest{
 		ApplyId: appliedRun.ApplyId,
 	})
 	if err != nil {
@@ -282,7 +287,11 @@ func (m *Manager) uploadConfigVersion(ctx context.Context, workspaceGID, directo
 	m.ui.Output("Uploading configuration version")
 
 	// Upload the directory using GID
-	if err := m.restClient.UploadConfigurationVersion(ctx, workspaceGID, createdConfigVersion.Metadata.Id, directoryPath); err != nil {
+	if err = m.tfeClient.UploadConfigurationVersion(ctx, &tfe.UploadConfigurationVersionInput{
+		WorkspaceID:     workspaceGID,
+		ConfigVersionID: createdConfigVersion.Metadata.Id,
+		DirectoryPath:   directoryPath,
+	}); err != nil {
 		return "", err
 	}
 
@@ -341,8 +350,6 @@ func processDirectoryPath(directoryPath string, isDestroy bool) error {
 	return nil
 }
 
-// Check whether a directory path has at least one file whose name ends in ".tf" or ".tf.json".
-// Return true if at least one such file exists.
 func hasConfigFile(dirPath string) (bool, error) {
 	found := false
 

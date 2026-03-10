@@ -51,7 +51,7 @@ func (c *groupListMembershipsCommand) Run(args []string) int {
 
 	c.Logger.Debug("group list-memberships input", "input", input)
 
-	result, err := c.client.NamespaceMembershipsClient.GetNamespaceMembershipsForNamespace(c.Context, input)
+	result, err := c.grpcClient.NamespaceMembershipsClient.GetNamespaceMembershipsForNamespace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of group memberships")
 		return 1

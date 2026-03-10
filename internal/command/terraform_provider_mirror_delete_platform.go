@@ -47,7 +47,7 @@ func (c *terraformProviderMirrorDeletePlatformCommand) Run(args []string) int {
 
 	c.Logger.Debug("terraform-provider-mirror delete-platform input", "input", input)
 
-	if _, err := c.client.TerraformProviderMirrorsClient.DeleteTerraformProviderPlatformMirror(c.Context, input); err != nil {
+	if _, err := c.grpcClient.TerraformProviderMirrorsClient.DeleteTerraformProviderPlatformMirror(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete terraform provider platform mirror")
 		return 1
 	}

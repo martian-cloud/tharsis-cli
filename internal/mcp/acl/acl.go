@@ -19,16 +19,16 @@ import (
 	"strings"
 
 	"github.com/ryanuber/go-glob"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 const maxPatternLength = 512
 
 // Checker validates access to namespaces.
 type Checker interface {
-	Authorize(ctx context.Context, client tharsis.Client, identifier string, resType trn.ResourceType) error
+	Authorize(ctx context.Context, client *client.Client, identifier string, resType trn.ResourceType) error
 }
 
 type checker struct {
@@ -51,7 +51,7 @@ func NewChecker(patternStr string) (Checker, error) {
 	}, nil
 }
 
-func (a *checker) Authorize(ctx context.Context, client tharsis.Client, identifier string, resType trn.ResourceType) error {
+func (a *checker) Authorize(ctx context.Context, client *client.Client, identifier string, resType trn.ResourceType) error {
 	if !a.hasPatterns {
 		return nil
 	}
@@ -70,53 +70,46 @@ func (a *checker) Authorize(ctx context.Context, client tharsis.Client, identifi
 	return err
 }
 
-func (a *checker) resolveNamespacePath(ctx context.Context, client tharsis.Client, identifier string, resType trn.ResourceType) (string, error) {
+func (a *checker) resolveNamespacePath(ctx context.Context, client *client.Client, identifier string, resType trn.ResourceType) (string, error) {
 	switch resType {
 	case trn.ResourceTypeWorkspace:
-		ws, err := client.Workspaces().GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &identifier})
+		resp, err := client.WorkspacesClient.GetWorkspaceByID(ctx, &pb.GetWorkspaceByIDRequest{Id: identifier})
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve workspace path: %w", err)
 		}
-		return ws.FullPath, nil
+		return resp.FullPath, nil
 
 	case trn.ResourceTypeGroup:
-		grp, err := client.Groups().GetGroup(ctx, &sdktypes.GetGroupInput{ID: &identifier})
+		resp, err := client.GroupsClient.GetGroupByID(ctx, &pb.GetGroupByIDRequest{Id: identifier})
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve group path: %w", err)
 		}
-		return grp.FullPath, nil
+		return resp.FullPath, nil
 
 	case trn.ResourceTypeRun:
-		run, err := client.Runs().GetRun(ctx, &sdktypes.GetRunInput{ID: identifier})
+		resp, err := client.RunsClient.GetRunByID(ctx, &pb.GetRunByIDRequest{Id: identifier})
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve run: %w", err)
 		}
-		pathParts := trn.ToPathParts(run.Metadata.TRN)
+		pathParts := trn.ToPathParts(resp.Metadata.Trn)
 		return strings.Join(pathParts[:len(pathParts)-1], "/"), nil
 
 	case trn.ResourceTypeConfigurationVersion:
-		cv, err := client.ConfigurationVersions().GetConfigurationVersion(ctx, &sdktypes.GetConfigurationVersionInput{ID: identifier})
+		resp, err := client.ConfigurationVersionsClient.GetConfigurationVersionByID(ctx, &pb.GetConfigurationVersionByIDRequest{Id: identifier})
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve configuration version: %w", err)
 		}
-		pathParts := trn.ToPathParts(cv.Metadata.TRN)
+		pathParts := trn.ToPathParts(resp.Metadata.Trn)
 		return strings.Join(pathParts[:len(pathParts)-1], "/"), nil
 
 	case trn.ResourceTypeTerraformModule:
-		module, err := client.TerraformModules().GetModule(ctx, &sdktypes.GetTerraformModuleInput{ID: &identifier})
+		resp, err := client.TerraformModulesClient.GetTerraformModuleByID(ctx, &pb.GetTerraformModuleByIDRequest{Id: identifier})
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve terraform module: %w", err)
 		}
-		return module.GroupPath, nil
-
-	case trn.ResourceTypeTerraformModuleVersion:
-		version, err := client.TerraformModuleVersions().GetModuleVersion(ctx, &sdktypes.GetTerraformModuleVersionInput{ID: &identifier})
-		if err != nil {
-			return "", fmt.Errorf("failed to resolve terraform module version: %w", err)
-		}
-		// TRN format: trn:terraform_module_version:group/module-name/system/version
-		pathParts := trn.ToPathParts(version.Metadata.TRN)
-		return strings.Join(pathParts[:len(pathParts)-3], "/"), nil
+		// TRN format: trn:terraform_module:group/name/system
+		pathParts := trn.ToPathParts(resp.Metadata.Trn)
+		return strings.Join(pathParts[:len(pathParts)-2], "/"), nil
 
 	default:
 		return "", fmt.Errorf("unsupported resource type for ACL: %s", resType)

@@ -70,7 +70,7 @@ func (c *workspaceListCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace list input", "input", input)
 
-	result, err := c.client.WorkspacesClient.GetWorkspaces(c.Context, input)
+	result, err := c.grpcClient.WorkspacesClient.GetWorkspaces(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of workspaces")
 		return 1

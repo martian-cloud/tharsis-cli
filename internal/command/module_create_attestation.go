@@ -58,7 +58,7 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 
 	c.Logger.Debug("module create attestation input", "input", input)
 
-	createdAttestation, err := c.client.TerraformModulesClient.CreateTerraformModuleAttestation(c.Context, input)
+	createdAttestation, err := c.grpcClient.TerraformModulesClient.CreateTerraformModuleAttestation(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create module attestation")
 		return 1

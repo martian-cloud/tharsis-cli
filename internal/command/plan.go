@@ -67,7 +67,11 @@ func (c *planCommand) Run(args []string) int {
 		return 1
 	}
 
-	runMgr := run.NewManager(c.client, tokenGetter, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
+	runMgr, err := run.NewManager(c.grpcClient, tokenGetter, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to create run manager")
+		return 1
+	}
 
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
 		WorkspaceID:      c.arguments[0],

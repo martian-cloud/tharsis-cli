@@ -55,7 +55,7 @@ func (c *groupUpdateMembershipCommand) Run(args []string) int {
 
 	c.Logger.Debug("group update-membership input", "input", input)
 
-	membership, err := c.client.NamespaceMembershipsClient.UpdateNamespaceMembership(c.Context, input)
+	membership, err := c.grpcClient.NamespaceMembershipsClient.UpdateNamespaceMembership(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update group membership")
 		return 1

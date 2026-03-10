@@ -61,7 +61,7 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 
 	c.Logger.Debug("terraform-provider create input", "input", input)
 
-	provider, err := c.client.TerraformProvidersClient.CreateTerraformProvider(c.Context, input)
+	provider, err := c.grpcClient.TerraformProvidersClient.CreateTerraformProvider(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create terraform provider")
 		return 1
