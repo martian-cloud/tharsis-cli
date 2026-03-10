@@ -69,7 +69,7 @@ func (c *moduleCreateCommand) Run(args []string) int {
 	if c.ifNotExists {
 		c.Logger.Debug("getting parent group", "value", c.groupID)
 
-		group, err := c.client.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.groupID})
+		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.groupID})
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get group")
 			return 1
@@ -78,7 +78,7 @@ func (c *moduleCreateCommand) Run(args []string) int {
 		checkID := trn.NewResourceTRN(trn.ResourceTypeTerraformModule, group.FullPath, name, system)
 		c.Logger.Debug("checking if module exists", "value", checkID)
 
-		module, err := c.client.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{Id: checkID})
+		module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{Id: checkID})
 		if err != nil && status.Code(err) != codes.NotFound {
 			c.UI.ErrorWithSummary(err, "failed to check module")
 			return 1
@@ -100,7 +100,7 @@ func (c *moduleCreateCommand) Run(args []string) int {
 
 	c.Logger.Debug("module create input", "input", input)
 
-	createdModule, err := c.client.TerraformModulesClient.CreateTerraformModule(c.Context, input)
+	createdModule, err := c.grpcClient.TerraformModulesClient.CreateTerraformModule(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a module")
 		return 1

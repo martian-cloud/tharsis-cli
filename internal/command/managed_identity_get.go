@@ -55,7 +55,7 @@ func (c *managedIdentityGetCommand) Run(args []string) int {
 
 	c.Logger.Debug("managed identity get input", "input", input)
 
-	identity, err := c.client.ManagedIdentitiesClient.GetManagedIdentityByID(c.Context, input)
+	identity, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get managed identity")
 		return 1

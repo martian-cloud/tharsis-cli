@@ -50,7 +50,7 @@ func (c *terraformProviderMirrorGetVersionCommand) Run(args []string) int {
 
 	c.Logger.Debug("terraform-provider-mirror get-version input", "input", input)
 
-	versionMirror, err := c.client.TerraformProviderMirrorsClient.GetTerraformProviderVersionMirrorByID(c.Context, input)
+	versionMirror, err := c.grpcClient.TerraformProviderMirrorsClient.GetTerraformProviderVersionMirrorByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get terraform provider version mirror")
 		return 1

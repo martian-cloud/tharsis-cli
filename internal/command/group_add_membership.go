@@ -58,7 +58,7 @@ func (c *groupAddMembershipCommand) Run(args []string) int {
 
 	c.Logger.Debug("group add-membership input", "input", input)
 
-	membership, err := c.client.NamespaceMembershipsClient.CreateNamespaceMembership(c.Context, input)
+	membership, err := c.grpcClient.NamespaceMembershipsClient.CreateNamespaceMembership(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to add group membership")
 		return 1

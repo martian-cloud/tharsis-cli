@@ -60,7 +60,7 @@ func (c *workspaceLabelCommand) Run(args []string) int {
 
 	workspaceID := c.arguments[0]
 
-	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
 		Id: workspaceID,
 	})
 	if err != nil {
@@ -77,7 +77,7 @@ func (c *workspaceLabelCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace label input", "input", input)
 
-	updatedWorkspace, err := c.client.WorkspacesClient.UpdateWorkspace(c.Context, input)
+	updatedWorkspace, err := c.grpcClient.WorkspacesClient.UpdateWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update workspace")
 		return 1

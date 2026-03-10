@@ -50,7 +50,7 @@ func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace get-assigned-managed-identities input", "input", input)
 
-	result, err := c.client.ManagedIdentitiesClient.GetManagedIdentitiesForWorkspace(c.Context, input)
+	result, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentitiesForWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get assigned managed identities")
 		return 1

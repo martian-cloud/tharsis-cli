@@ -52,7 +52,7 @@ func (c *managedIdentityAccessRuleGetCommand) Run(args []string) int {
 
 	c.Logger.Debug("managed identity access rule get input", "input", input)
 
-	rule, err := c.client.ManagedIdentitiesClient.GetManagedIdentityAccessRuleByID(c.Context, input)
+	rule, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityAccessRuleByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get managed identity access rule")
 		return 1

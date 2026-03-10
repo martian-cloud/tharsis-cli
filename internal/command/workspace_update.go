@@ -71,7 +71,7 @@ func (c *workspaceUpdateCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace update input", "input", input)
 
-	updatedWorkspace, err := c.client.WorkspacesClient.UpdateWorkspace(c.Context, input)
+	updatedWorkspace, err := c.grpcClient.WorkspacesClient.UpdateWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update a workspace")
 		return 1

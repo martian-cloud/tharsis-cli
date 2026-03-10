@@ -51,7 +51,7 @@ func (c *groupMigrateCommand) Run(args []string) int {
 
 	c.Logger.Debug("group migrate input", "input", input)
 
-	group, err := c.client.GroupsClient.MigrateGroup(c.Context, input)
+	group, err := c.grpcClient.GroupsClient.MigrateGroup(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to migrate group")
 		return 1

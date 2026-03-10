@@ -69,7 +69,7 @@ func (c *moduleListCommand) Run(args []string) int {
 
 	c.Logger.Debug("module list input", "input", input)
 
-	result, err := c.client.TerraformModulesClient.GetTerraformModules(c.Context, input)
+	result, err := c.grpcClient.TerraformModulesClient.GetTerraformModules(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of modules")
 		return 1

@@ -68,7 +68,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 	if c.ifNotExists {
 		c.Logger.Debug("getting parent group", "value", c.parentGroupID)
 
-		group, err := c.client.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.parentGroupID})
+		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.parentGroupID})
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get parent group")
 			return 1
@@ -77,7 +77,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 		checkID := trn.NewResourceTRN(trn.ResourceTypeWorkspace, group.FullPath, name)
 		c.Logger.Debug("checking if workspace exists", "value", checkID)
 
-		workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: checkID})
+		workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: checkID})
 		if err != nil && status.Code(err) != codes.NotFound {
 			c.UI.ErrorWithSummary(err, "failed to check workspace")
 			return 1
@@ -101,7 +101,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace create input", "input", input)
 
-	createdWorkspace, err := c.client.WorkspacesClient.CreateWorkspace(c.Context, input)
+	createdWorkspace, err := c.grpcClient.WorkspacesClient.CreateWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a workspace")
 		return 1
@@ -115,7 +115,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 
 		c.Logger.Debug("assigning managed identity", "input", assignInput)
 
-		if _, err := c.client.ManagedIdentitiesClient.AssignManagedIdentityToWorkspace(c.Context, assignInput); err != nil {
+		if _, err := c.grpcClient.ManagedIdentitiesClient.AssignManagedIdentityToWorkspace(c.Context, assignInput); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to assign managed identity to workspace")
 			return 1
 		}

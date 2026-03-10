@@ -68,7 +68,11 @@ func (c *destroyCommand) Run(args []string) int {
 		return 1
 	}
 
-	runMgr := run.NewManager(c.client, tokenGetter, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
+	runMgr, err := run.NewManager(c.grpcClient, tokenGetter, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to create run manager")
+		return 1
+	}
 
 	// Create non-speculative destroy run
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{

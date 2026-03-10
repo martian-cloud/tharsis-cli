@@ -52,7 +52,7 @@ func (c *serviceAccountCreateOIDCTokenCommand) Run(args []string) int {
 
 	c.Logger.Debug("service-account create-oidc-token input", "input", input)
 
-	result, err := c.client.ServiceAccountsClient.CreateOIDCToken(c.Context, input)
+	result, err := c.grpcClient.ServiceAccountsClient.CreateOIDCToken(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create token for service account")
 		return 1

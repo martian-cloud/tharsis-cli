@@ -70,7 +70,7 @@ func (c *moduleListAttestationsCommand) Run(args []string) int {
 
 	c.Logger.Debug("module list-attestations input", "input", input)
 
-	result, err := c.client.TerraformModulesClient.GetTerraformModuleAttestations(c.Context, input)
+	result, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleAttestations(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of module attestations")
 		return 1

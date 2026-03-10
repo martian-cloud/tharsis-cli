@@ -1,19 +1,17 @@
 package command
 
 import (
-	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 )
 
 type terraformProviderManifestType struct {
@@ -34,392 +32,342 @@ type artifactType struct {
 	Type            string `json:"type"`
 }
 
-// terraformProviderUploadVersionCommand is the top-level structure for the terraform-provider upload-version command.
 type terraformProviderUploadVersionCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	sg        terminal.StepGroup
+	directory string
 }
 
-// NewTerraformProviderUploadVersionCommandFactory returns a (Terraform provider Upload-Version) Command struct.
-func NewTerraformProviderUploadVersionCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return terraformProviderUploadVersionCommand{
-			meta: meta,
+func (c *terraformProviderUploadVersionCommand) validate() error {
+	const message = "provider-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
+}
+
+// NewTerraformProviderUploadVersionCommandFactory returns a new terraformProviderUploadVersionCommand.
+func NewTerraformProviderUploadVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &terraformProviderUploadVersionCommand{
+			BaseCommand: baseCommand,
+			sg:          baseCommand.UI.StepGroup(),
 		}, nil
 	}
 }
 
-func (tpuc terraformProviderUploadVersionCommand) Run(args []string) int {
-	tpuc.meta.Logger.Debugf("Starting the 'terraform-provider upload-version' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		tpuc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *terraformProviderUploadVersionCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("terraform-provider upload-version"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := tpuc.meta.GetSDKClient()
+	dirStat, err := os.Stat(c.directory)
 	if err != nil {
-		tpuc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to stat directory path")
 		return 1
 	}
 
-	ctx := context.Background()
+	if !dirStat.IsDir() {
+		c.UI.Errorf("path is not a directory: %s", c.directory)
+		return 1
+	}
 
-	return tpuc.doTerraformProviderUploadVersion(ctx, client, args)
-}
-
-func (tpuc terraformProviderUploadVersionCommand) doTerraformProviderUploadVersion(ctx context.Context,
-	client *tharsis.Client, opts []string) int {
-	tpuc.meta.Logger.Debugf("will do terraform-provider upload-version, %d opts", len(opts))
-
-	defs := tpuc.buildTerraformProviderUploadVersionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(tpuc.meta.BinaryName+" terraform-provider upload-version",
-		defs, opts)
+	step := c.sg.Add("Get provider")
+	provider, err := c.grpcClient.TerraformProvidersClient.GetTerraformProviderByID(c.Context, &pb.GetTerraformProviderByIDRequest{
+		Id: c.arguments[0],
+	})
 	if err != nil {
-		tpuc.meta.Logger.Error(output.FormatError("failed to parse terraform-provider upload-version options", err))
+		step.Abort()
+		c.UI.ErrorWithSummary(err, "failed to get provider")
 		return 1
 	}
-	if len(cmdArgs) < 1 {
-		tpuc.meta.Logger.Error(output.FormatError("missing terraform-provider upload-version <provider-path>", nil),
-			tpuc.HelpTerraformProviderUploadVersion())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive terraform-provider upload-version arguments: %s", cmdArgs)
-		tpuc.meta.Logger.Error(output.FormatError(msg, nil), tpuc.HelpTerraformProviderUploadVersion())
-		return 1
-	}
+	step.Done()
 
-	tfProviderPath := cmdArgs[0]
-	directoryPath := getOption("directory-path", ".", cmdOpts)[0] // default to "." (should work in *x and Windows)
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(tfProviderPath)
-	if !isResourcePathValid(tpuc.meta, actualPath) {
-		return 1
-	}
-
-	// Make sure the directory path exists and is a directory--to give more precise messages.
-	if err = tpuc.checkDirPath(directoryPath); err != nil {
-		tpuc.meta.Logger.Error(output.FormatError("invalid directory path", err))
-		return 1
-	}
-
-	tpuc.meta.UI.Output(fmt.Sprintf("• starting terraform-provider version upload: provider-full-path=%s directory=%s",
-		tfProviderPath, directoryPath))
-
-	tfProviderManifest, err := tpuc.readTerraformProviderManifest(directoryPath)
+	manifest, err := c.readManifest()
 	if err != nil {
-		tpuc.meta.UI.Error(output.FormatError("failed to read Terraform provider manifest", err))
+		c.UI.ErrorWithSummary(err, "failed to read manifest")
 		return 1
 	}
 
-	tfProviderVersionMetadata, err := tpuc.readTerraformProviderVersionMetadata(directoryPath)
+	versionMetadata, err := c.readVersionMetadata()
 	if err != nil {
-		tpuc.meta.UI.Error(output.FormatError("failed to read Terraform provider version metadata", err))
+		c.UI.ErrorWithSummary(err, "failed to read version metadata")
 		return 1
 	}
 
-	artifacts, err := tpuc.readTerraformProviderVersionArtifacts(directoryPath)
+	artifacts, err := c.readArtifacts()
 	if err != nil {
-		tpuc.meta.UI.Error(output.FormatError("failed to read Terraform provider version artifacts", err))
+		c.UI.ErrorWithSummary(err, "failed to read artifacts")
 		return 1
 	}
 
-	tpuc.meta.UI.Output(fmt.Sprintf("• creating Terraform provider version %s", tfProviderVersionMetadata.Version))
-
-	// Create Terraform provider version
-	tfProviderVersion, err := client.TerraformProviderVersion.CreateProviderVersion(ctx,
-		&types.CreateTerraformProviderVersionInput{
-			ProviderPath: tfProviderPath,
-			Version:      tfProviderVersionMetadata.Version,
-			Protocols:    tfProviderManifest.Metadata.ProtocolVersions,
-		})
+	step = c.sg.Add("Create provider version %q", versionMetadata.Version)
+	providerVersion, err := c.grpcClient.TerraformProvidersClient.CreateTerraformProviderVersion(c.Context, &pb.CreateTerraformProviderVersionRequest{
+		ProviderId: provider.Metadata.Id,
+		Version:    versionMetadata.Version,
+		Protocols:  manifest.Metadata.ProtocolVersions,
+	})
 	if err != nil {
-		tpuc.meta.UI.Error(output.FormatError("failed to create Terraform provider version", err))
+		step.Abort()
+		c.UI.ErrorWithSummary(err, "failed to create provider version")
+		return 1
+	}
+	step.Done()
+
+	curSettings, err := c.getCurrentSettings()
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get settings")
 		return 1
 	}
 
-	if err = tpuc.uploadReadme(ctx, client, directoryPath, tfProviderVersion); err != nil {
-		tpuc.meta.UI.Error(output.FormatError("failed to upload readme file", err))
+	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get token")
+		return 1
+	}
+
+	tfeClient, err := tfe.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenGetter, c.HTTPClient)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to create REST client")
+		return 1
+	}
+
+	if err = c.uploadReadme(tfeClient, providerVersion.Metadata.Id); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to upload README")
 		return 1
 	}
 
 	var checksumMap map[string]string
-
-	// Find Checksum file
 	for _, artifact := range artifacts {
-		artifactCopy := artifact
 		if artifact.Type == "Checksum" {
-			checksumMap, err = tpuc.uploadChecksums(ctx, client, directoryPath, tfProviderVersion, &artifactCopy)
+			checksumMap, err = c.uploadChecksums(tfeClient, providerVersion.Metadata.Id, artifact.Path)
 			if err != nil {
-				tpuc.meta.UI.Error(output.FormatError("failed to upload Terraform provider checksums", err))
+				c.UI.ErrorWithSummary(err, "failed to upload checksums")
 				return 1
 			}
 		}
 		if artifact.Type == "Signature" {
-			if err := tpuc.uploadSignature(ctx, client, directoryPath, tfProviderVersion, &artifactCopy); err != nil {
-				tpuc.meta.UI.Error(output.FormatError("failed to upload Terraform provider checksums signature", err))
+			if err := c.uploadSignature(tfeClient, providerVersion.Metadata.Id, artifact.Path); err != nil {
+				c.UI.ErrorWithSummary(err, "failed to upload signature")
 				return 1
 			}
 		}
 	}
 
-	// Create & Upload platforms
 	for _, artifact := range artifacts {
 		if artifact.Type == "Archive" {
-			artifactCopy := artifact
-			if err := tpuc.uploadPlatformArchive(ctx, client, directoryPath, tfProviderVersion, &artifactCopy, checksumMap); err != nil {
-				tpuc.meta.UI.Error(output.FormatError("failed to upload archive", err))
+			if err := c.uploadPlatformArchive(tfeClient, providerVersion.Metadata.Id, &artifact, checksumMap); err != nil {
+				c.UI.ErrorWithSummary(err, "failed to upload platform archive")
 				return 1
 			}
 		}
 	}
 
-	tpuc.meta.UI.Output("• Terraform provider version upload succeeded")
-
+	c.UI.Successf("\nProvider version uploaded successfully!")
 	return 0
 }
 
-func (tpuc terraformProviderUploadVersionCommand) uploadReadme(
-	ctx context.Context,
-	client *tharsis.Client,
-	dir string,
-	tfProviderVersion *types.TerraformProviderVersion,
-) error {
-	tpuc.meta.UI.Output("• checking for README file")
+func (c *terraformProviderUploadVersionCommand) readManifest() (*terraformProviderManifestType, error) {
+	step := c.sg.Add("Read terraform-registry-manifest.json")
 
-	matches, err := filepath.Glob(filepath.Join(dir, "README*"))
+	data, err := os.ReadFile(filepath.Join(c.directory, "terraform-registry-manifest.json"))
 	if err != nil {
-		return fmt.Errorf("error occurred while checking for README: %v", err)
+		step.Abort()
+		return nil, err
 	}
 
-	if len(matches) == 0 {
-		tpuc.meta.UI.Output("• skipping readme upload")
-		return nil
+	var manifest terraformProviderManifestType
+	if err = json.Unmarshal(data, &manifest); err != nil {
+		step.Abort()
+		return nil, err
 	}
 
-	tpuc.meta.UI.Output(fmt.Sprintf("• uploading README file %s", matches[0]))
-
-	reader, err := os.Open(matches[0])
-	if err != nil {
-		return fmt.Errorf("failed to read README file: %v", err)
-	}
-	defer reader.Close()
-
-	// upload readme file
-	if err := client.TerraformProviderVersion.UploadProviderReadme(ctx,
-		tfProviderVersion.Metadata.ID, reader); err != nil {
-		return fmt.Errorf("failed to upload readme file: %v", err)
-	}
-
-	tpuc.meta.UI.Output("• completed readme upload")
-
-	return nil
+	step.Done()
+	return &manifest, nil
 }
 
-func (tpuc terraformProviderUploadVersionCommand) uploadChecksums(
-	ctx context.Context,
-	client *tharsis.Client,
-	dir string,
-	tfProviderVersion *types.TerraformProviderVersion,
-	artifact *artifactType,
-) (map[string]string, error) {
-	checksumMap := map[string]string{}
+func (c *terraformProviderUploadVersionCommand) readVersionMetadata() (*terraformProviderVersionMetadataType, error) {
+	step := c.sg.Add("Read metadata.json")
 
-	tpuc.meta.UI.Output(fmt.Sprintf("• uploading checksums: file=%s", artifact.Path))
-
-	data, err := os.ReadFile(filepath.Join(dir, artifact.Path))
+	data, err := os.ReadFile(filepath.Join(c.directory, "dist", "metadata.json"))
 	if err != nil {
-		return nil, fmt.Errorf("failed to find %s file: %v", artifact.Path, err)
+		step.Abort()
+		return nil, err
 	}
 
-	checksums := strings.Split(string(data), "\n")
-	for _, checksum := range checksums {
-		parsedChecksum := strings.Split(checksum, "  ")
-		if len(parsedChecksum) == 2 {
-			checksumMap[parsedChecksum[1]] = parsedChecksum[0]
-		}
+	var metadata terraformProviderVersionMetadataType
+	if err = json.Unmarshal(data, &metadata); err != nil {
+		step.Abort()
+		return nil, err
 	}
 
-	reader, err := os.Open(filepath.Join(dir, artifact.Path))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read %s file: %v", artifact.Path, err)
-	}
-	defer reader.Close()
-
-	// upload sums file
-	if err := client.TerraformProviderVersion.UploadProviderChecksums(ctx,
-		tfProviderVersion.Metadata.ID, reader); err != nil {
-		return nil, fmt.Errorf("failed to upload checksum file: %v", err)
-	}
-
-	tpuc.meta.UI.Output("• completed checksums upload")
-
-	return checksumMap, nil
+	step.Done()
+	return &metadata, nil
 }
 
-func (tpuc terraformProviderUploadVersionCommand) uploadSignature(
-	ctx context.Context,
-	client *tharsis.Client,
-	dir string,
-	tfProviderVersion *types.TerraformProviderVersion,
-	artifact *artifactType,
-) error {
-	tpuc.meta.UI.Output(fmt.Sprintf("• uploading checksums signature: file=%s", artifact.Path))
+func (c *terraformProviderUploadVersionCommand) readArtifacts() ([]artifactType, error) {
+	step := c.sg.Add("Read artifacts.json")
 
-	// upload signature
-	reader, err := os.Open(filepath.Join(dir, artifact.Path))
+	data, err := os.ReadFile(filepath.Join(c.directory, "dist", "artifacts.json"))
 	if err != nil {
-		return fmt.Errorf("failed to read %s file: %v", artifact.Path, err)
-	}
-	defer reader.Close()
-
-	// upload sums file
-	if err := client.TerraformProviderVersion.UploadProviderChecksumSignature(ctx,
-		tfProviderVersion.Metadata.ID, reader); err != nil {
-		return fmt.Errorf("failed to upload checksum signature file: %v", err)
-	}
-
-	tpuc.meta.UI.Output("• completed checksums signature upload")
-
-	return nil
-}
-
-func (tpuc terraformProviderUploadVersionCommand) uploadPlatformArchive(
-	ctx context.Context,
-	client *tharsis.Client,
-	dir string,
-	tfProviderVersion *types.TerraformProviderVersion,
-	artifact *artifactType,
-	checksumMap map[string]string,
-) error {
-	checksum, ok := checksumMap[artifact.Name]
-	if !ok {
-		return fmt.Errorf("failed to find checksum for file %s", artifact.Path)
-	}
-
-	tpuc.meta.UI.Output(fmt.Sprintf("• uploading platform %s_%s", artifact.OperatingSystem, artifact.Architecture))
-
-	platform, err := client.TerraformProviderPlatform.CreateProviderPlatform(ctx,
-		&types.CreateTerraformProviderPlatformInput{
-			ProviderVersionID: tfProviderVersion.Metadata.ID,
-			OperatingSystem:   artifact.OperatingSystem,
-			Architecture:      artifact.Architecture,
-			SHASum:            checksum,
-			Filename:          artifact.Name,
-		})
-	if err != nil {
-		return fmt.Errorf("failed to create platform: %v", err)
-	}
-
-	// upload binary
-	reader, err := os.Open(filepath.Join(dir, artifact.Path))
-	if err != nil {
-		return fmt.Errorf("failed to read %s file: %v", artifact.Path, err)
-	}
-	defer reader.Close()
-
-	// upload binary file
-	if err := client.TerraformProviderPlatform.UploadProviderPlatformBinary(ctx, platform.Metadata.ID, reader); err != nil {
-		return fmt.Errorf("failed to upload platform binary file: %v", err)
-	}
-
-	tpuc.meta.UI.Output(fmt.Sprintf("• completed upload for platform %s_%s", artifact.OperatingSystem, artifact.Architecture))
-
-	return nil
-}
-
-func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderManifest(dir string) (*terraformProviderManifestType, error) {
-	tpuc.meta.UI.Output("• reading terraform-registry-manifest.json")
-
-	// Locate `terraform-registry-manifest.json` file which includes the protocol versions
-	data, err := os.ReadFile(filepath.Join(dir, "terraform-registry-manifest.json"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to find terraform-registry-manifest.json file: %v", err)
-	}
-
-	var tfProviderManifest terraformProviderManifestType
-
-	if err = json.Unmarshal(data, &tfProviderManifest); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal terraform-registry-manifest.json file: %v", err)
-	}
-
-	return &tfProviderManifest, nil
-}
-
-func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderVersionMetadata(dir string) (*terraformProviderVersionMetadataType, error) {
-	tpuc.meta.UI.Output("• reading metadata.json")
-
-	// Load version string from the metadata.json file in the dist directory
-	data, err := os.ReadFile(filepath.Join(dir, "dist", "metadata.json"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to find metadata.json file: %v", err)
-	}
-
-	var tfProviderVersionMetadata terraformProviderVersionMetadataType
-	if err = json.Unmarshal(data, &tfProviderVersionMetadata); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal metadata.json file: %v", err)
-	}
-
-	return &tfProviderVersionMetadata, nil
-}
-
-func (tpuc terraformProviderUploadVersionCommand) readTerraformProviderVersionArtifacts(dir string) ([]artifactType, error) {
-	tpuc.meta.UI.Output("• reading artifacts.json")
-
-	// Load the artifacts.json file to get the list of files/platforms that will be uploaded
-	data, err := os.ReadFile(filepath.Join(dir, "dist", "artifacts.json"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to find artifacts.json file: %v", err)
+		step.Abort()
+		return nil, err
 	}
 
 	var artifacts []artifactType
 	if err = json.Unmarshal(data, &artifacts); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal artifacts.json file: %v", err)
+		step.Abort()
+		return nil, err
 	}
 
+	step.Done()
 	return artifacts, nil
 }
 
-func (tpuc terraformProviderUploadVersionCommand) checkDirPath(directoryPath string) error {
-	dirStat, err := os.Stat(directoryPath)
-	if os.IsNotExist(err) {
-		return fmt.Errorf("directory path does not exist: %s", directoryPath)
-	}
+func (c *terraformProviderUploadVersionCommand) uploadReadme(restClient tfe.RESTClient, providerVersionID string) error {
+	step := c.sg.Add("Upload README")
+
+	matches, err := filepath.Glob(filepath.Join(c.directory, "README*"))
 	if err != nil {
-		return fmt.Errorf("failed to stat directory path %s: %s", directoryPath, err)
+		step.Abort()
+		return err
 	}
-	if !dirStat.IsDir() {
-		return fmt.Errorf("path is not a directory: %s", directoryPath)
+
+	if len(matches) == 0 {
+		step.Update("README upload not needed")
+		step.Done()
+		return nil
 	}
+
+	if err := restClient.UploadProviderReadme(c.Context, &tfe.UploadProviderReadmeInput{
+		ProviderVersionID: providerVersionID,
+		ReadmePath:        matches[0],
+	}); err != nil {
+		step.Abort()
+		return err
+	}
+
+	step.Done()
 	return nil
 }
 
-// buildTerraformProviderUploadVersionDefs returns defs used by terraform-provider upload-version command.
-func (tpuc terraformProviderUploadVersionCommand) buildTerraformProviderUploadVersionDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"directory-path": {
-			Arguments: []string{"Directory_Path"},
-			Synopsis:  "The path of the terraform provider's directory.",
-		},
+func (c *terraformProviderUploadVersionCommand) uploadChecksums(restClient tfe.RESTClient, providerVersionID, artifactPath string) (map[string]string, error) {
+	step := c.sg.Add("Upload checksums")
+
+	checksumMap := map[string]string{}
+
+	data, err := os.ReadFile(filepath.Join(c.directory, artifactPath))
+	if err != nil {
+		step.Abort()
+		return nil, err
 	}
+
+	for checksum := range strings.SplitSeq(string(data), "\n") {
+		hash, filename, ok := strings.Cut(checksum, "  ")
+		if ok {
+			checksumMap[filename] = hash
+		}
+	}
+
+	if err := restClient.UploadProviderChecksums(c.Context, &tfe.UploadProviderChecksumsInput{
+		ProviderVersionID: providerVersionID,
+		ChecksumsPath:     filepath.Join(c.directory, artifactPath),
+	}); err != nil {
+		step.Abort()
+		return nil, err
+	}
+
+	step.Done()
+	return checksumMap, nil
 }
 
-func (tpuc terraformProviderUploadVersionCommand) Synopsis() string {
+func (c *terraformProviderUploadVersionCommand) uploadSignature(restClient tfe.RESTClient, providerVersionID, artifactPath string) error {
+	step := c.sg.Add("Upload checksums signature")
+
+	if err := restClient.UploadProviderChecksumSignature(c.Context, &tfe.UploadProviderChecksumSignatureInput{
+		ProviderVersionID: providerVersionID,
+		SignaturePath:     filepath.Join(c.directory, artifactPath),
+	}); err != nil {
+		step.Abort()
+		return err
+	}
+
+	step.Done()
+	return nil
+}
+
+func (c *terraformProviderUploadVersionCommand) uploadPlatformArchive(restClient tfe.RESTClient, providerVersionID string, artifact *artifactType, checksumMap map[string]string) error {
+	step := c.sg.Add("Upload platform %s_%s", artifact.OperatingSystem, artifact.Architecture)
+
+	checksum, ok := checksumMap[artifact.Name]
+	if !ok {
+		step.Abort()
+		return fmt.Errorf("failed to find checksum for file %s", artifact.Path)
+	}
+
+	platform, err := c.grpcClient.TerraformProvidersClient.CreateTerraformProviderPlatform(c.Context, &pb.CreateTerraformProviderPlatformRequest{
+		ProviderVersionId: providerVersionID,
+		Os:                artifact.OperatingSystem,
+		Arch:              artifact.Architecture,
+		ShaSum:            checksum,
+		Filename:          artifact.Name,
+	})
+	if err != nil {
+		step.Abort()
+		return err
+	}
+
+	if err := restClient.UploadProviderPlatformBinary(c.Context, &tfe.UploadProviderPlatformBinaryInput{
+		PlatformID: platform.Metadata.Id,
+		BinaryPath: filepath.Join(c.directory, artifact.Path),
+	}); err != nil {
+		step.Abort()
+		return err
+	}
+
+	step.Done()
+	return nil
+}
+
+func (*terraformProviderUploadVersionCommand) Synopsis() string {
 	return "Upload a new Terraform provider version to the provider registry."
 }
 
-func (tpuc terraformProviderUploadVersionCommand) Help() string {
-	return tpuc.HelpTerraformProviderUploadVersion()
-}
-
-// HelpTerraformProviderUploadVersion produces the help string for the 'terraform-provider upload-version' command.
-func (tpuc terraformProviderUploadVersionCommand) HelpTerraformProviderUploadVersion() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] terraform-provider upload-version [options] <full_path>
-
+func (*terraformProviderUploadVersionCommand) Description() string {
+	return `
    The terraform-provider upload-version command uploads a new
    Terraform provider version to the provider registry.
+`
+}
 
-%s
+func (*terraformProviderUploadVersionCommand) Usage() string {
+	return "tharsis [global options] terraform-provider upload-version [options] <provider-id>"
+}
 
-`, tpuc.meta.BinaryName, buildHelpText(tpuc.buildTerraformProviderUploadVersionDefs()))
+func (*terraformProviderUploadVersionCommand) Example() string {
+	return `
+tharsis terraform-provider upload-version \
+  --directory ./my-provider \
+  trn:terraform_provider:my-group/my-provider
+`
+}
+
+func (c *terraformProviderUploadVersionCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.directory,
+		"directory",
+		".",
+		"The path of the terraform provider's directory.",
+	)
+	return f
 }

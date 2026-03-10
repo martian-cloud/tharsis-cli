@@ -67,7 +67,7 @@ func (c *groupListCommand) Run(args []string) int {
 
 	c.Logger.Debug("group list input", "input", input)
 
-	result, err := c.client.GroupsClient.GetGroups(c.Context, input)
+	result, err := c.grpcClient.GroupsClient.GetGroups(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of groups")
 		return 1

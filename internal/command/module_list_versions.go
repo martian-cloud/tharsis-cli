@@ -74,7 +74,7 @@ func (c *moduleListVersionsCommand) Run(args []string) int {
 
 	c.Logger.Debug("module list-versions input", "input", input)
 
-	result, err := c.client.TerraformModulesClient.GetTerraformModuleVersions(c.Context, input)
+	result, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleVersions(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of module versions")
 		return 1

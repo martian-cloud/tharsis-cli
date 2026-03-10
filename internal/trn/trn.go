@@ -28,6 +28,8 @@ const (
 	ResourceTypeTerraformModuleVersion ResourceType = "terraform_module_version"
 	// ResourceTypeTerraformProvider is the resource type constant for Terraform provider TRNs.
 	ResourceTypeTerraformProvider ResourceType = "terraform_provider"
+	// ResourceTypeTerraformProviderVersionMirror is the resource type constant for Terraform provider version mirror TRNs.
+	ResourceTypeTerraformProviderVersionMirror ResourceType = "terraform_provider_version_mirror"
 	// ResourceTypeTerraformProviderPlatform is the resource type constant for Terraform provider platform TRNs.
 	ResourceTypeTerraformProviderPlatform ResourceType = "terraform_provider_platform"
 	// ResourceTypeFederatedRegistry is the resource type constant for federated registry TRNs.

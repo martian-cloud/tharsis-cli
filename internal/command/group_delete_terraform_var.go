@@ -48,7 +48,7 @@ func (c *groupDeleteTerraformVarCommand) Run(args []string) int {
 	}
 
 	// Get group to retrieve full path
-	group, err := c.client.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
@@ -64,7 +64,7 @@ func (c *groupDeleteTerraformVarCommand) Run(args []string) int {
 
 	c.Logger.Debug("group delete-terraform-var input", "input", deleteInput)
 
-	if _, err = c.client.NamespaceVariablesClient.DeleteNamespaceVariable(c.Context, deleteInput); err != nil {
+	if _, err = c.grpcClient.NamespaceVariablesClient.DeleteNamespaceVariable(c.Context, deleteInput); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete terraform variable")
 		return 1
 	}

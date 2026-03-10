@@ -54,7 +54,7 @@ func (c *moduleGetCommand) Run(args []string) int {
 
 	c.Logger.Debug("module get input", "input", input)
 
-	module, err := c.client.TerraformModulesClient.GetTerraformModuleByID(c.Context, input)
+	module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get module")
 		return 1

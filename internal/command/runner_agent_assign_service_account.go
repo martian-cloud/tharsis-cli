@@ -49,7 +49,7 @@ func (c *runnerAgentAssignServiceAccountCommand) Run(args []string) int {
 
 	c.Logger.Debug("runner-agent assign-service-account input", "input", input)
 
-	if _, err := c.client.RunnersClient.AssignServiceAccountToRunner(c.Context, input); err != nil {
+	if _, err := c.grpcClient.RunnersClient.AssignServiceAccountToRunner(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to assign service account to runner agent")
 		return 1
 	}

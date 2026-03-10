@@ -45,7 +45,7 @@ func (c *groupSetTerraformVarsCommand) Run(args []string) int {
 		return code
 	}
 
-	group, err := c.client.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
@@ -75,7 +75,7 @@ func (c *groupSetTerraformVarsCommand) Run(args []string) int {
 
 	c.Logger.Debug("group set-terraform-vars input", "input", input)
 
-	if _, err = c.client.NamespaceVariablesClient.SetNamespaceVariables(c.Context, input); err != nil {
+	if _, err = c.grpcClient.NamespaceVariablesClient.SetNamespaceVariables(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to set terraform variables")
 		return 1
 	}

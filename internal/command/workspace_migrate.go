@@ -52,7 +52,7 @@ func (c *workspaceMigrateCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace migrate input", "input", input)
 
-	workspace, err := c.client.WorkspacesClient.MigrateWorkspace(c.Context, input)
+	workspace, err := c.grpcClient.WorkspacesClient.MigrateWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to migrate workspace")
 		return 1

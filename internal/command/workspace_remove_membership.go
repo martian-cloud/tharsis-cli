@@ -52,7 +52,7 @@ func (c *workspaceRemoveMembershipCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace remove-membership input", "input", input)
 
-	if _, err := c.client.NamespaceMembershipsClient.DeleteNamespaceMembership(c.Context, input); err != nil {
+	if _, err := c.grpcClient.NamespaceMembershipsClient.DeleteNamespaceMembership(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to remove workspace membership")
 		return 1
 	}

@@ -49,7 +49,7 @@ func (c *workspaceUnassignManagedIdentityCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace unassign-managed-identity input", "input", input)
 
-	if _, err := c.client.ManagedIdentitiesClient.RemoveManagedIdentityFromWorkspace(c.Context, input); err != nil {
+	if _, err := c.grpcClient.ManagedIdentitiesClient.RemoveManagedIdentityFromWorkspace(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to unassign managed identity from workspace")
 		return 1
 	}

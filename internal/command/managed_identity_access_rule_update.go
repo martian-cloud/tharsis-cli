@@ -79,7 +79,7 @@ func (c *managedIdentityAccessRuleUpdateCommand) Run(args []string) int {
 
 	c.Logger.Debug("managed identity access rule update input", "input", input)
 
-	updatedRule, err := c.client.ManagedIdentitiesClient.UpdateManagedIdentityAccessRule(c.Context, input)
+	updatedRule, err := c.grpcClient.ManagedIdentitiesClient.UpdateManagedIdentityAccessRule(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update managed identity access rule")
 		return 1

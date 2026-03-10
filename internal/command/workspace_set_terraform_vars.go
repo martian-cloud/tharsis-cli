@@ -45,7 +45,7 @@ func (c *workspaceSetTerraformVarsCommand) Run(args []string) int {
 		return code
 	}
 
-	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
@@ -75,7 +75,7 @@ func (c *workspaceSetTerraformVarsCommand) Run(args []string) int {
 
 	c.Logger.Debug("workspace set-terraform-vars input", "input", input)
 
-	if _, err = c.client.NamespaceVariablesClient.SetNamespaceVariables(c.Context, input); err != nil {
+	if _, err = c.grpcClient.NamespaceVariablesClient.SetNamespaceVariables(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to set terraform variables")
 		return 1
 	}

@@ -61,7 +61,7 @@ func (c *runnerAgentCreateCommand) Run(args []string) int {
 
 	c.Logger.Debug("runner agent create input", "input", input)
 
-	createdRunner, err := c.client.RunnersClient.CreateRunner(c.Context, input)
+	createdRunner, err := c.grpcClient.RunnersClient.CreateRunner(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a runner agent")
 		return 1

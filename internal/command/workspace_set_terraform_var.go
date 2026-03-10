@@ -51,7 +51,7 @@ func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
 	}
 
 	// Get workspace to retrieve full path
-	workspace, err := c.client.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
@@ -59,7 +59,7 @@ func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
 
 	// Build TRN and check if variable exists
 	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, "terraform", c.key)
-	existingVar, err := c.client.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, &pb.GetNamespaceVariableByIDRequest{
+	existingVar, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, &pb.GetNamespaceVariableByIDRequest{
 		Id: variableTRN,
 	})
 	if err != nil && status.Code(err) != codes.NotFound {
@@ -81,7 +81,7 @@ func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
 			Value: c.value,
 		}
 
-		if _, err = c.client.NamespaceVariablesClient.UpdateNamespaceVariable(c.Context, updateInput); err != nil {
+		if _, err = c.grpcClient.NamespaceVariablesClient.UpdateNamespaceVariable(c.Context, updateInput); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to update terraform variable")
 			return 1
 		}
@@ -98,7 +98,7 @@ func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
 
 		c.Logger.Debug("workspace set-terraform-var input", "input", createInput)
 
-		if _, err = c.client.NamespaceVariablesClient.CreateNamespaceVariable(c.Context, createInput); err != nil {
+		if _, err = c.grpcClient.NamespaceVariablesClient.CreateNamespaceVariable(c.Context, createInput); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to set terraform variable")
 			return 1
 		}
