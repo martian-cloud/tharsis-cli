@@ -10,9 +10,7 @@ package tools
 //go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name RunsClient --output mocks --outpkg mocks --filename mock_runs_client.go
 //go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name StateVersionsClient --output mocks --outpkg mocks --filename mock_state_versions_client.go
 //go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name TerraformModulesClient --output mocks --outpkg mocks --filename mock_terraform_modules_client.go
-//go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name TerraformModuleVersionsClient --output mocks --outpkg mocks --filename mock_terraform_module_versions_client.go
 //go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name TerraformProvidersClient --output mocks --outpkg mocks --filename mock_terraform_providers_client.go
-//go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name TerraformProviderPlatformsClient --output mocks --outpkg mocks --filename mock_terraform_provider_platforms_client.go
 //go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name WorkspacesClient --output mocks --outpkg mocks --filename mock_workspaces_client.go
 
 import (
@@ -20,18 +18,20 @@ import (
 	"net/http"
 
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/auth"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 )
 
 // ToolContext holds dependencies for tool execution.
 type ToolContext struct {
-	tharsisURL  string
-	profileName string
-	grpcClient  *client.Client
-	tfeClient   tfe.RESTClient
-	httpClient  *http.Client
-	acl         acl.Checker
+	tharsisURL    string
+	profileName   string
+	grpcClient    *client.Client
+	tfeClient     tfe.RESTClient
+	httpClient    *http.Client
+	authenticator auth.Authenticator
+	acl           acl.Checker
 }
 
 // ToolContextOption configures a ToolContext.
@@ -79,6 +79,13 @@ func NewToolContext(
 		}
 		tc.acl = checker
 	}
+
+	ssoAuthenticator, err := auth.NewSSOAuthenticator(tharsisURL, auth.WithGRPCClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create authenticator: %w", err)
+	}
+
+	tc.authenticator = ssoAuthenticator
 
 	return tc, nil
 }

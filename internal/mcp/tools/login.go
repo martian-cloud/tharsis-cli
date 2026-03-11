@@ -6,7 +6,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/auth"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -30,17 +29,12 @@ func loginWithSSO(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*ssoLoginInput,
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, _ *ssoLoginInput) (*mcp.CallToolResult, *ssoLoginOutput, error) {
-		ssoClient, err := auth.NewSSOClient(tc.tharsisURL, auth.WithGRPCClient(tc.grpcClient))
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create SSO client: %w", err)
-		}
-
-		token, err := ssoClient.PerformLogin(ctx)
+		token, err := tc.authenticator.PerformLogin(ctx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("login failed: %w", err)
 		}
 
-		if err := ssoClient.StoreToken(token); err != nil {
+		if err := tc.authenticator.StoreToken(token); err != nil {
 			return nil, nil, fmt.Errorf("failed to store token: %w", err)
 		}
 
