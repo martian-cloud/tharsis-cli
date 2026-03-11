@@ -389,6 +389,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	uuid "github.com/hashicorp/go-uuid"
 	"github.com/pkg/browser"
+	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"golang.org/x/oauth2"
@@ -433,6 +434,7 @@ type ssoAuthenticator struct {
 func NewSSOAuthenticator(tharsisURL string, opts ...Option) (Authenticator, error) {
 	cfg := &Options{
 		logger: hclog.NewNullLogger(),
+		ui:     terminal.NewNoopUI(),
 	}
 
 	for _, opt := range opts {
