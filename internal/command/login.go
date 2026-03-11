@@ -58,7 +58,7 @@ func (c *loginCommand) Run(args []string) int {
 	c.UI.Output(credsFilepath)
 
 	// Perform SSO login using shared auth module
-	ssoClient, err := auth.NewSSOClient(
+	ssoClient, err := auth.NewSSOAuthenticator(
 		currentSettings.CurrentProfile.Endpoint,
 		auth.WithLogger(c.Logger),
 		auth.WithUI(c.UI),

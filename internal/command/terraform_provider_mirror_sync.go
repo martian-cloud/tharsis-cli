@@ -47,6 +47,7 @@ func (c *terraformProviderMirrorSyncCommand) validate() error {
 	)
 }
 
+// NewTerraformProviderMirrorSyncCommandFactory returns a new terraformProviderMirrorSyncCommand
 func NewTerraformProviderMirrorSyncCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {
 		return &terraformProviderMirrorSyncCommand{

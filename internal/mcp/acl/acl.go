@@ -111,6 +111,15 @@ func (a *checker) resolveNamespacePath(ctx context.Context, client *client.Clien
 		pathParts := trn.ToPathParts(resp.Metadata.Trn)
 		return strings.Join(pathParts[:len(pathParts)-2], "/"), nil
 
+	case trn.ResourceTypeTerraformModuleVersion:
+		resp, err := client.TerraformModulesClient.GetTerraformModuleVersionByID(ctx, &pb.GetTerraformModuleVersionByIDRequest{Id: identifier})
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve terraform module version: %w", err)
+		}
+		// TRN format: trn:terraform_module_version:group/name/system/version
+		pathParts := trn.ToPathParts(resp.Metadata.Trn)
+		return strings.Join(pathParts[:len(pathParts)-3], "/"), nil
+
 	default:
 		return "", fmt.Errorf("unsupported resource type for ACL: %s", resType)
 	}

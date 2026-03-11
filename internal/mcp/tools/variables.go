@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -55,7 +56,7 @@ func setVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*setVariableInpu
 			return nil, nil, err
 		}
 
-		variableID := trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, input.Category, input.Key)
+		variableID := trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, strings.ToLower(input.Category), input.Key)
 		variable, err := tc.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(ctx, &pb.GetNamespaceVariableByIDRequest{Id: variableID})
 		if err != nil && status.Code(err) != codes.NotFound {
 			return nil, nil, fmt.Errorf("failed to get variable: %w", err)
@@ -266,7 +267,7 @@ func deleteVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteVariab
 			return nil, nil, err
 		}
 
-		variableID := trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, input.Category, input.Key)
+		variableID := trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, strings.ToLower(input.Category), input.Key)
 		_, err = tc.grpcClient.NamespaceVariablesClient.DeleteNamespaceVariable(ctx, &pb.DeleteNamespaceVariableRequest{Id: variableID})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to delete variable: %w", err)
