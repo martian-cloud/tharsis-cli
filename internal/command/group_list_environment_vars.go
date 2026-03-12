@@ -113,7 +113,7 @@ func (*groupListEnvironmentVarsCommand) Usage() string {
 
 func (*groupListEnvironmentVarsCommand) Example() string {
 	return `
-tharsis group list-environment-vars --show-sensitive trn:group:ops/my-group
+tharsis group list-environment-vars --show-sensitive trn:group:<group_path>
 `
 }
 

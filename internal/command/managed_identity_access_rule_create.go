@@ -9,6 +9,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // managedIdentityAccessRuleCreateCommand is the top-level structure for the managed identity access rule create command.
@@ -101,11 +102,11 @@ func (*managedIdentityAccessRuleCreateCommand) Description() string {
 func (*managedIdentityAccessRuleCreateCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule create \
-  --managed-identity-id trn:managed_identity:ops/my-identity \
-  --type eligible_principals \
+  --managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name> \
+  --rule-type eligible_principals \
   --run-stage plan \
-  --allowed-user trn:user:john.smith \
-  --allowed-team trn:team:my-team
+  --allowed-user trn:user:<username> \
+  --allowed-team trn:team:<team_name>
 `
 }
 
@@ -118,7 +119,15 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"The ID or TRN of the managed identity.",
 	)
 	f.Func(
-		"type",
+		"managed-identity-path",
+		"Resource path to the managed identity. Deprecated.",
+		func(s string) error {
+			c.managedIdentityID = trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
+			return nil
+		},
+	)
+	f.Func(
+		"rule-type",
 		"The type of access rule: eligible_principals or module_attestation.",
 		func(s string) error {
 			val, ok := pb.ManagedIdentityAccessRuleType_value[strings.ToUpper(s)]
@@ -145,7 +154,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"allowed-user",
 		"Allowed user ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedUsers = append(c.allowedUsers, s)
+			c.allowedUsers = append(c.allowedUsers, toTRN(trn.ResourceTypeUser, s))
 			return nil
 		},
 	)
@@ -153,7 +162,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"allowed-service-account",
 		"Allowed service account ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedServiceAccounts = append(c.allowedServiceAccounts, s)
+			c.allowedServiceAccounts = append(c.allowedServiceAccounts, toTRN(trn.ResourceTypeServiceAccount, s))
 			return nil
 		},
 	)
@@ -161,7 +170,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"allowed-team",
 		"Allowed team ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedTeams = append(c.allowedTeams, s)
+			c.allowedTeams = append(c.allowedTeams, toTRN(trn.ResourceTypeTeam, s))
 			return nil
 		},
 	)

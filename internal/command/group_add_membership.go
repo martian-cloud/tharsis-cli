@@ -3,8 +3,10 @@ package command
 import (
 	"flag"
 
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupAddMembershipCommand struct {
@@ -49,7 +51,7 @@ func (c *groupAddMembershipCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateNamespaceMembershipRequest{
-		NamespacePath:    c.arguments[0],
+		NamespacePath:    toTRN(trn.ResourceTypeGroup, c.arguments[0]),
 		RoleId:           c.roleID,
 		UserId:           c.userID,
 		ServiceAccountId: c.serviceAccountID,
@@ -85,9 +87,9 @@ func (*groupAddMembershipCommand) Usage() string {
 func (*groupAddMembershipCommand) Example() string {
 	return `
 tharsis group add-membership \
-  --role-id trn:role:owner \
-  --user-id trn:user:john.smith \
-  trn:group:top-level/my-group
+  --role-id trn:role:<role_name> \
+  --user-id trn:user:<username> \
+  trn:group:<group_path>
 `
 }
 
@@ -120,6 +122,30 @@ func (c *groupAddMembershipCommand) Flags() *flag.FlagSet {
 		"The team ID for the membership.",
 		func(s string) error {
 			c.teamID = &s
+			return nil
+		},
+	)
+	f.Func(
+		"team-name",
+		"The team name for the membership. Deprecated.",
+		func(s string) error {
+			c.teamID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeTeam, s))
+			return nil
+		},
+	)
+	f.Func(
+		"username",
+		"The username for the membership. Deprecated.",
+		func(s string) error {
+			c.userID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeUser, s))
+			return nil
+		},
+	)
+	f.Func(
+		"role",
+		"The role for the membership. Deprecated.",
+		func(s string) error {
+			c.roleID = trn.NewResourceTRN(trn.ResourceTypeRole, s)
 			return nil
 		},
 	)

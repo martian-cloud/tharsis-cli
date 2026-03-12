@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // groupDeleteCommand is the top-level structure for the group delete command.
@@ -50,7 +51,7 @@ func (c *groupDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteGroupRequest{
-		Id:      c.arguments[0],
+		Id:      toTRN(trn.ResourceTypeGroup, c.arguments[0]),
 		Force:   &c.force,
 		Version: c.version,
 	}
@@ -86,7 +87,7 @@ func (*groupDeleteCommand) Example() string {
 	return `
 tharsis group delete \
   --force \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 `
 }
 

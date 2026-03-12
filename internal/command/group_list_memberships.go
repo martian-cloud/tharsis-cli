@@ -7,6 +7,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupListMembershipsCommand struct {
@@ -45,8 +46,15 @@ func (c *groupListMembershipsCommand) Run(args []string) int {
 		return code
 	}
 
+	// Ensure it's a group.
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: toTRN(trn.ResourceTypeGroup, c.arguments[0])})
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get group")
+		return 1
+	}
+
 	input := &pb.GetNamespaceMembershipsForNamespaceRequest{
-		NamespacePath: c.arguments[0],
+		NamespacePath: group.FullPath,
 	}
 
 	c.Logger.Debug("group list-memberships input", "input", input)
@@ -93,12 +101,12 @@ func (*groupListMembershipsCommand) Description() string {
 }
 
 func (*groupListMembershipsCommand) Usage() string {
-	return "tharsis [global options] group list-memberships [options] <group-path>"
+	return "tharsis [global options] group list-memberships [options] <group-id>"
 }
 
 func (*groupListMembershipsCommand) Example() string {
 	return `
-tharsis group list-memberships top-level/my-group
+tharsis group list-memberships trn:group:<group_path>
 `
 }
 

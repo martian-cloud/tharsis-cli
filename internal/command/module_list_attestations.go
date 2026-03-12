@@ -3,24 +3,24 @@ package command
 import (
 	"flag"
 	"fmt"
-	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type moduleListAttestationsCommand struct {
 	*BaseCommand
 
-	limit  *int32
-	cursor *string
-	digest *string
-	sortBy *pb.TerraformModuleAttestationSortableField
-	toJSON bool
+	limit     int
+	sortOrder *string
+	cursor    *string
+	digest    *string
+	sortBy    *string
+	toJSON    bool
 }
 
 // NewModuleListAttestationsCommandFactory returns a moduleListAttestationsCommand struct.
@@ -39,7 +39,7 @@ func (c *moduleListAttestationsCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.limit, validation.Min(0), validation.Max(100), validation.When(c.limit != nil)),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
 	)
 }
 
@@ -54,15 +54,21 @@ func (c *moduleListAttestationsCommand) Run(args []string) int {
 		return code
 	}
 
-	if c.limit == nil {
-		c.limit = ptr.Int32(defaultPaginationLimit)
+	sortByEnum, err := parseSortField[pb.TerraformModuleAttestationSortableField](
+		c.sortBy,
+		c.sortOrder,
+		pb.TerraformModuleAttestationSortableField_value,
+	)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to parse sort field")
+		return 1
 	}
 
 	input := &pb.GetTerraformModuleAttestationsRequest{
-		ModuleId: c.arguments[0],
-		Sort:     c.sortBy,
+		ModuleId: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Sort:     sortByEnum,
 		PaginationOptions: &pb.PaginationOptions{
-			First: c.limit,
+			First: ptr.Int32(int32(c.limit)),
 			After: c.cursor,
 		},
 		Digest: c.digest,
@@ -131,7 +137,7 @@ func (*moduleListAttestationsCommand) Example() string {
 tharsis module list-attestations \
   --sort-by CREATED_AT_DESC \
   --limit 10 \
-  trn:terraform_module:ops/installer/aws
+  trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 
@@ -145,28 +151,28 @@ func (c *moduleListAttestationsCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.IntVar(
+		&c.limit,
 		"limit",
+		maxPaginationLimit,
 		"Maximum number of result elements to return. Defaults to 100.",
-		func(s string) error {
-			i, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return err
-			}
-			c.limit = ptr.Int32(int32(i))
-			return nil
-		},
 	)
 	f.Func(
 		"sort-by",
 		"Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).",
 		func(s string) error {
-			value, ok := pb.TerraformModuleAttestationSortableField_value[strings.ToUpper(s)]
-			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, maps.Keys(pb.TerraformModuleAttestationSortableField_value))
+			// TODO: Update to use PB types and validate with PB map once deprecation is done.
+			switch v := strings.ToUpper(s); v {
+			case "PREDICATE", // Deprecated
+				"CREATED", // Deprecated
+				pb.TerraformModuleAttestationSortableField_CREATED_AT_ASC.String(),
+				pb.TerraformModuleAttestationSortableField_CREATED_AT_DESC.String(),
+				pb.TerraformModuleAttestationSortableField_PREDICATE_ASC.String(),
+				pb.TerraformModuleAttestationSortableField_PREDICATE_DESC.String():
+				c.sortBy = &v
 			}
-			c.sortBy = pb.TerraformModuleAttestationSortableField(value).Enum()
-			return nil
+
+			return fmt.Errorf("unknown sort by option %s", s)
 		},
 	)
 	f.Func(
@@ -175,6 +181,18 @@ func (c *moduleListAttestationsCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			c.digest = &s
 			return nil
+		},
+	)
+	f.Func(
+		"sort-order",
+		"Sort in this direction, ASC or DESC. Deprecated",
+		func(s string) error {
+			switch v := strings.ToUpper(s); v {
+			case "ASC", "DESC":
+				c.sortBy = &v
+			}
+
+			return fmt.Errorf("invalid sort-order value: %s", s)
 		},
 	)
 	f.BoolVar(

@@ -13,7 +13,7 @@ import (
 
 // Authenticator handles authentication flow.
 type Authenticator interface {
-	PerformLogin(ctx context.Context) (*oauth2.Token, error)
+	Authenticate(ctx context.Context) (*oauth2.Token, error)
 	StoreToken(token *oauth2.Token) error
 }
 

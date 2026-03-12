@@ -2,20 +2,17 @@ package command
 
 import (
 	"flag"
-	"fmt"
-	"maps"
 	"strconv"
-	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // managedIdentityAccessRuleUpdateCommand is the top-level structure for the managed identity access rule update command.
 type managedIdentityAccessRuleUpdateCommand struct {
 	*BaseCommand
 
-	runStage                  pb.JobType
 	allowedUsers              []string
 	allowedServiceAccounts    []string
 	allowedTeams              []string
@@ -33,7 +30,6 @@ func (c *managedIdentityAccessRuleUpdateCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.runStage, validation.Required),
 	)
 }
 
@@ -69,7 +65,6 @@ func (c *managedIdentityAccessRuleUpdateCommand) Run(args []string) int {
 
 	input := &pb.UpdateManagedIdentityAccessRuleRequest{
 		Id:                        c.arguments[0],
-		RunStage:                  c.runStage,
 		AllowedUsers:              c.allowedUsers,
 		AllowedServiceAccounts:    c.allowedServiceAccounts,
 		AllowedTeams:              c.allowedTeams,
@@ -105,31 +100,18 @@ func (*managedIdentityAccessRuleUpdateCommand) Description() string {
 func (*managedIdentityAccessRuleUpdateCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule update \
-  --run-stage apply \
-  --allowed-user trn:user:john.smith \
-  TV80ZG...
+  --allowed-user trn:user:<username> \
+  <id>
 `
 }
 
 func (c *managedIdentityAccessRuleUpdateCommand) Flags() *flag.FlagSet {
 	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
 	f.Func(
-		"run-stage",
-		"The run stage: plan or apply.",
-		func(s string) error {
-			val, ok := pb.JobType_value[strings.ToUpper(s)]
-			if !ok {
-				return fmt.Errorf("invalid run stage: %s (valid stages: %v)", s, maps.Keys(pb.JobType_value))
-			}
-			c.runStage = pb.JobType(val)
-			return nil
-		},
-	)
-	f.Func(
 		"allowed-user",
 		"Allowed user ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedUsers = append(c.allowedUsers, s)
+			c.allowedUsers = append(c.allowedUsers, toTRN(trn.ResourceTypeUser, s))
 			return nil
 		},
 	)
@@ -137,7 +119,7 @@ func (c *managedIdentityAccessRuleUpdateCommand) Flags() *flag.FlagSet {
 		"allowed-service-account",
 		"Allowed service account ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedServiceAccounts = append(c.allowedServiceAccounts, s)
+			c.allowedServiceAccounts = append(c.allowedServiceAccounts, toTRN(trn.ResourceTypeServiceAccount, s))
 			return nil
 		},
 	)
@@ -145,7 +127,7 @@ func (c *managedIdentityAccessRuleUpdateCommand) Flags() *flag.FlagSet {
 		"allowed-team",
 		"Allowed team ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedTeams = append(c.allowedTeams, s)
+			c.allowedTeams = append(c.allowedTeams, toTRN(trn.ResourceTypeTeam, s))
 			return nil
 		},
 	)

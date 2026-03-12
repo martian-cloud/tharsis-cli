@@ -5,6 +5,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type runnerAgentAssignServiceAccountCommand struct {
@@ -25,9 +26,9 @@ func NewRunnerAgentAssignServiceAccountCommandFactory(baseCommand *BaseCommand) 
 
 func (c *runnerAgentAssignServiceAccountCommand) validate() error {
 	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Empty),
-		validation.Field(&c.runnerID, validation.Required),
-		validation.Field(&c.serviceAccountID, validation.Required),
+		validation.Field(&c.arguments, validation.Required.When(c.runnerID == "" && c.serviceAccountID == "")),
+		validation.Field(&c.runnerID, validation.Required.When(len(c.arguments) == 0)),
+		validation.Field(&c.serviceAccountID, validation.Required.When(len(c.arguments) == 0)),
 	)
 }
 
@@ -43,8 +44,8 @@ func (c *runnerAgentAssignServiceAccountCommand) Run(args []string) int {
 	}
 
 	input := &pb.AssignServiceAccountToRunnerRequest{
-		RunnerId:         c.runnerID,
-		ServiceAccountId: c.serviceAccountID,
+		RunnerId:         toTRN(trn.ResourceTypeRunner, c.runnerID),
+		ServiceAccountId: toTRN(trn.ResourceTypeServiceAccount, c.serviceAccountID),
 	}
 
 	c.Logger.Debug("runner-agent assign-service-account input", "input", input)
@@ -75,8 +76,8 @@ func (*runnerAgentAssignServiceAccountCommand) Usage() string {
 func (*runnerAgentAssignServiceAccountCommand) Example() string {
 	return `
 tharsis runner-agent assign-service-account \
-  --runner-id trn:runner:ops/my-runner \
-  --service-account-id trn:service_account:ops/my-sa
+  --runner-id trn:runner:<group_path>/<runner_name> \
+  --service-account-id trn:service_account:<group_path>/<service_account_name>
 `
 }
 

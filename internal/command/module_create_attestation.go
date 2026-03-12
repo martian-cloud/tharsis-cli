@@ -6,6 +6,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // moduleCreateAttestationCommand is the top-level structure for the module create attestation command.
@@ -51,7 +52,7 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateTerraformModuleAttestationRequest{
-		ModuleId:        c.arguments[0],
+		ModuleId:        toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 		Description:     c.description,
 		AttestationData: c.attestationData,
 	}
@@ -85,8 +86,8 @@ func (*moduleCreateAttestationCommand) Example() string {
 	return `
 tharsis module create-attestation \
   --description "Attestation for v1.0.0" \
-  --attestation-data '{"key":"value"}' \
-  trn:terraform_module:ops/installer/aws
+  --attestation-data aGVsbG8sIHdvcmxk \
+  trn:terraform_module:<module_path>
 `
 }
 

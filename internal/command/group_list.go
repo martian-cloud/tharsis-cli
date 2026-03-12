@@ -4,19 +4,19 @@ import (
 	"flag"
 	"fmt"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupListCommand struct {
 	*BaseCommand
 
-	limit    *int32
+	limit    int
 	cursor   *string
 	search   *string
 	parentID *string
@@ -35,7 +35,7 @@ func NewGroupListCommandFactory(baseCommand *BaseCommand) func() (Command, error
 
 func (c *groupListCommand) validate() error {
 	return validation.ValidateStruct(c,
-		validation.Field(&c.limit, validation.Min(0), validation.Max(100), validation.When(c.limit != nil)),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
 		validation.Field(&c.arguments, validation.Empty),
 	)
 }
@@ -51,14 +51,10 @@ func (c *groupListCommand) Run(args []string) int {
 		return code
 	}
 
-	if c.limit == nil {
-		c.limit = ptr.Int32(defaultPaginationLimit)
-	}
-
 	input := &pb.GetGroupsRequest{
 		Sort: c.sortBy,
 		PaginationOptions: &pb.PaginationOptions{
-			First: c.limit,
+			First: ptr.Int32(int32(c.limit)),
 			After: c.cursor,
 		},
 		Search:   c.search,
@@ -127,7 +123,7 @@ func (*groupListCommand) Usage() string {
 func (*groupListCommand) Example() string {
 	return `
 tharsis group list \
-  --parent-id trn:group:top-level/bottom-level \
+  --parent-id trn:group:<parent_group_path> \
   --sort-by FULL_PATH_ASC \
   --limit 5 \
   --json
@@ -144,17 +140,11 @@ func (c *groupListCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.IntVar(
+		&c.limit,
 		"limit",
+		maxPaginationLimit,
 		"Maximum number of result elements to return. Defaults to 100.",
-		func(s string) error {
-			i, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return err
-			}
-			c.limit = ptr.Int32(int32(i))
-			return nil
-		},
 	)
 	f.Func(
 		"sort-by",
@@ -182,6 +172,28 @@ func (c *groupListCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			c.parentID = &s
 			return nil
+		},
+	)
+	f.Func(
+		"parent-path",
+		"Filter to only direct sub-groups of this parent group. Deprecated",
+		func(s string) error {
+			c.parentID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, s))
+			return nil
+		},
+	)
+	f.Func(
+		"sort-order",
+		"Sort in this direction, ASC or DESC. Deprecated",
+		func(s string) error {
+			switch strings.ToUpper(s) {
+			case "ASC":
+				c.sortBy = pb.GroupSortableField_FULL_PATH_ASC.Enum()
+			case "DESC":
+				c.sortBy = pb.GroupSortableField_FULL_PATH_DESC.Enum()
+			}
+
+			return fmt.Errorf("unknown sort option %s", s)
 		},
 	)
 	f.BoolVar(

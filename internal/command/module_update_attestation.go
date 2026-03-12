@@ -81,7 +81,7 @@ func (*moduleUpdateAttestationCommand) Example() string {
 	return `
 tharsis module update-attestation \
   --description "Updated description" \
-  trn:terraform_module_attestation:ops/installer/aws:VE1W
+  trn:terraform_module_attestation:<group_path>/<module_name>/<system>/<sha_sum>
 `
 }
 

@@ -77,7 +77,7 @@ func (*groupRemoveMembershipCommand) Usage() string {
 
 func (*groupRemoveMembershipCommand) Example() string {
 	return `
-tharsis group remove-membership trn:namespace_membership:ops/Tk1fZ...
+tharsis group remove-membership <id>
 `
 }
 

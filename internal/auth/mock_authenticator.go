@@ -14,12 +14,12 @@ type MockAuthenticator struct {
 	mock.Mock
 }
 
-// PerformLogin provides a mock function with given fields: ctx
-func (_m *MockAuthenticator) PerformLogin(ctx context.Context) (*oauth2.Token, error) {
+// Authenticate provides a mock function with given fields: ctx
+func (_m *MockAuthenticator) Authenticate(ctx context.Context) (*oauth2.Token, error) {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
-		panic("no return value specified for PerformLogin")
+		panic("no return value specified for Authenticate")
 	}
 
 	var r0 *oauth2.Token

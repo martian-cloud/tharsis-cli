@@ -6,6 +6,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type destroyCommand struct {
@@ -76,7 +77,7 @@ func (c *destroyCommand) Run(args []string) int {
 
 	// Create non-speculative destroy run
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
-		WorkspaceID:      c.arguments[0],
+		WorkspaceID:      toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		DirectoryPath:    c.directoryPath,
 		ModuleSource:     c.moduleSource,
 		ModuleVersion:    c.moduleVersion,
@@ -159,7 +160,7 @@ func (*destroyCommand) Usage() string {
 
 func (*destroyCommand) Example() string {
 	return `
-tharsis destroy --directory-path ./terraform trn:workspace:ops/my-workspace
+tharsis destroy --directory-path ./terraform trn:workspace:<workspace_path>
 `
 }
 

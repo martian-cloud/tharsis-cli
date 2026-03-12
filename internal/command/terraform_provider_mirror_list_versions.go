@@ -38,7 +38,7 @@ func (c *terraformProviderMirrorListVersionsCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.limit, validation.Min(0), validation.Max(100), validation.When(c.limit != nil)),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit), validation.When(c.limit != nil)),
 	)
 }
 
@@ -54,7 +54,7 @@ func (c *terraformProviderMirrorListVersionsCommand) Run(args []string) int {
 	}
 
 	if c.limit == nil {
-		c.limit = ptr.Int32(defaultPaginationLimit)
+		c.limit = ptr.Int32(maxPaginationLimit)
 	}
 
 	input := &pb.GetTerraformProviderVersionMirrorsRequest{

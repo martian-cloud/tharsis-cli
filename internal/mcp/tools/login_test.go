@@ -115,14 +115,14 @@ func TestLoginWithSSO(t *testing.T) {
 			name: "successful login",
 			mockSetup: func(ma *auth.MockAuthenticator) {
 				token := &oauth2.Token{AccessToken: "test-token"}
-				ma.On("PerformLogin", mock.Anything).Return(token, nil)
+				ma.On("Authenticate", mock.Anything).Return(token, nil)
 				ma.On("StoreToken", token).Return(nil)
 			},
 		},
 		{
 			name: "login fails",
 			mockSetup: func(ma *auth.MockAuthenticator) {
-				ma.On("PerformLogin", mock.Anything).Return(nil, status.Error(codes.Unauthenticated, "login failed"))
+				ma.On("Authenticate", mock.Anything).Return(nil, status.Error(codes.Unauthenticated, "login failed"))
 			},
 			expectError: true,
 		},
@@ -130,7 +130,7 @@ func TestLoginWithSSO(t *testing.T) {
 			name: "store token fails",
 			mockSetup: func(ma *auth.MockAuthenticator) {
 				token := &oauth2.Token{AccessToken: "test-token"}
-				ma.On("PerformLogin", mock.Anything).Return(token, nil)
+				ma.On("Authenticate", mock.Anything).Return(token, nil)
 				ma.On("StoreToken", token).Return(status.Error(codes.Internal, "store failed"))
 			},
 			expectError: true,

@@ -7,12 +7,14 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type moduleGetVersionCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	version string
+	toJSON  bool
 }
 
 // NewModuleGetVersionCommandFactory returns a moduleGetVersionCommand struct.
@@ -25,7 +27,7 @@ func NewModuleGetVersionCommandFactory(baseCommand *BaseCommand) func() (Command
 }
 
 func (c *moduleGetVersionCommand) validate() error {
-	const message = "version-id is required"
+	const message = "id is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,
 			validation.Required.Error(message),
@@ -45,8 +47,15 @@ func (c *moduleGetVersionCommand) Run(args []string) int {
 		return code
 	}
 
+	moduleVersionID := c.arguments[0]
+
+	if c.version != "" {
+		// Handle deprecated version flag and module path arg.
+		moduleVersionID = trn.NewResourceTRN(trn.ResourceTypeTerraformModuleVersion, moduleVersionID, c.version)
+	}
+
 	input := &pb.GetTerraformModuleVersionByIDRequest{
-		Id: c.arguments[0],
+		Id: moduleVersionID,
 	}
 
 	c.Logger.Debug("module get version input", "input", input)
@@ -76,7 +85,7 @@ func (*moduleGetVersionCommand) Usage() string {
 
 func (*moduleGetVersionCommand) Example() string {
 	return `
-tharsis module get-version trn:terraform_module_version:ops/installer/aws/1.0.0
+tharsis module get-version trn:terraform_module_version:<group_path>/<module_name>/<system>/<version>
 `
 }
 
@@ -87,6 +96,12 @@ func (c *moduleGetVersionCommand) Flags() *flag.FlagSet {
 		"json",
 		false,
 		"Output in JSON format.",
+	)
+	f.StringVar(
+		&c.version,
+		"version",
+		"",
+		"A semver compliant version tag to use as a filter. Deprecated.",
 	)
 	return f
 }

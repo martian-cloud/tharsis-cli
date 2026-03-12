@@ -79,7 +79,7 @@ func (*moduleDeleteVersionCommand) Usage() string {
 
 func (*moduleDeleteVersionCommand) Example() string {
 	return `
-tharsis module delete-version trn:terraform_module_version:ops/installer/aws/1.0.0
+tharsis module delete-version trn:terraform_module_version:<group_path>/<module_name>/<system>/<semantic_version>
 `
 }
 

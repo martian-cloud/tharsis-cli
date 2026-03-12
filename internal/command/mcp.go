@@ -2,10 +2,12 @@ package command
 
 import (
 	"flag"
+	"log/slog"
 	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
+	"github.com/hashicorp/go-hclog"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	env "github.com/qiangxue/go-env"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/mcp"
@@ -133,6 +135,7 @@ func (c *mcpCommand) Run(args []string) int {
 		Name:            "tharsis-cli",
 		Title:           "Tharsis CLI MCP Server",
 		Version:         c.Version,
+		Logger:          slog.New(slog.NewTextHandler(c.Logger.StandardWriter(&hclog.StandardLoggerOptions{}), nil)),
 		Instructions:    mcp.DefaultInstructions(),
 		EnabledToolsets: cfg.Toolsets,
 		EnabledTools:    cfg.Tools,

@@ -22,6 +22,7 @@ import (
 	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/command"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/useragent"
 	"golang.org/x/text/cases"
@@ -85,8 +86,8 @@ func realMain() int {
 	)
 
 	// Create a global flagSet.
-	f := flag.NewFlagSet("global options", flag.ContinueOnError)
-	f.SetOutput(io.Discard)
+	globalFlags := flag.NewFlagSet("global options", flag.ContinueOnError)
+	globalFlags.SetOutput(io.Discard)
 
 	// Default profile from env var, then fall back to default.
 	defaultProfile := os.Getenv(profileEnvVar)
@@ -94,21 +95,21 @@ func realMain() int {
 		defaultProfile = settings.DefaultProfileName
 	}
 
-	f.StringVar(
+	globalFlags.StringVar(
 		&profileName,
 		"p",
 		defaultProfile,
 		"Profile name from config file. Overrides THARSIS_PROFILE env var.",
 	)
-	f.BoolVar(&color.NoColor, "no-color", os.Getenv("NO_COLOR") != "", "Disable colored output. Also respects NO_COLOR env var.")
+	globalFlags.BoolVar(&color.NoColor, "no-color", os.Getenv("NO_COLOR") != "", "Disable colored output. Also respects NO_COLOR env var.")
 
 	// Values are never used since CLI framework can handle them,
 	// these are simply meant to facilitate the help output for
 	// available global flags.
-	_ = f.String("v", "", "Show the version information.")
-	_ = f.String("h", "", "Show this usage message.")
-	_ = f.Bool(autocompleteFlagInstall, false, "Install shell autocompletion.")
-	_ = f.Bool(autocompleteFlagUninstall, false, "Uninstall shell autocompletion.")
+	_ = globalFlags.String("v", "", "Show the version information.")
+	_ = globalFlags.String("h", "", "Show this usage message.")
+	_ = globalFlags.Bool(autocompleteFlagInstall, false, "Install shell autocompletion.")
+	_ = globalFlags.Bool(autocompleteFlagUninstall, false, "Uninstall shell autocompletion.")
 
 	// Check for autocomplete flags - pass directly to CLI without parsing global flags
 	isAutocomplete := false
@@ -123,7 +124,7 @@ func realMain() int {
 	// Only parse global flags if not an autocomplete request
 	if !isAutocomplete {
 		// Ignore errors since CLI framework will handle them.
-		_ = f.Parse(rawArgs)
+		_ = globalFlags.Parse(rawArgs)
 	}
 
 	logLevel := os.Getenv(logLevelEnvVar)
@@ -212,10 +213,10 @@ func realMain() int {
 	defer baseCommand.Close()
 
 	commandArgs := rawArgs // No global flag.
-	if f.NFlag() > 0 {
+	if globalFlags.NFlag() > 0 {
 		// A global option was set, so pass remaining arguments to commands,
 		// since it will automatically be handled.
-		commandArgs = f.Args()
+		commandArgs = globalFlags.Args()
 	}
 
 	availableCommands, err := commands(baseCommand)
@@ -229,7 +230,7 @@ func realMain() int {
 		Version:               Version,
 		Args:                  commandArgs,
 		Commands:              availableCommands,
-		HelpFunc:              helpFunc(cli.BasicHelpFunc(binaryName), f),
+		HelpFunc:              helpFunc(cli.BasicHelpFunc(binaryName), globalFlags),
 		HelpWriter:            os.Stdout,
 		ErrorWriter:           os.Stderr,
 		Autocomplete:          true,
@@ -265,7 +266,12 @@ func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, 
 		"group update":                              command.NewGroupUpdateCommandFactory(baseCommand),
 		"group delete":                              command.NewGroupDeleteCommandFactory(baseCommand),
 		"group list":                                command.NewGroupListCommandFactory(baseCommand),
+		"group migrate":                             command.NewGroupMigrateCommandFactory(baseCommand),
 		"group list-memberships":                    command.NewGroupListMembershipsCommandFactory(baseCommand),
+		"group get-membership":                      command.NewGroupGetMembershipCommandFactory(baseCommand),
+		"group add-membership":                      command.NewGroupAddMembershipCommandFactory(baseCommand),
+		"group update-membership":                   command.NewGroupUpdateMembershipCommandFactory(baseCommand),
+		"group remove-membership":                   command.NewGroupRemoveMembershipCommandFactory(baseCommand),
 		"group get-terraform-var":                   command.NewGroupGetTerraformVarCommandFactory(baseCommand),
 		"group set-terraform-var":                   command.NewGroupSetTerraformVarCommandFactory(baseCommand),
 		"group delete-terraform-var":                command.NewGroupDeleteTerraformVarCommandFactory(baseCommand),
@@ -287,6 +293,7 @@ func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, 
 		"managed-identity-alias":                    command.NewHelpCommandFactory(getHelpText("managed-identity-alias")),
 		"managed-identity-alias create":             command.NewManagedIdentityAliasCreateCommandFactory(baseCommand),
 		"managed-identity-alias delete":             command.NewManagedIdentityAliasDeleteCommandFactory(baseCommand),
+		"mcp":                                       command.NewMCPCommandFactory(baseCommand),
 		"module":                                    command.NewHelpCommandFactory(getHelpText("module")),
 		"module get":                                command.NewModuleGetCommandFactory(baseCommand),
 		"module create":                             command.NewModuleCreateCommandFactory(baseCommand),
@@ -322,6 +329,7 @@ func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, 
 		"terraform-provider-mirror get-version":     command.NewTerraformProviderMirrorGetVersionCommandFactory(baseCommand),
 		"terraform-provider-mirror list-versions":   command.NewTerraformProviderMirrorListVersionsCommandFactory(baseCommand),
 		"terraform-provider-mirror list-platforms":  command.NewTerraformProviderMirrorListPlatformsCommandFactory(baseCommand),
+		"terraform-provider-mirror sync":            command.NewTerraformProviderMirrorSyncCommandFactory(baseCommand),
 		"terraform-provider-mirror delete-version":  command.NewTerraformProviderMirrorDeleteVersionCommandFactory(baseCommand),
 		"terraform-provider-mirror delete-platform": command.NewTerraformProviderMirrorDeletePlatformCommandFactory(baseCommand),
 		"version":                                   command.NewVersionCommandFactory(baseCommand),
@@ -331,7 +339,12 @@ func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, 
 		"workspace update":                          command.NewWorkspaceUpdateCommandFactory(baseCommand),
 		"workspace delete":                          command.NewWorkspaceDeleteCommandFactory(baseCommand),
 		"workspace list":                            command.NewWorkspaceListCommandFactory(baseCommand),
+		"workspace migrate":                         command.NewWorkspaceMigrateCommandFactory(baseCommand),
 		"workspace list-memberships":                command.NewWorkspaceListMembershipsCommandFactory(baseCommand),
+		"workspace get-membership":                  command.NewWorkspaceGetMembershipCommandFactory(baseCommand),
+		"workspace add-membership":                  command.NewWorkspaceAddMembershipCommandFactory(baseCommand),
+		"workspace update-membership":               command.NewWorkspaceUpdateMembershipCommandFactory(baseCommand),
+		"workspace remove-membership":               command.NewWorkspaceRemoveMembershipCommandFactory(baseCommand),
 		"workspace assign-managed-identity":         command.NewWorkspaceAssignManagedIdentityCommandFactory(baseCommand),
 		"workspace unassign-managed-identity":       command.NewWorkspaceUnassignManagedIdentityCommandFactory(baseCommand),
 		"workspace get-assigned-managed-identities": command.NewWorkspaceGetAssignedManagedIdentitiesCommandFactory(baseCommand),
@@ -367,34 +380,29 @@ func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, 
 }
 
 // helpFunc adds global options to the default help function.
-func helpFunc(h cli.HelpFunc, f *flag.FlagSet) cli.HelpFunc {
+func helpFunc(h cli.HelpFunc, globalFlags *flag.FlagSet) cli.HelpFunc {
 	return func(commands map[string]cli.CommandFactory) string {
 		var headingBuf bytes.Buffer
 
 		// Build the header with colors
-		titleColor := color.New(color.Bold, color.FgMagenta)
-		boldColor := color.New(color.Bold)
-		greenBold := color.New(color.Bold, color.FgGreen)
-
-		fmt.Fprint(&headingBuf, titleColor.Sprint("Welcome to Tharsis!"))
+		fmt.Fprint(&headingBuf, color.New(color.Bold, color.FgHiGreen).Sprint("Welcome to Tharsis!"))
 		fmt.Fprint(&headingBuf, " — ")
 		fmt.Fprintln(&headingBuf, "An open-source Terraform platform.")
 
-		fmt.Fprint(&headingBuf, boldColor.Sprint("Documentation:"))
+		fmt.Fprint(&headingBuf, color.New(color.Bold).Sprint("Documentation:"))
 		fmt.Fprintln(&headingBuf, " https://tharsis.martian-cloud.io")
 
-		fmt.Fprint(&headingBuf, greenBold.Sprint("Version:"))
+		fmt.Fprint(&headingBuf, color.New(color.FgGreen).Sprint("Version:"))
 		fmt.Fprintln(&headingBuf, " "+Version)
 		fmt.Fprintln(&headingBuf)
 
-		// Build global flag usage.
-		var usageBuf bytes.Buffer
-		usageBuf.Write([]byte("\n"))
-		globalFlags := f
-		globalFlags.SetOutput(&usageBuf)
-		globalFlags.Usage()
+		// Build global flag usage with syntax highlighting.
+		globalFlagsOutput := output.CommandHelp(output.CommandHelpInfo{
+			Flags:      globalFlags,
+			FlagsTitle: "Global options:",
+		})
 
-		return strings.TrimSpace(headingBuf.String() + h(commands) + usageBuf.String())
+		return strings.TrimSpace(headingBuf.String() + h(commands) + "\n" + globalFlagsOutput)
 	}
 }
 

@@ -10,8 +10,6 @@ import (
 // moduleDeleteAttestationCommand is the top-level structure for the module delete attestation command.
 type moduleDeleteAttestationCommand struct {
 	*BaseCommand
-
-	force bool
 }
 
 var _ Command = (*moduleDeleteAttestationCommand)(nil)
@@ -42,7 +40,6 @@ func (c *moduleDeleteAttestationCommand) Run(args []string) int {
 		WithCommandName("module delete-attestation"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to delete this module attestation?"),
 	); code != 0 {
 		return code
 	}
@@ -79,18 +76,10 @@ func (*moduleDeleteAttestationCommand) Description() string {
 
 func (*moduleDeleteAttestationCommand) Example() string {
 	return `
-tharsis module delete-attestation trn:terraform_module_attestation:ops/installer/aws:VE1W
+tharsis module delete-attestation trn:terraform_module_attestation:<group_path>/<module_name>/<module_system>/<sha_sum>
 `
 }
 
 func (c *moduleDeleteAttestationCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.BoolVar(
-		&c.force,
-		"force",
-		false,
-		"Force delete the module attestation.",
-	)
-
-	return f
+	return nil
 }
