@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // groupUpdateCommand is the top-level structure for the group update command.
@@ -49,10 +50,8 @@ func (c *groupUpdateCommand) Run(args []string) int {
 		return code
 	}
 
-	groupID := c.arguments[0]
-
 	input := &pb.UpdateGroupRequest{
-		Id:          groupID,
+		Id:          toTRN(trn.ResourceTypeGroup, c.arguments[0]),
 		Description: c.description,
 		Version:     c.version,
 	}
@@ -88,7 +87,7 @@ func (*groupUpdateCommand) Example() string {
 	return `
 tharsis group update \
   --description "Updated operations group" \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 `
 }
 

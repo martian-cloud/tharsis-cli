@@ -5,6 +5,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type planCommand struct {
@@ -74,7 +75,7 @@ func (c *planCommand) Run(args []string) int {
 	}
 
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
-		WorkspaceID:      c.arguments[0],
+		WorkspaceID:      toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		DirectoryPath:    c.directoryPath,
 		ModuleSource:     c.moduleSource,
 		ModuleVersion:    c.moduleVersion,
@@ -133,7 +134,7 @@ func (*planCommand) Usage() string {
 
 func (*planCommand) Example() string {
 	return `
-tharsis plan --directory-path ./terraform trn:workspace:ops/my-workspace
+tharsis plan --directory-path ./terraform trn:workspace:<workspace_path>
 `
 }
 

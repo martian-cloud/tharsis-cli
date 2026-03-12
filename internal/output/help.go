@@ -26,6 +26,7 @@ type CommandHelpInfo struct {
 	Usage       string
 	Description string
 	Flags       *flag.FlagSet
+	FlagsTitle  string // Title for flags section (default: "Command options:")
 	Example     string
 }
 
@@ -35,7 +36,7 @@ type CommandHelpInfo struct {
 func CommandHelp(info CommandHelpInfo) string {
 	var buf bytes.Buffer
 	bold := color.New(color.Bold)
-	highlightColor := color.New(color.FgMagenta)
+	highlightColor := color.New(color.FgHiGreen)
 
 	// Build help sections
 	buf.WriteString("\n" + strings.TrimSpace(info.Usage) + "\n")
@@ -45,13 +46,17 @@ func CommandHelp(info CommandHelpInfo) string {
 	}
 
 	if info.Flags != nil {
-		buf.WriteString("\n" + bold.Sprint("Command options:") + "\n")
+		flagsTitle := info.FlagsTitle
+		if flagsTitle == "" {
+			flagsTitle = "Command options:"
+		}
+		buf.WriteString("\n" + bold.Sprint(flagsTitle) + "\n")
 		var optionsBuf bytes.Buffer
 		writer := tabwriter.NewWriter(&optionsBuf, 0, 80, 0, ' ', 0)
 		info.Flags.VisitAll(func(f *flag.Flag) {
 			var defValue string
 			if f.DefValue != "" {
-				defValue = fmt.Sprintf("(default %s)", f.DefValue)
+				defValue = fmt.Sprintf("(default %s)", bold.Sprint(f.DefValue))
 			}
 			wrapped := text.Wrap(f.Usage, 70)
 			lines := strings.Split(wrapped, "\n")
@@ -65,7 +70,7 @@ func CommandHelp(info CommandHelpInfo) string {
 	}
 
 	if example := strings.TrimSuffix(strings.TrimPrefix(info.Example, "\n"), "\n"); example != "" {
-		buf.WriteString("\n" + bold.Sprint("Example:") + "\n\n" + highlightCode(example, info.ProductName) + "\n\n")
+		buf.WriteString("\n" + bold.Sprint("Example:") + "\n" + highlightCode(example, info.ProductName) + "\n\n")
 	}
 
 	// Apply syntax highlighting line by line

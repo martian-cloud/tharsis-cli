@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // moduleUpdateCommand is the top-level structure for the module update command.
@@ -51,7 +52,7 @@ func (c *moduleUpdateCommand) Run(args []string) int {
 	}
 
 	input := &pb.UpdateTerraformModuleRequest{
-		Id:            c.arguments[0],
+		Id:            toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 		RepositoryUrl: c.repositoryURL,
 		Private:       c.private,
 		Version:       c.version,
@@ -89,7 +90,7 @@ func (*moduleUpdateCommand) Example() string {
 tharsis module update \
   --repository-url https://github.com/example/terraform-aws-vpc-v2 \
   --private true \
-  trn:terraform_module:ops/my-group/vpc
+  trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 

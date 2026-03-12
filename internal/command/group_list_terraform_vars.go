@@ -9,6 +9,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupListTerraformVarsCommand struct {
@@ -48,7 +49,7 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 		return code
 	}
 
-	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: toTRN(trn.ResourceTypeGroup, c.arguments[0])})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
@@ -116,7 +117,7 @@ func (*groupListTerraformVarsCommand) Usage() string {
 
 func (*groupListTerraformVarsCommand) Example() string {
 	return `
-tharsis group list-terraform-vars --show-sensitive trn:group:ops/my-group
+tharsis group list-terraform-vars --show-sensitive trn:group:<group_path>
 `
 }
 

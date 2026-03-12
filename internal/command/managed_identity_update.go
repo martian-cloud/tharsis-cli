@@ -1,11 +1,15 @@
 package command
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // managedIdentityUpdateCommand is the top-level structure for the managed identity update command.
@@ -17,6 +21,7 @@ type managedIdentityUpdateCommand struct {
 	azureFederatedClientID           *string
 	azureFederatedTenantID           *string
 	tharsisFederatedServiceAccountID *string
+	kubernetesFederatedAudience      *string
 	updateIdentityData               bool
 	toJSON                           bool
 }
@@ -53,9 +58,9 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 		return code
 	}
 
-	managedIdentityID := c.arguments[0]
+	managedIdentityID := toTRN(trn.ResourceTypeManagedIdentity, c.arguments[0])
 
-	var data *string
+	var encodedData *string
 	if c.updateIdentityData {
 		identity, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityByID(c.Context, &pb.GetManagedIdentityByIDRequest{Id: managedIdentityID})
 		if err != nil {
@@ -63,35 +68,48 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 			return 1
 		}
 
-		identityType := pb.ManagedIdentityType(pb.ManagedIdentityType_value[identity.Type])
-
 		// Build data based on identity type and provided fields
-		switch identityType {
-		case pb.ManagedIdentityType_AWS_FEDERATED:
+		var data string
+		switch identity.Type {
+		case pb.ManagedIdentityType_AWS_FEDERATED.String():
 			if c.awsFederatedRole != nil {
-				dataStr := fmt.Sprintf(`{"role":"%s"}`, *c.awsFederatedRole)
-				data = &dataStr
+				data = fmt.Sprintf(`{"role":"%s"}`, *c.awsFederatedRole)
 			}
-		case pb.ManagedIdentityType_AZURE_FEDERATED:
+		case pb.ManagedIdentityType_AZURE_FEDERATED.String():
 			if c.azureFederatedClientID != nil && c.azureFederatedTenantID != nil {
-				dataStr := fmt.Sprintf(`{"clientId":"%s","tenantId":"%s"}`, *c.azureFederatedClientID, *c.azureFederatedTenantID)
-				data = &dataStr
+				data = fmt.Sprintf(`{"clientId":"%s","tenantId":"%s"}`, *c.azureFederatedClientID, *c.azureFederatedTenantID)
 			}
-		case pb.ManagedIdentityType_THARSIS_FEDERATED:
+		case pb.ManagedIdentityType_THARSIS_FEDERATED.String():
 			if c.tharsisFederatedServiceAccountID != nil {
-				dataStr := fmt.Sprintf(`{"serviceAccountId":"%s"}`, *c.tharsisFederatedServiceAccountID)
-				data = &dataStr
+				data = fmt.Sprintf(`{"serviceAccountId":"%s"}`, *c.tharsisFederatedServiceAccountID)
+			}
+		case pb.ManagedIdentityType_KUBERNETES_FEDERATED.String():
+			if c.kubernetesFederatedAudience != nil {
+				data = fmt.Sprintf(`{"audience":"%s"}`, *c.kubernetesFederatedAudience)
 			}
 		default:
 			c.UI.Errorf("unsupported identity type: %s", identity.Type)
 			return 1
 		}
+
+		if data == "" {
+			c.UI.Errorf("no valid managed identity data provided")
+			return 1
+		}
+
+		marshalled, err := json.Marshal(data)
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to marshal managed identity data")
+			return 1
+		}
+
+		encodedData = ptr.String(base64.StdEncoding.EncodeToString(marshalled))
 	}
 
 	input := &pb.UpdateManagedIdentityRequest{
 		Id:          managedIdentityID,
 		Description: c.description,
-		Data:        data,
+		Data:        encodedData,
 	}
 
 	c.Logger.Debug("managed identity update input", "input", input)
@@ -126,7 +144,7 @@ func (*managedIdentityUpdateCommand) Example() string {
 tharsis managed-identity update \
   --description "Updated AWS production role" \
   --aws-federated-role arn:aws:iam::123456789012:role/UpdatedRole \
-  trn:managed_identity:ops/my-group/aws-prod
+  trn:managed_identity:<group_path>/<managed_identity_name>
 `
 }
 
@@ -172,6 +190,23 @@ func (c *managedIdentityUpdateCommand) Flags() *flag.FlagSet {
 		"Tharsis service account ID or TRN. (Only if type is tharsis_federated)",
 		func(s string) error {
 			c.tharsisFederatedServiceAccountID = &s
+			c.updateIdentityData = true
+			return nil
+		},
+	)
+	f.Func(
+		"tharsis-federated-service-account-path",
+		"Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated). Deprecated.",
+		func(s string) error {
+			c.tharsisFederatedServiceAccountID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeServiceAccount, s))
+			return nil
+		},
+	)
+	f.Func(
+		"kubernetes-federated-audience",
+		"Kubernetes federated audience. The audience should match the client_id configured in your EKS OIDC identity provider. (Only if type is kubernetes_federated)",
+		func(s string) error {
+			c.kubernetesFederatedAudience = &s
 			c.updateIdentityData = true
 			return nil
 		},

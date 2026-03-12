@@ -6,6 +6,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // groupGetCommand is the top-level structure for the group get command.
@@ -48,7 +49,7 @@ func (c *groupGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetGroupByIDRequest{
-		Id: c.arguments[0],
+		Id: toTRN(trn.ResourceTypeGroup, c.arguments[0]),
 	}
 
 	c.Logger.Debug("group get input", "input", input)
@@ -81,7 +82,7 @@ func (*groupGetCommand) Example() string {
 	return `
 tharsis group get \
   --json \
-  trn:tharsis:group:ops/my-group
+  trn:tharsis:group:<group_path>
 `
 }
 

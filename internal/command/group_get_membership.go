@@ -7,12 +7,16 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupGetMembershipCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	serviceAccountID *string
+	teamName         *string
+	username         *string
+	toJSON           bool
 }
 
 // NewGroupGetMembershipCommandFactory returns a groupGetMembershipCommand struct.
@@ -43,6 +47,70 @@ func (c *groupGetMembershipCommand) Run(args []string) int {
 		WithClient(true),
 	); code != 0 {
 		return code
+	}
+
+	// Check if this using the deprecated group path argument.
+	if g := toTRN(trn.ResourceTypeGroup, c.arguments[0]); g != "" {
+		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: g})
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get group")
+			return 1
+		}
+
+		// This is passing in a group path argument (deprecated)
+		// so we'll need to lookup the membership a different way.
+		memberships, err := c.grpcClient.NamespaceMembershipsClient.GetNamespaceMembershipsForNamespace(c.Context, &pb.GetNamespaceMembershipsForNamespaceRequest{
+			NamespacePath: group.FullPath,
+		})
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get group memberships")
+			return 1
+		}
+
+		var foundMembership *pb.NamespaceMembership
+		for _, membership := range memberships.NamespaceMemberships {
+			if c.username != nil && membership.UserId != nil {
+				user, err := c.grpcClient.UsersClient.GetUserByID(c.Context, &pb.GetUserByIDRequest{
+					Id: trn.NewResourceTRN(trn.ResourceTypeUser, *c.username),
+				})
+				if err != nil {
+					c.UI.ErrorWithSummary(err, "failed to get user")
+					return 1
+				}
+
+				if user.Metadata.Id == *membership.UserId {
+					foundMembership = membership
+					break
+				}
+			}
+
+			if c.teamName != nil && membership.TeamId != nil {
+				team, err := c.grpcClient.TeamsClient.GetTeamByID(c.Context, &pb.GetTeamByIDRequest{
+					Id: trn.NewResourceTRN(trn.ResourceTypeTeam, *c.teamName),
+				})
+				if err != nil {
+					c.UI.ErrorWithSummary(err, "failed to get team")
+					return 1
+				}
+
+				if team.Metadata.Id == *membership.TeamId {
+					foundMembership = membership
+					break
+				}
+			}
+
+			if c.serviceAccountID != nil && ptr.ToString(membership.ServiceAccountId) == *c.serviceAccountID {
+				foundMembership = membership
+				break
+			}
+		}
+
+		if foundMembership == nil {
+			c.UI.Errorf("no membership found for the specified principal")
+			return 1
+		}
+
+		return outputMembership(c.UI, c.toJSON, foundMembership)
 	}
 
 	input := &pb.GetNamespaceMembershipByIDRequest{
@@ -76,7 +144,7 @@ func (*groupGetMembershipCommand) Usage() string {
 
 func (*groupGetMembershipCommand) Example() string {
 	return `
-tharsis group get-membership trn:namespace_membership:ops/Tk1fZj
+tharsis group get-membership <id>
 `
 }
 
@@ -87,6 +155,30 @@ func (c *groupGetMembershipCommand) Flags() *flag.FlagSet {
 		"json",
 		false,
 		"Output in JSON format.",
+	)
+	f.Func(
+		"service-account-id",
+		"Service account ID to find the group membership. Deprecated",
+		func(s string) error {
+			c.serviceAccountID = &s
+			return nil
+		},
+	)
+	f.Func(
+		"username",
+		"Username to find the group membership. Deprecated",
+		func(s string) error {
+			c.username = &s
+			return nil
+		},
+	)
+	f.Func(
+		"team-name",
+		"Team name to find the group membership. Deprecated",
+		func(s string) error {
+			c.teamName = &s
+			return nil
+		},
 	)
 
 	return f

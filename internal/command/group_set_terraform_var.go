@@ -51,7 +51,7 @@ func (c *groupSetTerraformVarCommand) Run(args []string) int {
 	}
 
 	// Get group to retrieve full path
-	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.arguments[0]})
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: toTRN(trn.ResourceTypeGroup, c.arguments[0])})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
@@ -127,7 +127,7 @@ func (*groupSetTerraformVarCommand) Example() string {
 tharsis group set-terraform-var \
   --key region \
   --value us-east-1 \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 `
 }
 

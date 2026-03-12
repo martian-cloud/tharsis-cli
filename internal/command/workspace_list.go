@@ -37,7 +37,7 @@ func NewWorkspaceListCommandFactory(baseCommand *BaseCommand) func() (Command, e
 
 func (c *workspaceListCommand) validate() error {
 	return validation.ValidateStruct(c,
-		validation.Field(&c.limit, validation.Min(0), validation.Max(100), validation.When(c.limit != nil)),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit), validation.When(c.limit != nil)),
 		validation.Field(&c.arguments, validation.Empty),
 	)
 }
@@ -54,7 +54,7 @@ func (c *workspaceListCommand) Run(args []string) int {
 	}
 
 	if c.limit == nil {
-		c.limit = ptr.Int32(defaultPaginationLimit)
+		c.limit = ptr.Int32(maxPaginationLimit)
 	}
 
 	input := &pb.GetWorkspacesRequest{

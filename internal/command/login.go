@@ -69,7 +69,7 @@ func (c *loginCommand) Run(args []string) int {
 		return 1
 	}
 
-	token, err := ssoClient.PerformLogin(c.Context)
+	token, err := ssoClient.Authenticate(c.Context)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to complete SSO login")
 		return 1

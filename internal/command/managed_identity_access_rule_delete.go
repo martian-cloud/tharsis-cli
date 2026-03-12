@@ -75,7 +75,7 @@ func (*managedIdentityAccessRuleDeleteCommand) Description() string {
 
 func (*managedIdentityAccessRuleDeleteCommand) Example() string {
 	return `
-tharsis managed-identity-access-rule delete TV80ZG...
+tharsis managed-identity-access-rule delete <id>
 `
 }
 

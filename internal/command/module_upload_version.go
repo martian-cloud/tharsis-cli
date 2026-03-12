@@ -11,6 +11,7 @@ import (
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 const (
@@ -71,7 +72,7 @@ func (c *moduleUploadVersionCommand) Run(args []string) int {
 
 	step := c.sg.Add("Get module")
 	module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{
-		Id: c.arguments[0],
+		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 	})
 	if err != nil {
 		step.Abort()
@@ -208,7 +209,7 @@ func (*moduleUploadVersionCommand) Example() string {
 tharsis module upload-version \
   --version 1.0.0 \
   --directory-path ./my-module \
-  trn:terraform_module:my-group/my-module/aws
+  trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 

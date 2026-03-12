@@ -5,23 +5,27 @@ package command
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 const (
-	// defaultPaginationLimit is the default limit for paginated list commands.
-	defaultPaginationLimit = 100
+	// maxPaginationLimit is the default (and max) limit for paginated list commands.
+	maxPaginationLimit = 100
 )
 
 // baseOptions contains the different ways to configure the behavior of BaseCommand.
@@ -246,8 +250,14 @@ func (c *BaseCommand) Close() error {
 	return errors.Join(errs...)
 }
 
+/*
+Below methods are to be removed once deprecation is done.
+These methods help us preserve the command / option behavior from
+the former Graphql-driven CLI / SDK.
+*/
+
 // migrateSettings migrates old Tharsis settings format to new Phobos-compatible format.
-// TODO: Remove this migration after a few releases when all users have migrated.
+// Remove this migration once deprecation is done.
 func (c *BaseCommand) migrateSettings() error {
 	settingsPath, err := settings.DefaultSettingsFilepath()
 	if err != nil {
@@ -336,4 +346,62 @@ func (c *BaseCommand) migrateSettings() error {
 	c.Logger.Info("migrated settings from old Tharsis format to new format")
 	c.UI.Output("Settings migration complete.")
 	return nil
+}
+
+// toTRN converts a namespace path to a TRN to maintain backwards compatibility or
+// returns as is if it's already a TRN or a GID lookalike.
+// This is deprecated. Remove after users are on the latest CLI.
+func toTRN(rt trn.ResourceType, p string) string {
+	// If it's already a TRN, return as-is
+	if trn.IsTRN(p) {
+		return p
+	}
+
+	// Check if it's a valid GID by attempting to decode
+	if _, err := base64.RawURLEncoding.DecodeString(p); err == nil {
+		// It's a valid base64 string, assume it's a GID
+		return p
+	}
+
+	// Otherwise, assume it's a path and convert to TRN
+	return trn.NewResourceTRN(rt, p)
+}
+
+// extractParentPath returns the parent path from a given path.
+// This is deprecated. Remove after users are on the latest CLI.
+func extractParentPath(p string) string {
+	if index := strings.LastIndex(p, "/"); index != -1 {
+		return p[:index]
+	}
+
+	return ""
+}
+
+// parseSortField converts a sort string to an enum value, handling deprecated separate sort-by and sort-order flags.
+// Remove after users are on the latest CLI.
+func parseSortField[T ~int32](sortBy, sortOrder *string, enumValues map[string]int32) (*T, error) {
+	if sortBy == nil {
+		return nil, nil
+	}
+
+	// Try direct lookup first (new format: FIELD_ORDER)
+	sort, ok := enumValues[*sortBy]
+	if ok {
+		enumVal := T(sort)
+		return &enumVal, nil
+	}
+
+	// Handle deprecated separate sort-by and sort-order flags
+	if sortOrder == nil {
+		return nil, fmt.Errorf("sort order must be specified if using deprecated sort-by value %s", *sortBy)
+	}
+
+	sortValue := fmt.Sprintf("%s_%s", *sortBy, *sortOrder)
+	sort, ok = enumValues[sortValue]
+	if !ok {
+		return nil, fmt.Errorf("unknown sort value %s", sortValue)
+	}
+
+	enumVal := T(sort)
+	return &enumVal, nil
 }

@@ -7,6 +7,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // moduleGetCommand is the top-level structure for the module get command.
@@ -49,7 +50,7 @@ func (c *moduleGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetTerraformModuleByIDRequest{
-		Id: c.arguments[0],
+		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 	}
 
 	c.Logger.Debug("module get input", "input", input)
@@ -73,14 +74,13 @@ func (*moduleGetCommand) Usage() string {
 
 func (*moduleGetCommand) Description() string {
 	return `
-   The module get command prints information about one
-   Terraform module.
+   The module get command prints information about one Terraform module.
 `
 }
 
 func (*moduleGetCommand) Example() string {
 	return `
-tharsis module get trn:terraform_module:ops/my-group/vpc
+tharsis module get trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 

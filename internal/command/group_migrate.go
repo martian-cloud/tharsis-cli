@@ -1,15 +1,20 @@
 package command
 
 import (
+	"errors"
 	"flag"
+	"strconv"
 
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupMigrateCommand struct {
 	*BaseCommand
 
+	toTopLevel  *bool
 	newParentID *string
 	toJSON      bool
 }
@@ -24,6 +29,10 @@ func NewGroupMigrateCommandFactory(baseCommand *BaseCommand) func() (Command, er
 }
 
 func (c *groupMigrateCommand) validate() error {
+	if c.newParentID != nil && c.toTopLevel != nil {
+		return errors.New("must supply only one of --new-parent-path and --to-top-level")
+	}
+
 	const message = "group-id is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,
@@ -45,7 +54,7 @@ func (c *groupMigrateCommand) Run(args []string) int {
 	}
 
 	input := &pb.MigrateGroupRequest{
-		GroupId:     c.arguments[0],
+		GroupId:     toTRN(trn.ResourceTypeGroup, c.arguments[0]),
 		NewParentId: c.newParentID,
 	}
 
@@ -78,8 +87,8 @@ func (*groupMigrateCommand) Usage() string {
 func (*groupMigrateCommand) Example() string {
 	return `
 tharsis group migrate \
-  --new-parent-id trn:group:ops/infrastructure \
-  trn:group:ops/my-group
+  --new-parent-id trn:group:<parent_group_path> \
+  trn:group:<group_path>
 `
 }
 
@@ -90,6 +99,27 @@ func (c *groupMigrateCommand) Flags() *flag.FlagSet {
 		"New parent group ID. Omit to migrate to top-level.",
 		func(s string) error {
 			c.newParentID = &s
+			return nil
+		},
+	)
+	f.Func(
+		"new-parent-path",
+		"New parent path for the group. Deprecated",
+		func(s string) error {
+			c.newParentID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, s))
+			return nil
+		},
+	)
+	f.Func(
+		"to-top-level",
+		"Migrate group to top level. Deprecated.",
+		func(s string) error {
+			b, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+
+			c.toTopLevel = &b
 			return nil
 		},
 	)

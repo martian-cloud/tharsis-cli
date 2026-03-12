@@ -58,13 +58,21 @@ func (c *moduleCreateCommand) Run(args []string) int {
 
 	// Parse module-name/system
 	parts := strings.Split(moduleArg, "/")
-	if len(parts) != 2 {
+	var name, system string
+	switch len(parts) {
+	case 1:
 		c.UI.Errorf("argument must be in format: module-name/system")
 		return 1
+	case 2:
+		name = parts[0]
+		system = parts[1]
+	default:
+		// Handle deprecated syntax by extracting name, system, and group path.
+		system = parts[len(parts)-1]
+		name = parts[len(parts)-2]
+		groupPath := strings.Join(parts[:len(parts)-2], "/")
+		c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, groupPath)
 	}
-
-	name := parts[0]
-	system := parts[1]
 
 	if c.ifNotExists {
 		c.Logger.Debug("getting parent group", "value", c.groupID)
@@ -130,7 +138,7 @@ func (*moduleCreateCommand) Description() string {
 func (*moduleCreateCommand) Example() string {
 	return `
 tharsis module create \
-  --group-id trn:group:ops/my-group \
+  --group-id trn:group:<group_path> \
   --repository-url https://github.com/example/terraform-aws-vpc \
   --private \
   vpc/aws

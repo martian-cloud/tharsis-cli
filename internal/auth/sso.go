@@ -451,8 +451,8 @@ func NewSSOAuthenticator(tharsisURL string, opts ...Option) (Authenticator, erro
 	}, nil
 }
 
-// PerformLogin executes the full SSO login flow and returns the token.
-func (a *ssoAuthenticator) PerformLogin(ctx context.Context) (*oauth2.Token, error) {
+// Authenticate executes the full SSO login flow and returns the token.
+func (a *ssoAuthenticator) Authenticate(ctx context.Context) (*oauth2.Token, error) {
 	// Fetch OAuth config
 	oauthCfg, err := a.fetchAuthConfig(ctx)
 	if err != nil {

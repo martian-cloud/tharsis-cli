@@ -5,6 +5,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // managedIdentityAliasDeleteCommand is the top-level structure for the managed identity alias delete command.
@@ -48,7 +49,7 @@ func (c *managedIdentityAliasDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteManagedIdentityAliasRequest{
-		Id:    c.arguments[0],
+		Id:    toTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
 		Force: &c.force,
 	}
 
@@ -80,7 +81,7 @@ func (*managedIdentityAliasDeleteCommand) Description() string {
 
 func (*managedIdentityAliasDeleteCommand) Example() string {
 	return `
-tharsis managed-identity-alias delete trn:managed_identity:ops/my-group/prod-identity-alias
+tharsis managed-identity-alias delete trn:managed_identity:<group_path>/<managed_identity_name>
 `
 }
 

@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
@@ -16,7 +15,7 @@ import (
 type moduleListCommand struct {
 	*BaseCommand
 
-	limit            *int32
+	limit            int
 	cursor           *string
 	search           *string
 	groupID          *string
@@ -36,7 +35,7 @@ func NewModuleListCommandFactory(baseCommand *BaseCommand) func() (Command, erro
 
 func (c *moduleListCommand) validate() error {
 	return validation.ValidateStruct(c,
-		validation.Field(&c.limit, validation.Min(0), validation.Max(100), validation.When(c.limit != nil)),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
 		validation.Field(&c.arguments, validation.Empty),
 	)
 }
@@ -52,14 +51,10 @@ func (c *moduleListCommand) Run(args []string) int {
 		return code
 	}
 
-	if c.limit == nil {
-		c.limit = ptr.Int32(defaultPaginationLimit)
-	}
-
 	input := &pb.GetTerraformModulesRequest{
 		Sort: c.sortBy,
 		PaginationOptions: &pb.PaginationOptions{
-			First: c.limit,
+			First: ptr.Int32(int32(c.limit)),
 			After: c.cursor,
 		},
 		Search:           c.search,
@@ -129,7 +124,7 @@ func (*moduleListCommand) Usage() string {
 func (*moduleListCommand) Example() string {
 	return `
 tharsis module list \
-  --group-id trn:group:top-level \
+  --group-id trn:group:<group_path> \
   --include-inherited \
   --sort-by UPDATED_AT_DESC \
   --limit 5 \
@@ -147,17 +142,11 @@ func (c *moduleListCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.IntVar(
+		&c.limit,
 		"limit",
+		maxPaginationLimit,
 		"Maximum number of result elements to return. Defaults to 100.",
-		func(s string) error {
-			i, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return err
-			}
-			c.limit = ptr.Int32(int32(i))
-			return nil
-		},
 	)
 	f.Func(
 		"sort-by",

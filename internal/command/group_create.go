@@ -3,6 +3,7 @@ package command
 import (
 	"flag"
 
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
@@ -84,6 +85,11 @@ func (c *groupCreateCommand) Run(args []string) int {
 		}
 	}
 
+	if c.parentGroupID == nil {
+		// Deprecated. Attempt to extract parent path from the argument.
+		c.parentGroupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, extractParentPath(name)))
+	}
+
 	input := &pb.CreateGroupRequest{
 		Name:        name,
 		ParentId:    c.parentGroupID,
@@ -121,7 +127,7 @@ func (*groupCreateCommand) Description() string {
 func (*groupCreateCommand) Example() string {
 	return `
 tharsis group create \
-  --parent-group-id trn:group:ops \
+  --parent-group-id trn:group:<group_path> \
   --description "Operations group" \
   my-group
 `

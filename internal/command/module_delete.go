@@ -5,6 +5,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // moduleDeleteCommand is the top-level structure for the module delete command.
@@ -44,7 +45,7 @@ func (c *moduleDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteTerraformModuleRequest{
-		Id: c.arguments[0],
+		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 	}
 
 	c.Logger.Debug("module delete input", "input", input)
@@ -69,14 +70,12 @@ func (*moduleDeleteCommand) Usage() string {
 func (*moduleDeleteCommand) Description() string {
 	return `
    The module delete command deletes a Terraform module.
-
-   Use with caution as deleting a module is irreversible!
 `
 }
 
 func (*moduleDeleteCommand) Example() string {
 	return `
-tharsis module delete trn:terraform_module:ops/my-group/vpc
+tharsis module delete trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 

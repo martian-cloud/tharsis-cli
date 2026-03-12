@@ -9,37 +9,25 @@ import (
 // ResourceType represents the type of resource for TRN construction.
 type ResourceType string
 
+// ResourceType constants.
 const (
-	// ResourceTypeWorkspace is the resource type constant for workspace TRNs.
-	ResourceTypeWorkspace ResourceType = "workspace"
-	// ResourceTypeGroup is the resource type constant for group TRNs.
-	ResourceTypeGroup ResourceType = "group"
-	// ResourceTypeManagedIdentity is the resource type constant for managed identity TRNs.
-	ResourceTypeManagedIdentity ResourceType = "managed_identity"
-	// ResourceTypeVariable is the resource type constant for variable TRNs.
-	ResourceTypeVariable ResourceType = "variable"
-	// ResourceTypeRun is the resource type constant for run TRNs.
-	ResourceTypeRun ResourceType = "run"
-	// ResourceTypeConfigurationVersion is the resource type constant for configuration version TRNs.
-	ResourceTypeConfigurationVersion ResourceType = "configuration_version"
-	// ResourceTypeTerraformModule is the resource type constant for Terraform module TRNs.
-	ResourceTypeTerraformModule ResourceType = "terraform_module"
-	// ResourceTypeTerraformModuleVersion is the resource type constant for Terraform module version TRNs.
-	ResourceTypeTerraformModuleVersion ResourceType = "terraform_module_version"
-	// ResourceTypeTerraformProvider is the resource type constant for Terraform provider TRNs.
-	ResourceTypeTerraformProvider ResourceType = "terraform_provider"
-	// ResourceTypeTerraformProviderVersionMirror is the resource type constant for Terraform provider version mirror TRNs.
+	ResourceTypeWorkspace                      ResourceType = "workspace"
+	ResourceTypeGroup                          ResourceType = "group"
+	ResourceTypeManagedIdentity                ResourceType = "managed_identity"
+	ResourceTypeVariable                       ResourceType = "variable"
+	ResourceTypeRun                            ResourceType = "run"
+	ResourceTypeConfigurationVersion           ResourceType = "configuration_version"
+	ResourceTypeTerraformModule                ResourceType = "terraform_module"
+	ResourceTypeTerraformModuleVersion         ResourceType = "terraform_module_version"
+	ResourceTypeTerraformProvider              ResourceType = "terraform_provider"
 	ResourceTypeTerraformProviderVersionMirror ResourceType = "terraform_provider_version_mirror"
-	// ResourceTypeTerraformProviderPlatform is the resource type constant for Terraform provider platform TRNs.
-	ResourceTypeTerraformProviderPlatform ResourceType = "terraform_provider_platform"
-	// ResourceTypeFederatedRegistry is the resource type constant for federated registry TRNs.
-	ResourceTypeFederatedRegistry ResourceType = "federated_registry"
-	// ResourceTypeServiceAccount is the resource type constant for service account TRNs.
-	ResourceTypeServiceAccount ResourceType = "service_account"
-	// ResourceTypeTeam is the resource type constant for team TRNs.
-	ResourceTypeTeam ResourceType = "team"
-	// ResourceTypeUser is the resource type constant for user TRNs.
-	ResourceTypeUser ResourceType = "user"
+	ResourceTypeTerraformProviderPlatform      ResourceType = "terraform_provider_platform"
+	ResourceTypeFederatedRegistry              ResourceType = "federated_registry"
+	ResourceTypeServiceAccount                 ResourceType = "service_account"
+	ResourceTypeTeam                           ResourceType = "team"
+	ResourceTypeUser                           ResourceType = "user"
+	ResourceTypeRole                           ResourceType = "role"
+	ResourceTypeRunner                         ResourceType = "runner"
 )
 
 const (
@@ -80,7 +68,7 @@ func IsTRN(identifier string) bool {
 // If the input is a path, it converts it to a TRN with the specified resource type.
 func ToTRN(resourceType ResourceType, identifier string) string {
 	// If it's already a TRN, return as-is
-	if strings.HasPrefix(identifier, TRNPrefix) {
+	if IsTRN(identifier) {
 		return identifier
 	}
 

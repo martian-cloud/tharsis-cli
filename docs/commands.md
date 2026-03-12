@@ -13,6 +13,7 @@ group                                       Do operations on groups.
 managed-identity                            Do operations on a managed identity.
 managed-identity-access-rule                Do operations on a managed identity access rule.
 managed-identity-alias                      Do operations on a managed identity alias.
+mcp                                         Start the Tharsis MCP server.
 module                                      Do operations on a terraform module.
 plan                                        Create a speculative plan
 run                                         Do operations on runs.
@@ -77,7 +78,7 @@ tharsis [global options] apply [options] <workspace-id>
 
 :::note Example
 ```bash
-tharsis apply --directory-path ./terraform trn:workspace:ops/my-workspace
+tharsis apply --directory-path ./terraform trn:workspace:<workspace_path>
 ```
 :::
 
@@ -205,7 +206,7 @@ tharsis [global options] destroy [options] <workspace-id>
 
 :::note Example
 ```bash
-tharsis destroy --directory-path ./terraform trn:workspace:ops/my-workspace
+tharsis destroy --directory-path ./terraform trn:workspace:<workspace_path>
 ```
 :::
 
@@ -254,19 +255,24 @@ tharsis documentation generate
 Do operations on groups.
 
 :::info Subcommands
+- `add-membership                           ` - Add a membership to a group.
 - `create                                   ` - Create a new group.
 - `delete                                   ` - Delete a group.
 - `delete-terraform-var                     ` - Delete a terraform variable from a group.
 - `get                                      ` - Get a single group.
+- `get-membership                           ` - Get a group membership by ID.
 - `get-terraform-var                        ` - Get a terraform variable for a group.
 - `list                                     ` - Retrieve a paginated list of groups.
 - `list-environment-vars                    ` - List all environment variables in a group.
 - `list-memberships                         ` - Retrieve a list of group memberships.
 - `list-terraform-vars                      ` - List all terraform variables in a group.
+- `migrate                                  ` - Migrate a group to a new parent or to top-level.
+- `remove-membership                        ` - Remove a group membership.
 - `set-environment-vars                     ` - Set environment variables for a group.
 - `set-terraform-var                        ` - Set a terraform variable for a group.
 - `set-terraform-vars                       ` - Set terraform variables for a group.
 - `update                                   ` - Update a group.
+- `update-membership                        ` - Update a group membership.
 :::
 
 Groups are containers for organizing workspaces hierarchically.
@@ -274,6 +280,49 @@ They can be nested and inherit variables and managed identities
 to children. Use group commands to create, update, delete groups,
 set Terraform and environment variables, manage memberships, and
 migrate groups between parents.
+
+---
+
+#### group add-membership
+
+Add a membership to a group.
+
+```bash
+tharsis [global options] group add-membership [options] <group-id>
+```
+
+   The group add-membership command adds a membership to a group.
+   Exactly one of --user-id, --service-account-id, or --team-id must be specified.
+
+<details>
+<summary>Options</summary>
+
+- `--json` - Output in JSON format.
+
+- `--role` - The role for the membership. Deprecated.
+
+- `--role-id` - The role ID for the membership.
+
+- `--service-account-id` - The service account ID for the membership.
+
+- `--team-id` - The team ID for the membership.
+
+- `--team-name` - The team name for the membership. Deprecated.
+
+- `--user-id` - The user ID for the membership.
+
+- `--username` - The username for the membership. Deprecated.
+
+</details>
+
+:::note Example
+```bash
+tharsis group add-membership \
+  --role-id trn:role:<role_name> \
+  --user-id trn:user:<username> \
+  trn:group:<group_path>
+```
+:::
 
 ---
 
@@ -306,7 +355,7 @@ tharsis [global options] group create [options] <name>
 :::note Example
 ```bash
 tharsis group create \
-  --parent-group-id trn:group:ops \
+  --parent-group-id trn:group:<group_path> \
   --description "Operations group" \
   my-group
 ```
@@ -339,7 +388,7 @@ tharsis [global options] group delete [options] <id>
 ```bash
 tharsis group delete \
   --force \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 ```
 :::
 
@@ -368,7 +417,7 @@ tharsis [global options] group delete-terraform-var [options] <group-id>
 ```bash
 tharsis group delete-terraform-var \
   --key region \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 ```
 :::
 
@@ -396,7 +445,38 @@ tharsis [global options] group get [options] <id>
 ```bash
 tharsis group get \
   --json \
-  trn:tharsis:group:ops/my-group
+  trn:tharsis:group:<group_path>
+```
+:::
+
+---
+
+#### group get-membership
+
+Get a group membership by ID.
+
+```bash
+tharsis [global options] group get-membership [options] <membership-id>
+```
+
+   The group get-membership command retrieves details about a specific group membership.
+
+<details>
+<summary>Options</summary>
+
+- `--json` - Output in JSON format.
+
+- `--service-account-id` - Service account ID to find the group membership. Deprecated
+
+- `--team-name` - Team name to find the group membership. Deprecated
+
+- `--username` - Username to find the group membership. Deprecated
+
+</details>
+
+:::note Example
+```bash
+tharsis group get-membership <id>
 ```
 :::
 
@@ -427,7 +507,7 @@ tharsis [global options] group get-terraform-var [options] <group-id>
 ```bash
 tharsis group get-terraform-var \
   --key region \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 ```
 :::
 
@@ -456,16 +536,20 @@ tharsis [global options] group list [options]
 
 - `--parent-id` - Filter to only direct sub-groups of this parent group.
 
+- `--parent-path` - Filter to only direct sub-groups of this parent group. Deprecated
+
 - `--search` - Filter to only groups containing this substring in their path.
 
 - `--sort-by` - Sort by this field (e.g., UPDATED_AT_ASC, UPDATED_AT_DESC, FULL_PATH_ASC, FULL_PATH_DESC).
+
+- `--sort-order` - Sort in this direction, ASC or DESC. Deprecated
 
 </details>
 
 :::note Example
 ```bash
 tharsis group list \
-  --parent-id trn:group:top-level/bottom-level \
+  --parent-id trn:group:<parent_group_path> \
   --sort-by FULL_PATH_ASC \
   --limit 5 \
   --json
@@ -496,7 +580,7 @@ tharsis [global options] group list-environment-vars [options] <group-id>
 
 :::note Example
 ```bash
-tharsis group list-environment-vars --show-sensitive trn:group:ops/my-group
+tharsis group list-environment-vars --show-sensitive trn:group:<group_path>
 ```
 :::
 
@@ -507,7 +591,7 @@ tharsis group list-environment-vars --show-sensitive trn:group:ops/my-group
 Retrieve a list of group memberships.
 
 ```bash
-tharsis [global options] group list-memberships [options] <group-path>
+tharsis [global options] group list-memberships [options] <group-id>
 ```
 
    The group list-memberships command prints information about
@@ -522,7 +606,7 @@ tharsis [global options] group list-memberships [options] <group-path>
 
 :::note Example
 ```bash
-tharsis group list-memberships top-level/my-group
+tharsis group list-memberships trn:group:<group_path>
 ```
 :::
 
@@ -550,7 +634,66 @@ tharsis [global options] group list-terraform-vars [options] <group-id>
 
 :::note Example
 ```bash
-tharsis group list-terraform-vars --show-sensitive trn:group:ops/my-group
+tharsis group list-terraform-vars --show-sensitive trn:group:<group_path>
+```
+:::
+
+---
+
+#### group migrate
+
+Migrate a group to a new parent or to top-level.
+
+```bash
+tharsis [global options] group migrate [options] <group-id>
+```
+
+   The group migrate command migrates a group to another parent group or to top-level.
+   Omit --new-parent-id to migrate to top-level.
+
+<details>
+<summary>Options</summary>
+
+- `--json` - Output in JSON format.
+
+- `--new-parent-id` - New parent group ID. Omit to migrate to top-level.
+
+- `--new-parent-path` - New parent path for the group. Deprecated
+
+- `--to-top-level` - Migrate group to top level. Deprecated.
+
+</details>
+
+:::note Example
+```bash
+tharsis group migrate \
+  --new-parent-id trn:group:<parent_group_path> \
+  trn:group:<group_path>
+```
+:::
+
+---
+
+#### group remove-membership
+
+Remove a group membership.
+
+```bash
+tharsis [global options] group remove-membership [options] <membership-id>
+```
+
+   The group remove-membership command removes a membership from a group.
+
+<details>
+<summary>Options</summary>
+
+- `--version` - Metadata version of the resource to be deleted. In most cases, this is not required.
+
+</details>
+
+:::note Example
+```bash
+tharsis group remove-membership <id>
 ```
 :::
 
@@ -579,7 +722,7 @@ tharsis [global options] group set-environment-vars [options] <group-id>
 ```bash
 tharsis group set-environment-vars \
   --env-var-file vars.env \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 ```
 :::
 
@@ -611,7 +754,7 @@ tharsis [global options] group set-terraform-var [options] <group-id>
 tharsis group set-terraform-var \
   --key region \
   --value us-east-1 \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 ```
 :::
 
@@ -640,7 +783,7 @@ tharsis [global options] group set-terraform-vars [options] <group-id>
 ```bash
 tharsis group set-terraform-vars \
   --tf-var-file terraform.tfvars \
-  trn:group:ops/my-group
+  trn:group:<group_path>
 ```
 :::
 
@@ -673,7 +816,40 @@ tharsis [global options] group update [options] <id>
 ```bash
 tharsis group update \
   --description "Updated operations group" \
-  trn:group:ops/my-group
+  trn:group:<group_path>
+```
+:::
+
+---
+
+#### group update-membership
+
+Update a group membership.
+
+```bash
+tharsis [global options] group update-membership [options] <membership-id>
+```
+
+   The group update-membership command updates a group membership's role.
+
+<details>
+<summary>Options</summary>
+
+- `--json` - Output in JSON format.
+
+- `--role` - New role for the membership. Deprecated.
+
+- `--role-id` - The role ID for the membership.
+
+- `--version` - Metadata version of the resource to be updated. In most cases, this is not required.
+
+</details>
+
+:::note Example
+```bash
+tharsis group update-membership \
+  --role-id trn:role:<role_name> \
+  <id>
 ```
 :::
 
@@ -720,18 +896,26 @@ tharsis [global options] managed-identity create [options] <name>
 
 - `--group-id` - Group ID or TRN where the managed identity will be created.
 
+- `--group-path` - The group path where the managed identity will be created. Deprecated.
+
 - `--json` - Show final output as JSON.
 
-- `--tharsis-federated-service-account-id` - Tharsis service account ID or TRN. (Only if type is tharsis_federated)
+- `--kubernetes-federated-audience` - Kubernetes federated audience. The audience should match the client_id configured in your EKS OIDC identity provider. (Only if type is kubernetes_federated)
 
-- `--type` - The type of managed identity: aws_federated, azure_federated, tharsis_federated.
+- `--name` - The name of the managed identity. Deprecated
+
+- `--tharsis-federated-service-account-id` - Tharsis service account ID or TRN this managed identity will assume. (Only if type is tharsis_federated)
+
+- `--tharsis-federated-service-account-path` - Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated). Deprecated.
+
+- `--type` - The type of managed identity: aws_federated, azure_federated, tharsis_federated, kubernetes_federated.
 
 </details>
 
 :::note Example
 ```bash
 tharsis managed-identity create \
-  --group-id trn:group:ops/my-group \
+  --group-id trn:group:<group_path> \
   --type aws_federated \
   --aws-federated-role arn:aws:iam::123456789012:role/MyRole \
   --description "AWS production role" \
@@ -762,7 +946,7 @@ tharsis [global options] managed-identity delete [options] <id>
 
 :::note Example
 ```bash
-tharsis managed-identity delete --force trn:managed_identity:ops/my-group/aws-prod
+tharsis managed-identity delete --force trn:managed_identity:<group_path>/<managed_identity_name>
 ```
 :::
 
@@ -788,7 +972,7 @@ tharsis [global options] managed-identity get [options] <id>
 
 :::note Example
 ```bash
-tharsis managed-identity get trn:managed_identity:ops/my-group/aws-prod
+tharsis managed-identity get trn:managed_identity:<group_path>/<managed_identity_name>
 ```
 :::
 
@@ -819,7 +1003,11 @@ tharsis [global options] managed-identity update [options] <id>
 
 - `--json` - Show final output as JSON.
 
+- `--kubernetes-federated-audience` - Kubernetes federated audience. The audience should match the client_id configured in your EKS OIDC identity provider. (Only if type is kubernetes_federated)
+
 - `--tharsis-federated-service-account-id` - Tharsis service account ID or TRN. (Only if type is tharsis_federated)
+
+- `--tharsis-federated-service-account-path` - Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated). Deprecated.
 
 </details>
 
@@ -828,7 +1016,7 @@ tharsis [global options] managed-identity update [options] <id>
 tharsis managed-identity update \
   --description "Updated AWS production role" \
   --aws-federated-role arn:aws:iam::123456789012:role/UpdatedRole \
-  trn:managed_identity:ops/my-group/aws-prod
+  trn:managed_identity:<group_path>/<managed_identity_name>
 ```
 :::
 
@@ -875,11 +1063,13 @@ tharsis [global options] managed-identity-access-rule create [options]
 
 - `--managed-identity-id` - The ID or TRN of the managed identity.
 
+- `--managed-identity-path` - Resource path to the managed identity. Deprecated.
+
 - `--module-attestation-policy` - Module attestation policy in format "[PredicateType=someval,]PublicKeyFile=/path/to/file". (This flag may be repeated)
 
-- `--run-stage` - The run stage: plan or apply.
+- `--rule-type` - The type of access rule: eligible_principals or module_attestation.
 
-- `--type` - The type of access rule: eligible_principals or module_attestation.
+- `--run-stage` - The run stage: plan or apply.
 
 - `--verify-state-lineage` - Verify state lineage.
 
@@ -888,11 +1078,11 @@ tharsis [global options] managed-identity-access-rule create [options]
 :::note Example
 ```bash
 tharsis managed-identity-access-rule create \
-  --managed-identity-id trn:managed_identity:ops/my-identity \
-  --type eligible_principals \
+  --managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name> \
+  --rule-type eligible_principals \
   --run-stage plan \
-  --allowed-user trn:user:john.smith \
-  --allowed-team trn:team:my-team
+  --allowed-user trn:user:<username> \
+  --allowed-team trn:team:<team_name>
 ```
 :::
 
@@ -910,7 +1100,7 @@ tharsis [global options] managed-identity-access-rule delete [options] <id>
 
 :::note Example
 ```bash
-tharsis managed-identity-access-rule delete TV80ZG...
+tharsis managed-identity-access-rule delete <id>
 ```
 :::
 
@@ -935,7 +1125,7 @@ tharsis [global options] managed-identity-access-rule get [options] <id>
 
 :::note Example
 ```bash
-tharsis managed-identity-access-rule get trn:managed_identity_access_rule:abc123
+tharsis managed-identity-access-rule get <id>
 ```
 :::
 
@@ -946,7 +1136,7 @@ tharsis managed-identity-access-rule get trn:managed_identity_access_rule:abc123
 Retrieve a list of managed identity access rules.
 
 ```bash
-tharsis [global options] managed-identity-access-rule list [options] <managed-identity-id>
+tharsis [global options] managed-identity-access-rule list [options]
 ```
 
    The managed-identity-access-rule list command prints information about
@@ -957,12 +1147,16 @@ tharsis [global options] managed-identity-access-rule list [options] <managed-id
 
 - `--json` - Show final output as JSON.
 
+- `--managed-identity-id` - ID of the managed identity to get access rules for.
+
+- `--managed-identity-path` - Resource path of the managed identity to get access rules for. Deprecated.
+
 </details>
 
 :::note Example
 ```bash
 tharsis managed-identity-access-rule list \
-  trn:managed_identity:ops/my-identity
+  --managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name>
 ```
 :::
 
@@ -991,8 +1185,6 @@ tharsis [global options] managed-identity-access-rule update [options] <id>
 
 - `--module-attestation-policy` - Module attestation policy in format "[PredicateType=someval,]PublicKeyFile=/path/to/file". (This flag may be repeated)
 
-- `--run-stage` - The run stage: plan or apply.
-
 - `--verify-state-lineage` - Verify state lineage (true or false).
 
 </details>
@@ -1000,9 +1192,8 @@ tharsis [global options] managed-identity-access-rule update [options] <id>
 :::note Example
 ```bash
 tharsis managed-identity-access-rule update \
-  --run-stage apply \
-  --allowed-user trn:user:john.smith \
-  TV80ZG...
+  --allowed-user trn:user:<username> \
+  <id>
 ```
 :::
 
@@ -1037,17 +1228,23 @@ tharsis [global options] managed-identity-alias create [options] <name>
 
 - `--alias-source-id` - The ID or TRN of the source managed identity.
 
+- `--alias-source-path` - The alias source path. Deprecated.
+
 - `--group-id` - Group ID or TRN where the managed identity alias will be created.
 
+- `--group-path` - Full path of the group where the managed identity alias will be created. Deprecated
+
 - `--json` - Show final output as JSON.
+
+- `--name` - The name of the managed identity alias. Deprecated
 
 </details>
 
 :::note Example
 ```bash
 tharsis managed-identity-alias create \
-  --group-id trn:group:ops/my-group \
-  --alias-source-id trn:managed_identity:source-identity \
+  --group-id trn:group:<group_path> \
+  --alias-source-id trn:managed_identity:<group_path>/<source_identity_name> \
   prod-identity-alias
 ```
 :::
@@ -1073,7 +1270,101 @@ tharsis [global options] managed-identity-alias delete [options] <id>
 
 :::note Example
 ```bash
-tharsis managed-identity-alias delete trn:managed_identity:ops/my-group/prod-identity-alias
+tharsis managed-identity-alias delete trn:managed_identity:<group_path>/<managed_identity_name>
+```
+:::
+
+---
+
+## mcp
+
+Start the Tharsis MCP server.
+
+```bash
+tharsis [global options] mcp [options]
+```
+
+   The mcp command starts the Tharsis MCP server, enabling AI assistants
+   to interact with Tharsis resources through the Model Context Protocol.
+   By default, all toolsets are enabled in read-only mode for safety.
+
+   Available toolsets: auth, run, job, configuration_version, workspace, group, variable, managed_identity, documentation, terraform_module, terraform_module_version, terraform_provider, terraform_provider_platform
+
+   Environment variables (command-line options take precedence):
+     THARSIS_MCP_TOOLSETS               Comma-separated list of toolsets to enable
+     THARSIS_MCP_TOOLS                  Comma-separated list of individual tools to enable
+     THARSIS_MCP_READ_ONLY              Enable read-only mode (true/false)
+     THARSIS_MCP_NAMESPACE_MUTATION_ACL ACL patterns for namespace mutations
+
+   Access Control (ACL) Patterns:
+
+   Control which namespaces (groups and workspaces) can be modified using
+   simple wildcard patterns. ACL patterns apply to write operations (create,
+   update, delete, apply) to prevent accidental changes to production resources.
+   Read operations (get, list) are only restricted by user permissions.
+
+   Patterns are case-insensitive and support:
+     - Exact match: "prod" matches only "prod"
+     - Wildcard: "prod/*" matches any path starting with "prod/" (all levels)
+     - Prefix/suffix: "prod/team-*" matches "prod/team-alpha", "prod/team-beta"
+
+   Tip: Wildcards match across all path levels. To match a specific resource,
+   use exact paths like "prod/workspace" instead of "prod/*".
+
+   Examples:
+     - "prod" - Allow access to the "prod" group only
+     - "prod/workspace" - Allow access to specific workspace
+     - "prod/*" - Allow access to all resources under "prod" at any depth
+     - "prod/team-*" - Allow access to resources matching "prod/team-*"
+     - "dev,staging" - Allow access to "dev" and "staging" (comma-separated)
+
+   Restrictions:
+     - Wildcard-only patterns ("*") are not allowed
+     - Patterns cannot start with a wildcard ("*/workspace")
+
+<details>
+<summary>Options</summary>
+
+- `--namespace-mutation-acl` - ACL patterns for namespace mutations (comma-separated).
+
+- `--read-only` - Enable read-only mode (disables write tools).
+
+- `--tools` - Comma-separated list of individual tools to enable.
+
+- `--toolsets` - Comma-separated list of toolsets to enable.
+
+</details>
+
+:::note Example
+```bash
+# Start MCP server with production profile in read-only mode
+tharsis -p production mcp
+
+# Start with specific toolsets
+tharsis mcp --toolsets auth,run
+
+# Start with namespace ACL restrictions
+tharsis mcp --namespace-mutation-acl "dev/*,staging/*"
+
+# MCP Client Configuration (mcp.json):
+{
+  "mcpServers": {
+    "tharsis-prod": {
+      "command": "tharsis",
+      "args": ["-p", "production", "mcp"],
+      "env": {"THARSIS_MCP_READ_ONLY": "true"},
+      "disabled": false,
+      "autoApprove": []
+    },
+    "tharsis-dev": {
+      "command": "tharsis",
+      "args": ["-p", "development", "mcp"],
+      "env": {"THARSIS_MCP_TOOLSETS": "auth,run"},
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
 ```
 :::
 
@@ -1138,7 +1429,7 @@ tharsis [global options] module create [options] <module-name/system>
 :::note Example
 ```bash
 tharsis module create \
-  --group-id trn:group:ops/my-group \
+  --group-id trn:group:<group_path> \
   --repository-url https://github.com/example/terraform-aws-vpc \
   --private \
   vpc/aws
@@ -1172,8 +1463,8 @@ tharsis [global options] module create-attestation [options] <module-id>
 ```bash
 tharsis module create-attestation \
   --description "Attestation for v1.0.0" \
-  --attestation-data '{"key":"value"}' \
-  trn:terraform_module:ops/installer/aws
+  --attestation-data aGVsbG8sIHdvcmxk \
+  trn:terraform_module:<module_path>
 ```
 :::
 
@@ -1189,11 +1480,9 @@ tharsis [global options] module delete [options] <id>
 
    The module delete command deletes a Terraform module.
 
-   Use with caution as deleting a module is irreversible!
-
 :::note Example
 ```bash
-tharsis module delete trn:terraform_module:ops/my-group/vpc
+tharsis module delete trn:terraform_module:<group_path>/<module_name>/<system>
 ```
 :::
 
@@ -1209,16 +1498,9 @@ tharsis [global options] module delete-attestation [options] <id>
 
    The module delete-attestation command deletes a module attestation.
 
-<details>
-<summary>Options</summary>
-
-- `--force` - Force delete the module attestation.
-
-</details>
-
 :::note Example
 ```bash
-tharsis module delete-attestation trn:terraform_module_attestation:ops/installer/aws:VE1W
+tharsis module delete-attestation trn:terraform_module_attestation:<group_path>/<module_name>/<module_system>/<sha_sum>
 ```
 :::
 
@@ -1245,7 +1527,7 @@ tharsis [global options] module delete-version [options] <version-id>
 
 :::note Example
 ```bash
-tharsis module delete-version trn:terraform_module_version:ops/installer/aws/1.0.0
+tharsis module delete-version trn:terraform_module_version:<group_path>/<module_name>/<system>/<semantic_version>
 ```
 :::
 
@@ -1259,8 +1541,7 @@ Get a single Terraform module.
 tharsis [global options] module get [options] <id>
 ```
 
-   The module get command prints information about one
-   Terraform module.
+   The module get command prints information about one Terraform module.
 
 <details>
 <summary>Options</summary>
@@ -1271,7 +1552,7 @@ tharsis [global options] module get [options] <id>
 
 :::note Example
 ```bash
-tharsis module get trn:terraform_module:ops/my-group/vpc
+tharsis module get trn:terraform_module:<group_path>/<module_name>/<system>
 ```
 :::
 
@@ -1292,11 +1573,13 @@ tharsis [global options] module get-version [options] <version-id>
 
 - `--json` - Output in JSON format.
 
+- `--version` - A semver compliant version tag to use as a filter. Deprecated.
+
 </details>
 
 :::note Example
 ```bash
-tharsis module get-version trn:terraform_module_version:ops/installer/aws/1.0.0
+tharsis module get-version trn:terraform_module_version:<group_path>/<module_name>/<system>/<version>
 ```
 :::
 
@@ -1336,7 +1619,7 @@ tharsis [global options] module list [options]
 :::note Example
 ```bash
 tharsis module list \
-  --group-id trn:group:top-level \
+  --group-id trn:group:<group_path> \
   --include-inherited \
   --sort-by UPDATED_AT_DESC \
   --limit 5 \
@@ -1370,6 +1653,8 @@ tharsis [global options] module list-attestations [options] <module-id>
 
 - `--sort-by` - Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).
 
+- `--sort-order` - Sort in this direction, ASC or DESC. Deprecated
+
 </details>
 
 :::note Example
@@ -1377,7 +1662,7 @@ tharsis [global options] module list-attestations [options] <module-id>
 tharsis module list-attestations \
   --sort-by CREATED_AT_DESC \
   --limit 10 \
-  trn:terraform_module:ops/installer/aws
+  trn:terraform_module:<group_path>/<module_name>/<system>
 ```
 :::
 
@@ -1411,6 +1696,8 @@ tharsis [global options] module list-versions [options] <module-id>
 
 - `--sort-by` - Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).
 
+- `--sort-order` - Sort in this direction, ASC or DESC. Deprecated
+
 </details>
 
 :::note Example
@@ -1419,7 +1706,7 @@ tharsis module list-versions \
   --search 1.0 \
   --sort-by CREATED_AT_DESC \
   --limit 10 \
-  trn:terraform_module:ops/installer/aws
+  trn:terraform_module:<group_path>/<module_name>/<system>
 ```
 :::
 
@@ -1455,7 +1742,7 @@ tharsis [global options] module update [options] <id>
 tharsis module update \
   --repository-url https://github.com/example/terraform-aws-vpc-v2 \
   --private true \
-  trn:terraform_module:ops/my-group/vpc
+  trn:terraform_module:<group_path>/<module_name>/<system>
 ```
 :::
 
@@ -1484,7 +1771,7 @@ tharsis [global options] module update-attestation [options] <id>
 ```bash
 tharsis module update-attestation \
   --description "Updated description" \
-  trn:terraform_module_attestation:ops/installer/aws:VE1W
+  trn:terraform_module_attestation:<group_path>/<module_name>/<system>/<sha_sum>
 ```
 :::
 
@@ -1515,7 +1802,7 @@ tharsis [global options] module upload-version [options] <module-id>
 tharsis module upload-version \
   --version 1.0.0 \
   --directory-path ./my-module \
-  trn:terraform_module:my-group/my-module/aws
+  trn:terraform_module:<group_path>/<module_name>/<system>
 ```
 :::
 
@@ -1582,7 +1869,7 @@ tharsis [global options] plan [options] <workspace-id>
 
 :::note Example
 ```bash
-tharsis plan --directory-path ./terraform trn:workspace:ops/my-workspace
+tharsis plan --directory-path ./terraform trn:workspace:<workspace_path>
 ```
 :::
 
@@ -1621,7 +1908,7 @@ tharsis [global options] run cancel [options] <run-id>
 
 :::note Example
 ```bash
-tharsis run cancel --force Ul9kOW
+tharsis run cancel --force <id>
 ```
 :::
 
@@ -1669,8 +1956,8 @@ tharsis [global options] runner-agent assign-service-account [options]
 :::note Example
 ```bash
 tharsis runner-agent assign-service-account \
-  --runner-id trn:runner:ops/my-runner \
-  --service-account-id trn:service_account:ops/my-sa
+  --runner-id trn:runner:<group_path>/<runner_name> \
+  --service-account-id trn:service_account:<group_path>/<service_account_name>
 ```
 :::
 
@@ -2002,6 +2289,7 @@ Mirror Terraform providers from any Terraform registry.
 - `get-version                              ` - Get a mirrored terraform provider version.
 - `list-platforms                           ` - Retrieve a paginated list of provider platform mirrors.
 - `list-versions                            ` - Retrieve a paginated list of provider version mirrors.
+- `sync                                     ` - Sync provider platforms from upstream registry to mirror.
 :::
 
 The provider mirror caches Terraform providers from any registry
@@ -2161,6 +2449,40 @@ tharsis terraform-provider-mirror list-versions \
 
 ---
 
+#### terraform-provider-mirror sync
+
+Sync provider platforms from upstream registry to mirror.
+
+```bash
+tharsis [global options] terraform-provider-mirror sync [options] <provider-fqn>
+```
+
+   The terraform-provider-mirror sync command syncs provider platforms
+   from an upstream Terraform registry to a Tharsis provider mirror.
+
+<details>
+<summary>Options</summary>
+
+- `--platform` - Platform to sync (format: os_arch). Can be specified multiple times. If not specified, syncs all platforms.
+
+- `--root-group-name` - The name of the root group to create the mirror in.
+
+- `--version` - The provider version to sync. If not specified, uses the latest version.
+
+</details>
+
+:::note Example
+```bash
+tharsis terraform-provider-mirror sync \
+  --root-group-name my-group \
+  --version 1.0.0 \
+  --platform linux_amd64 \
+  registry.terraform.io/hashicorp/aws
+```
+:::
+
+---
+
 ## version
 
 Get the CLI's version.
@@ -2191,30 +2513,72 @@ tharsis version --json
 Do operations on workspaces.
 
 :::info Subcommands
+- `add-membership                           ` - Add a membership to a workspace.
 - `assign-managed-identity                  ` - Assign a managed identity to a workspace.
 - `create                                   ` - Create a new workspace.
 - `delete                                   ` - Delete a workspace.
 - `delete-terraform-var                     ` - Delete a terraform variable from a workspace.
 - `get                                      ` - Get a single workspace.
 - `get-assigned-managed-identities          ` - Get assigned managed identities for a workspace.
+- `get-membership                           ` - Get a workspace membership by ID.
 - `get-terraform-var                        ` - Get a terraform variable for a workspace.
 - `label                                    ` - Manage labels on a workspace.
 - `list                                     ` - Retrieve a paginated list of workspaces.
 - `list-environment-vars                    ` - List all environment variables in a workspace.
 - `list-memberships                         ` - Retrieve a list of workspace memberships.
 - `list-terraform-vars                      ` - List all terraform variables in a workspace.
+- `migrate                                  ` - Migrate a workspace to a new group.
 - `outputs                                  ` - Get the state version outputs for a workspace.
+- `remove-membership                        ` - Remove a workspace membership.
 - `set-environment-vars                     ` - Set environment variables for a workspace.
 - `set-terraform-var                        ` - Set a terraform variable for a workspace.
 - `set-terraform-vars                       ` - Set terraform variables for a workspace.
 - `unassign-managed-identity                ` - Unassign a managed identity from a workspace.
 - `update                                   ` - Update a workspace.
+- `update-membership                        ` - Update a workspace membership.
 :::
 
 Workspaces contain Terraform deployments, state, runs, and variables.
 Use workspace commands to create, update, delete workspaces, assign
 and unassign managed identities, set Terraform and environment
 variables, manage memberships, and view workspace outputs.
+
+---
+
+#### workspace add-membership
+
+Add a membership to a workspace.
+
+```bash
+tharsis [global options] workspace add-membership [options] <workspace-id>
+```
+
+   The workspace add-membership command adds a membership to a workspace.
+   Exactly one of --user-id, --service-account-id, or --team-id must be specified.
+
+<details>
+<summary>Options</summary>
+
+- `--json` - Output in JSON format.
+
+- `--role-id` - The role ID for the membership.
+
+- `--service-account-id` - The service account ID for the membership.
+
+- `--team-id` - The team ID for the membership.
+
+- `--user-id` - The user ID for the membership.
+
+</details>
+
+:::note Example
+```bash
+tharsis workspace add-membership \
+  --role-id trn:role:owner \
+  --user-id trn:user:john.smith \
+  trn:workspace:top-level/my-workspace
+```
+:::
 
 ---
 
@@ -2407,6 +2771,31 @@ tharsis [global options] workspace get-assigned-managed-identities [options] <wo
 :::note Example
 ```bash
 tharsis workspace get-assigned-managed-identities trn:workspace:ops/my-workspace
+```
+:::
+
+---
+
+#### workspace get-membership
+
+Get a workspace membership by ID.
+
+```bash
+tharsis [global options] workspace get-membership [options] <membership-id>
+```
+
+   The workspace get-membership command retrieves details about a specific workspace membership.
+
+<details>
+<summary>Options</summary>
+
+- `--json` - Output in JSON format.
+
+</details>
+
+:::note Example
+```bash
+tharsis workspace get-membership trn:namespace_membership:ops/my-workspace/Tk1fZj
 ```
 :::
 
@@ -2607,6 +2996,35 @@ tharsis workspace list-terraform-vars --show-sensitive trn:workspace:ops/my-work
 
 ---
 
+#### workspace migrate
+
+Migrate a workspace to a new group.
+
+```bash
+tharsis [global options] workspace migrate [options] <workspace-id>
+```
+
+   The workspace migrate command migrates a workspace to a different group.
+
+<details>
+<summary>Options</summary>
+
+- `--json` - Output in JSON format.
+
+- `--new-group-id` - New parent group ID.
+
+</details>
+
+:::note Example
+```bash
+tharsis workspace migrate \
+  --new-group-id trn:group:ops/infrastructure \
+  trn:workspace:ops/my-workspace
+```
+:::
+
+---
+
 #### workspace outputs
 
 Get the state version outputs for a workspace.
@@ -2640,6 +3058,31 @@ tharsis [global options] workspace outputs [options] <workspace-id>
 :::note Example
 ```bash
 tharsis workspace outputs trn:workspace:ops/my-workspace
+```
+:::
+
+---
+
+#### workspace remove-membership
+
+Remove a workspace membership.
+
+```bash
+tharsis [global options] workspace remove-membership [options] <membership-id>
+```
+
+   The workspace remove-membership command removes a membership from a workspace.
+
+<details>
+<summary>Options</summary>
+
+- `--version` - Metadata version of the resource to be deleted. In most cases, this is not required.
+
+</details>
+
+:::note Example
+```bash
+tharsis workspace remove-membership trn:namespace_membership:ops/my-workspace/Tk1fZ...
 ```
 :::
 
@@ -2804,6 +3247,37 @@ tharsis workspace update \
   --max-job-duration 120 \
   --prevent-destroy-plan true \
   trn:workspace:ops/my-group/my-workspace
+```
+:::
+
+---
+
+#### workspace update-membership
+
+Update a workspace membership.
+
+```bash
+tharsis [global options] workspace update-membership [options] <membership-id>
+```
+
+   The workspace update-membership command updates a workspace membership's role.
+
+<details>
+<summary>Options</summary>
+
+- `--json` - Output in JSON format.
+
+- `--role-id` - The role ID for the membership.
+
+- `--version` - Metadata version of the resource to be updated. In most cases, this is not required.
+
+</details>
+
+:::note Example
+```bash
+tharsis workspace update-membership \
+  --role-id trn:role:deployer \
+  trn:namespace_membership:ops/my-workspace/Tk1fZ...
 ```
 :::
 

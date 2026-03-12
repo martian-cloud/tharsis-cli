@@ -77,7 +77,7 @@ func (*managedIdentityAccessRuleGetCommand) Description() string {
 
 func (*managedIdentityAccessRuleGetCommand) Example() string {
 	return `
-tharsis managed-identity-access-rule get trn:managed_identity_access_rule:abc123
+tharsis managed-identity-access-rule get <id>
 `
 }
 

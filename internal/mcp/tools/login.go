@@ -29,7 +29,7 @@ func loginWithSSO(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*ssoLoginInput,
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, _ *ssoLoginInput) (*mcp.CallToolResult, *ssoLoginOutput, error) {
-		token, err := tc.authenticator.PerformLogin(ctx)
+		token, err := tc.authenticator.Authenticate(ctx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("login failed: %w", err)
 		}
