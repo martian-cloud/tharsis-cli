@@ -51,16 +51,17 @@ func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
 	}
 
 	// Get workspace to retrieve full path
-	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
 	// Build TRN and check if variable exists
-	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, "terraform", c.key)
 	existingVar, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, &pb.GetNamespaceVariableByIDRequest{
-		Id: variableTRN,
+		Id: trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, pb.VariableCategory_terraform.String(), c.key),
 	})
 	if err != nil && status.Code(err) != codes.NotFound {
 		c.UI.ErrorWithSummary(err, "failed to check existing variable")
@@ -86,11 +87,10 @@ func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
 			return 1
 		}
 	} else {
-
 		// Create new variable
 		createInput := &pb.CreateNamespaceVariableRequest{
 			NamespacePath: workspace.FullPath,
-			Category:      pb.VariableCategory_TERRAFORM,
+			Category:      pb.VariableCategory_terraform,
 			Key:           c.key,
 			Value:         c.value,
 			Sensitive:     c.sensitive,
@@ -104,7 +104,7 @@ func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
 		}
 	}
 
-	c.UI.Successf("Terraform variable %q set successfully in workspace %s", c.key, workspace.FullPath)
+	c.UI.Successf("Terraform variable set successfully in workspace!")
 	return 0
 }
 
@@ -127,7 +127,7 @@ func (*workspaceSetTerraformVarCommand) Example() string {
 tharsis workspace set-terraform-var \
   --key region \
   --value us-east-1 \
-  trn:workspace:ops/my-workspace
+  trn:workspace:<workspace_path>
 `
 }
 

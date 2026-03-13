@@ -38,7 +38,6 @@ func (c *workspaceCreateCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.parentGroupID, validation.Required),
 	)
 }
 
@@ -64,6 +63,11 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 	}
 
 	name := c.arguments[0]
+
+	if c.parentGroupID == "" {
+		// Handle deprecated syntax where full path of the workspace is passed into the argument.
+		c.parentGroupID = trn.NewResourceTRN(trn.ResourceTypeGroup, extractParentPath(name))
+	}
 
 	if c.ifNotExists {
 		c.Logger.Debug("getting parent group", "value", c.parentGroupID)
@@ -109,7 +113,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 
 	if c.managedIdentityID != nil {
 		assignInput := &pb.AssignManagedIdentityToWorkspaceRequest{
-			ManagedIdentityId: *c.managedIdentityID,
+			ManagedIdentityId: toTRN(trn.ResourceTypeManagedIdentity, *c.managedIdentityID),
 			WorkspaceId:       createdWorkspace.Metadata.Id,
 		}
 
@@ -145,15 +149,15 @@ func (*workspaceCreateCommand) Description() string {
 func (*workspaceCreateCommand) Example() string {
 	return `
 tharsis workspace create \
-  --parent-group-id trn:group:ops/my-group \
+  --parent-group-id trn:group:<group_path> \
   --description "Production workspace" \
   --terraform-version "1.5.0" \
   --max-job-duration 60 \
   --prevent-destroy-plan \
-  --managed-identity trn:managed_identity:ops/aws-prod \
+  --managed-identity trn:managed_identity:<group_path>/<identity_name> \
   --label env=prod \
   --label team=platform \
-  my-workspace
+  <name>
 `
 }
 

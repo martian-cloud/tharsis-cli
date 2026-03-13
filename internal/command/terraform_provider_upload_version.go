@@ -12,6 +12,7 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type terraformProviderManifestType struct {
@@ -83,7 +84,7 @@ func (c *terraformProviderUploadVersionCommand) Run(args []string) int {
 
 	step := c.sg.Add("Get provider")
 	provider, err := c.grpcClient.TerraformProvidersClient.GetTerraformProviderByID(c.Context, &pb.GetTerraformProviderByIDRequest{
-		Id: c.arguments[0],
+		Id: toTRN(trn.ResourceTypeTerraformProvider, c.arguments[0]),
 	})
 	if err != nil {
 		step.Abort()
@@ -357,7 +358,7 @@ func (*terraformProviderUploadVersionCommand) Example() string {
 	return `
 tharsis terraform-provider upload-version \
   --directory ./my-provider \
-  trn:terraform_provider:my-group/my-provider
+  trn:terraform_provider:<group_path>/<name>
 `
 }
 

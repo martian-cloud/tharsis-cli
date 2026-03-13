@@ -70,7 +70,7 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 	// Filter to only terraform variables
 	var terraformVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
-		if v.Category == "terraform" {
+		if v.Category == pb.VariableCategory_terraform.String() {
 			terraformVars = append(terraformVars, v)
 		}
 	}

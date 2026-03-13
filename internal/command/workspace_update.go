@@ -9,6 +9,7 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // workspaceUpdateCommand is the top-level structure for the workspace update command.
@@ -57,10 +58,8 @@ func (c *workspaceUpdateCommand) Run(args []string) int {
 		return code
 	}
 
-	workspaceID := c.arguments[0]
-
 	input := &pb.UpdateWorkspaceRequest{
-		Id:                 workspaceID,
+		Id:                 toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		Description:        c.description,
 		TerraformVersion:   c.terraformVersion,
 		MaxJobDuration:     c.maxJobDuration,
@@ -104,7 +103,7 @@ tharsis workspace update \
   --terraform-version "1.6.0" \
   --max-job-duration 120 \
   --prevent-destroy-plan true \
-  trn:workspace:ops/my-group/my-workspace
+  trn:workspace:<workspace_path>
 `
 }
 

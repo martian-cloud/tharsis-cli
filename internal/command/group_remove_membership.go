@@ -45,8 +45,21 @@ func (c *groupRemoveMembershipCommand) Run(args []string) int {
 		return code
 	}
 
+	membership, err := c.grpcClient.NamespaceMembershipsClient.GetNamespaceMembershipByID(c.Context, &pb.GetNamespaceMembershipByIDRequest{
+		Id: c.arguments[0],
+	})
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get namespace membership")
+		return 1
+	}
+
+	if membership.Namespace == nil || membership.Namespace.GroupId == nil {
+		c.UI.Errorf("namespace membership not found for group")
+		return 1
+	}
+
 	input := &pb.DeleteNamespaceMembershipRequest{
-		Id:      c.arguments[0],
+		Id:      membership.Metadata.Id,
 		Version: c.version,
 	}
 

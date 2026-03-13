@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // workspaceDeleteCommand is the top-level structure for the workspace delete command.
@@ -50,7 +51,7 @@ func (c *workspaceDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteWorkspaceRequest{
-		Id:      c.arguments[0],
+		Id:      toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		Version: c.version,
 		Force:   &c.force,
 	}
@@ -86,7 +87,7 @@ func (*workspaceDeleteCommand) Description() string {
 
 func (*workspaceDeleteCommand) Example() string {
 	return `
-tharsis workspace delete --force trn:workspace:ops/my-group/my-workspace
+tharsis workspace delete --force trn:workspace:<workspace_path>
 `
 }
 

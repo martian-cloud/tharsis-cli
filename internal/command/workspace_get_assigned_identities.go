@@ -6,6 +6,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceGetAssignedManagedIdentitiesCommand struct {
@@ -45,7 +46,7 @@ func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetManagedIdentitiesForWorkspaceRequest{
-		WorkspaceId: c.arguments[0],
+		WorkspaceId: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	}
 
 	c.Logger.Debug("workspace get-assigned-managed-identities input", "input", input)
@@ -94,7 +95,7 @@ func (*workspaceGetAssignedManagedIdentitiesCommand) Usage() string {
 
 func (*workspaceGetAssignedManagedIdentitiesCommand) Example() string {
 	return `
-tharsis workspace get-assigned-managed-identities trn:workspace:ops/my-workspace
+tharsis workspace get-assigned-managed-identities trn:workspace:<workspace_path>
 `
 }
 

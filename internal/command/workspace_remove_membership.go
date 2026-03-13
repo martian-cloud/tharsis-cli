@@ -45,8 +45,21 @@ func (c *workspaceRemoveMembershipCommand) Run(args []string) int {
 		return code
 	}
 
+	membership, err := c.grpcClient.NamespaceMembershipsClient.GetNamespaceMembershipByID(c.Context, &pb.GetNamespaceMembershipByIDRequest{
+		Id: c.arguments[0],
+	})
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get namespace membership")
+		return 1
+	}
+
+	if membership.Namespace == nil || membership.Namespace.WorkspaceId == nil {
+		c.UI.Errorf("namespace membership not found for workspace")
+		return 1
+	}
+
 	input := &pb.DeleteNamespaceMembershipRequest{
-		Id:      c.arguments[0],
+		Id:      membership.Metadata.Id,
 		Version: c.version,
 	}
 
@@ -77,7 +90,7 @@ func (*workspaceRemoveMembershipCommand) Usage() string {
 
 func (*workspaceRemoveMembershipCommand) Example() string {
 	return `
-tharsis workspace remove-membership trn:namespace_membership:ops/my-workspace/Tk1fZ...
+tharsis workspace remove-membership <id>
 `
 }
 

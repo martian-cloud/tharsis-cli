@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
@@ -16,7 +15,7 @@ import (
 type terraformProviderMirrorListVersionsCommand struct {
 	*BaseCommand
 
-	limit  *int32
+	limit  int
 	cursor *string
 	sortBy *pb.TerraformProviderVersionMirrorSortableField
 	toJSON bool
@@ -38,7 +37,7 @@ func (c *terraformProviderMirrorListVersionsCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit), validation.When(c.limit != nil)),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
 	)
 }
 
@@ -53,15 +52,11 @@ func (c *terraformProviderMirrorListVersionsCommand) Run(args []string) int {
 		return code
 	}
 
-	if c.limit == nil {
-		c.limit = ptr.Int32(maxPaginationLimit)
-	}
-
 	input := &pb.GetTerraformProviderVersionMirrorsRequest{
 		NamespacePath: c.arguments[0],
 		Sort:          c.sortBy,
 		PaginationOptions: &pb.PaginationOptions{
-			First: c.limit,
+			First: ptr.Int32(int32(c.limit)),
 			After: c.cursor,
 		},
 	}
@@ -130,7 +125,7 @@ func (*terraformProviderMirrorListVersionsCommand) Example() string {
 tharsis terraform-provider-mirror list-versions \
   --sort-by CREATED_AT_DESC \
   --limit 10 \
-  ops
+  <namespace_path>
 `
 }
 
@@ -144,17 +139,11 @@ func (c *terraformProviderMirrorListVersionsCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.IntVar(
+		&c.limit,
 		"limit",
-		"Maximum number of result elements to return. Defaults to 100.",
-		func(s string) error {
-			i, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return err
-			}
-			c.limit = ptr.Int32(int32(i))
-			return nil
-		},
+		maxPaginationLimit,
+		"Maximum number of result elements to return.",
 	)
 	f.Func(
 		"sort-by",

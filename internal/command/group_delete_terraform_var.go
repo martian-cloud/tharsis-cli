@@ -54,11 +54,8 @@ func (c *groupDeleteTerraformVarCommand) Run(args []string) int {
 		return 1
 	}
 
-	// Build TRN: trn:variable:namespace-path/terraform/key
-	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, "terraform", c.key)
-
 	deleteInput := &pb.DeleteNamespaceVariableRequest{
-		Id:      variableTRN,
+		Id:      trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), c.key),
 		Version: c.version,
 	}
 

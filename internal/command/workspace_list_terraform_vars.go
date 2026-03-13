@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceListTerraformVarsCommand struct {
@@ -45,7 +46,9 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 		return code
 	}
 
-	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
@@ -66,7 +69,7 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 	// Filter to only terraform variables
 	var terraformVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
-		if v.Category == "terraform" {
+		if v.Category == pb.VariableCategory_terraform.String() {
 			terraformVars = append(terraformVars, v)
 		}
 	}
@@ -113,7 +116,7 @@ func (*workspaceListTerraformVarsCommand) Usage() string {
 
 func (*workspaceListTerraformVarsCommand) Example() string {
 	return `
-tharsis workspace list-terraform-vars --show-sensitive trn:workspace:ops/my-workspace
+tharsis workspace list-terraform-vars --show-sensitive trn:workspace:<workspace_path>
 `
 }
 

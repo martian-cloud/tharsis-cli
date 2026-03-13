@@ -36,7 +36,6 @@ func NewModuleDeleteAttestationCommandFactory(baseCommand *BaseCommand) func() (
 func (c *moduleDeleteAttestationCommand) Run(args []string) int {
 	if code := c.initialize(
 		WithArguments(args),
-		WithFlags(c.Flags()),
 		WithCommandName("module delete-attestation"),
 		WithInputValidator(c.validate),
 		WithClient(true),

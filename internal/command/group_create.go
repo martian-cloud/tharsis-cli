@@ -87,7 +87,9 @@ func (c *groupCreateCommand) Run(args []string) int {
 
 	if c.parentGroupID == nil {
 		// Deprecated. Attempt to extract parent path from the argument.
-		c.parentGroupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, extractParentPath(name)))
+		if p := extractParentPath(name); p != "" {
+			c.parentGroupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, p))
+		}
 	}
 
 	input := &pb.CreateGroupRequest{
@@ -129,7 +131,7 @@ func (*groupCreateCommand) Example() string {
 tharsis group create \
   --parent-group-id trn:group:<group_path> \
   --description "Operations group" \
-  my-group
+  <name>
 `
 }
 

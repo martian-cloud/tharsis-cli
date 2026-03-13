@@ -3,24 +3,24 @@ package command
 import (
 	"flag"
 	"fmt"
-	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceListCommand struct {
 	*BaseCommand
 
-	limit        *int32
+	limit        int
+	sortOrder    *string
 	cursor       *string
 	search       *string
 	groupID      *string
-	sortBy       *pb.WorkspaceSortableField
+	sortBy       *string
 	labelFilters map[string]string
 	toJSON       bool
 }
@@ -37,7 +37,7 @@ func NewWorkspaceListCommandFactory(baseCommand *BaseCommand) func() (Command, e
 
 func (c *workspaceListCommand) validate() error {
 	return validation.ValidateStruct(c,
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit), validation.When(c.limit != nil)),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
 		validation.Field(&c.arguments, validation.Empty),
 	)
 }
@@ -53,14 +53,20 @@ func (c *workspaceListCommand) Run(args []string) int {
 		return code
 	}
 
-	if c.limit == nil {
-		c.limit = ptr.Int32(maxPaginationLimit)
+	sortByEnum, err := parseSortField[pb.WorkspaceSortableField](
+		c.sortBy,
+		c.sortOrder,
+		pb.WorkspaceSortableField_value,
+	)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to parse sort field")
+		return 1
 	}
 
 	input := &pb.GetWorkspacesRequest{
-		Sort: c.sortBy,
+		Sort: sortByEnum,
 		PaginationOptions: &pb.PaginationOptions{
-			First: c.limit,
+			First: ptr.Int32(int32(c.limit)),
 			After: c.cursor,
 		},
 		Search:       c.search,
@@ -130,7 +136,7 @@ func (*workspaceListCommand) Usage() string {
 func (*workspaceListCommand) Example() string {
 	return `
 tharsis workspace list \
-  --group-id trn:group:top-level \
+  --group-id trn:group:<group_path> \
   --label env=prod \
   --label team=platform \
   --sort-by FULL_PATH_ASC \
@@ -149,28 +155,28 @@ func (c *workspaceListCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.IntVar(
+		&c.limit,
 		"limit",
-		"Maximum number of result elements to return. Defaults to 100.",
-		func(s string) error {
-			i, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return err
-			}
-			c.limit = ptr.Int32(int32(i))
-			return nil
-		},
+		maxPaginationLimit,
+		"Maximum number of result elements to return.",
 	)
 	f.Func(
 		"sort-by",
 		"Sort by this field (e.g., UPDATED_AT_ASC, UPDATED_AT_DESC, FULL_PATH_ASC, FULL_PATH_DESC).",
 		func(s string) error {
-			value, ok := pb.WorkspaceSortableField_value[strings.ToUpper(s)]
-			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, maps.Keys(pb.WorkspaceSortableField_value))
+			// TODO: Update to use PB types and validate with PB map once deprecation is done.
+			switch v := strings.ToUpper(s); v {
+			case "UPDATED", // Deprecated.
+				"PATH", // Deprecated.
+				pb.WorkspaceSortableField_FULL_PATH_ASC.String(),
+				pb.WorkspaceSortableField_FULL_PATH_DESC.String(),
+				pb.WorkspaceSortableField_UPDATED_AT_ASC.String(),
+				pb.WorkspaceSortableField_UPDATED_AT_DESC.String():
+				c.sortBy = &v
 			}
-			c.sortBy = pb.WorkspaceSortableField(value).Enum()
-			return nil
+
+			return fmt.Errorf("unknown sort by option %s", s)
 		},
 	)
 	f.Func(
@@ -190,6 +196,14 @@ func (c *workspaceListCommand) Flags() *flag.FlagSet {
 		},
 	)
 	f.Func(
+		"group-path",
+		"Filter to only workspaces in this group path. Deprecated.",
+		func(s string) error {
+			c.groupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, s))
+			return nil
+		},
+	)
+	f.Func(
 		"label",
 		"Filter by label (key=value). This flag may be repeated.",
 		func(s string) error {
@@ -199,6 +213,18 @@ func (c *workspaceListCommand) Flags() *flag.FlagSet {
 			}
 			c.labelFilters[parts[0]] = parts[1]
 			return nil
+		},
+	)
+	f.Func(
+		"sort-order",
+		"Sort in this direction, ASC or DESC. Deprecated",
+		func(s string) error {
+			switch strings.ToUpper(s) {
+			case "ASC", "DESC":
+				c.sortOrder = &s
+			}
+
+			return fmt.Errorf("unknown sort order %s", s)
 		},
 	)
 	f.BoolVar(

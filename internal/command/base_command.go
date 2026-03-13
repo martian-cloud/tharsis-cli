@@ -358,7 +358,7 @@ func toTRN(rt trn.ResourceType, p string) string {
 	}
 
 	// Check if it's a valid GID by attempting to decode
-	if _, err := base64.RawURLEncoding.DecodeString(p); err == nil {
+	if _, err := base64.StdEncoding.DecodeString(p); err == nil {
 		// It's a valid base64 string, assume it's a GID
 		return p
 	}

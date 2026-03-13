@@ -5,13 +5,11 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceUnassignManagedIdentityCommand struct {
 	*BaseCommand
-
-	workspaceID       string
-	managedIdentityID string
 }
 
 // NewWorkspaceUnassignManagedIdentityCommandFactory returns a workspaceUnassignManagedIdentityCommand struct.
@@ -24,17 +22,18 @@ func NewWorkspaceUnassignManagedIdentityCommandFactory(baseCommand *BaseCommand)
 }
 
 func (c *workspaceUnassignManagedIdentityCommand) validate() error {
+	const message = "workspace id and managed identity id are required"
 	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Empty),
-		validation.Field(&c.workspaceID, validation.Required),
-		validation.Field(&c.managedIdentityID, validation.Required),
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(2, 2).Error(message),
+		),
 	)
 }
 
 func (c *workspaceUnassignManagedIdentityCommand) Run(args []string) int {
 	if code := c.initialize(
 		WithArguments(args),
-		WithFlags(c.Flags()),
 		WithCommandName("workspace unassign-managed-identity"),
 		WithInputValidator(c.validate),
 		WithClient(true),
@@ -43,8 +42,8 @@ func (c *workspaceUnassignManagedIdentityCommand) Run(args []string) int {
 	}
 
 	input := &pb.RemoveManagedIdentityFromWorkspaceRequest{
-		WorkspaceId:       c.workspaceID,
-		ManagedIdentityId: c.managedIdentityID,
+		WorkspaceId:       toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		ManagedIdentityId: toTRN(trn.ResourceTypeManagedIdentity, c.arguments[1]),
 	}
 
 	c.Logger.Debug("workspace unassign-managed-identity input", "input", input)
@@ -54,7 +53,7 @@ func (c *workspaceUnassignManagedIdentityCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("Managed identity %s unassigned from workspace successfully", c.managedIdentityID)
+	c.UI.Successf("Managed identity unassigned from workspace successfully!")
 	return 0
 }
 
@@ -69,31 +68,17 @@ func (*workspaceUnassignManagedIdentityCommand) Description() string {
 }
 
 func (*workspaceUnassignManagedIdentityCommand) Usage() string {
-	return "tharsis [global options] workspace unassign-managed-identity [options]"
+	return "tharsis [global options] workspace unassign-managed-identity <workspace-id> <identity-id>"
 }
 
 func (*workspaceUnassignManagedIdentityCommand) Example() string {
 	return `
 tharsis workspace unassign-managed-identity \
-  --workspace-id trn:workspace:ops/my-workspace \
-  --managed-identity-id trn:managed_identity:ops/my-identity
+  trn:workspace:<workspace_path> \
+  trn:managed_identity:<group_path>/<identity_name>
 `
 }
 
 func (c *workspaceUnassignManagedIdentityCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.StringVar(
-		&c.workspaceID,
-		"workspace-id",
-		"",
-		"The ID of the workspace.",
-	)
-	f.StringVar(
-		&c.managedIdentityID,
-		"managed-identity-id",
-		"",
-		"The ID of the managed identity to unassign.",
-	)
-
-	return f
+	return nil
 }

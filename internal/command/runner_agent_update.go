@@ -93,7 +93,7 @@ tharsis runner-agent update \
   --disabled true \
   --tag prod \
   --tag us-west-2 \
-  trn:runner:abc123
+  trn:runner:<group_path>/<runner_name>
 `
 }
 

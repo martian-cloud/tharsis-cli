@@ -144,7 +144,7 @@ func (c *groupListCommand) Flags() *flag.FlagSet {
 		&c.limit,
 		"limit",
 		maxPaginationLimit,
-		"Maximum number of result elements to return. Defaults to 100.",
+		"Maximum number of result elements to return.",
 	)
 	f.Func(
 		"sort-by",
@@ -193,7 +193,7 @@ func (c *groupListCommand) Flags() *flag.FlagSet {
 				c.sortBy = pb.GroupSortableField_FULL_PATH_DESC.Enum()
 			}
 
-			return fmt.Errorf("unknown sort option %s", s)
+			return fmt.Errorf("unknown sort order %s", s)
 		},
 	)
 	f.BoolVar(
