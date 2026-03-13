@@ -162,7 +162,7 @@ func (c *moduleListVersionsCommand) Flags() *flag.FlagSet {
 		&c.limit,
 		"limit",
 		maxPaginationLimit,
-		"Maximum number of result elements to return. Defaults to 100.",
+		"Maximum number of result elements to return.",
 	)
 	f.Func(
 		"sort-by",

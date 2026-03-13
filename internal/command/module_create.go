@@ -61,12 +61,21 @@ func (c *moduleCreateCommand) Run(args []string) int {
 	var name, system string
 	switch len(parts) {
 	case 1:
-		c.UI.Errorf("argument must be in format: module-name/system")
+		c.UI.Errorf("argument must be in format: module-name/system or group-path/module-name/system")
 		return 1
 	case 2:
+		if c.groupID == "" {
+			c.UI.Errorf("group-id is required when supplying just the module-name/system in the argument")
+			return 1
+		}
 		name = parts[0]
 		system = parts[1]
 	default:
+		if c.groupID != "" {
+			c.UI.Errorf("group-id should not be supplied when supplying just the module path in the argument")
+			return 1
+		}
+
 		// Handle deprecated syntax by extracting name, system, and group path.
 		system = parts[len(parts)-1]
 		name = parts[len(parts)-2]

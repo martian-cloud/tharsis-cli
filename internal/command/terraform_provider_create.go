@@ -3,10 +3,12 @@ package command
 import (
 	"flag"
 	"fmt"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type terraformProviderCreateCommand struct {
@@ -35,7 +37,6 @@ func (c *terraformProviderCreateCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.groupID, validation.Required),
 	)
 }
 
@@ -51,6 +52,24 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 	}
 
 	providerName := c.arguments[0]
+
+	parts := strings.Split(providerName, "/")
+	if len(parts) == 1 {
+		// Ensure a group is supplied when using just provider name argument.
+		if c.groupID == "" {
+			c.UI.Errorf("group-id is required when supplying the name in the argument")
+			return 1
+		}
+	} else {
+		if c.groupID != "" {
+			c.UI.Errorf("group-id should not be supplied when using provider path")
+			return 1
+		}
+
+		// Handle deprecated syntax by extracting name and group path.
+		providerName = parts[len(parts)-1]
+		c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, extractParentPath(providerName))
+	}
 
 	input := &pb.CreateTerraformProviderRequest{
 		Name:          providerName,
@@ -103,7 +122,7 @@ func (*terraformProviderCreateCommand) Usage() string {
 func (*terraformProviderCreateCommand) Example() string {
 	return `
 tharsis terraform-provider create \
-  --group-id trn:group:ops/my-group \
+  --group-id trn:group:<group_path> \
   --repository-url https://github.com/example/terraform-provider-example \
   my-provider
 `

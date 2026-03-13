@@ -33,7 +33,6 @@ func (c *terraformProviderMirrorDeletePlatformCommand) validate() error {
 func (c *terraformProviderMirrorDeletePlatformCommand) Run(args []string) int {
 	if code := c.initialize(
 		WithArguments(args),
-		WithFlags(c.Flags()),
 		WithCommandName("terraform-provider-mirror delete-platform"),
 		WithInputValidator(c.validate),
 		WithClient(true),
@@ -52,7 +51,7 @@ func (c *terraformProviderMirrorDeletePlatformCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("Terraform provider platform mirror %s deleted successfully", c.arguments[0])
+	c.UI.Successf("Terraform provider platform mirror deleted successfully!")
 	return 0
 }
 

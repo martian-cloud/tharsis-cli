@@ -58,7 +58,7 @@ func (c *groupSetTerraformVarCommand) Run(args []string) int {
 	}
 
 	// Build TRN and check if variable exists
-	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, "terraform", c.key)
+	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), c.key)
 	existingVar, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, &pb.GetNamespaceVariableByIDRequest{
 		Id: variableTRN,
 	})
@@ -90,7 +90,7 @@ func (c *groupSetTerraformVarCommand) Run(args []string) int {
 		// Create new variable
 		createInput := &pb.CreateNamespaceVariableRequest{
 			NamespacePath: group.FullPath,
-			Category:      pb.VariableCategory_TERRAFORM,
+			Category:      pb.VariableCategory_terraform,
 			Key:           c.key,
 			Value:         c.value,
 			Sensitive:     c.sensitive,
@@ -104,7 +104,7 @@ func (c *groupSetTerraformVarCommand) Run(args []string) int {
 		}
 	}
 
-	c.UI.Successf("Terraform variable %q set successfully in group %s", c.key, group.FullPath)
+	c.UI.Successf("Terraform variable set successfully in group!")
 	return 0
 }
 

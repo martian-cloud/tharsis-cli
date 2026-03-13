@@ -80,7 +80,7 @@ func (*runnerAgentDeleteCommand) Description() string {
 
 func (*runnerAgentDeleteCommand) Example() string {
 	return `
-tharsis runner-agent delete trn:runner:ops/prod-runner
+tharsis runner-agent delete trn:runner:<group_path>/<runner_name>
 `
 }
 

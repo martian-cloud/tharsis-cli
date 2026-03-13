@@ -70,7 +70,7 @@ func (c *groupSetEnvironmentVarsCommand) Run(args []string) int {
 
 	input := &pb.SetNamespaceVariablesRequest{
 		NamespacePath: group.FullPath,
-		Category:      pb.VariableCategory_ENVIRONMENT,
+		Category:      pb.VariableCategory_environment,
 		Variables:     pbVariables,
 	}
 
@@ -81,7 +81,7 @@ func (c *groupSetEnvironmentVarsCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("Environment variables set successfully in group %s", group.FullPath)
+	c.UI.Successf("Environment variables set successfully in group!")
 	return 0
 }
 

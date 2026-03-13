@@ -5,25 +5,26 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
-type serviceAccountCreateOIDCTokenCommand struct {
+type serviceAccountCreateTokenCommand struct {
 	*BaseCommand
 
 	token  string
 	toJSON bool
 }
 
-// NewServiceAccountCreateOIDCTokenCommandFactory returns a serviceAccountCreateOIDCTokenCommand struct.
-func NewServiceAccountCreateOIDCTokenCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+// NewServiceAccountCreateTokenCommandFactory returns a serviceAccountCreateTokenCommand struct.
+func NewServiceAccountCreateTokenCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {
-		return &serviceAccountCreateOIDCTokenCommand{
+		return &serviceAccountCreateTokenCommand{
 			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (c *serviceAccountCreateOIDCTokenCommand) validate() error {
+func (c *serviceAccountCreateTokenCommand) validate() error {
 	const message = "service-account-id is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,
@@ -34,11 +35,11 @@ func (c *serviceAccountCreateOIDCTokenCommand) validate() error {
 	)
 }
 
-func (c *serviceAccountCreateOIDCTokenCommand) Run(args []string) int {
+func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
 	if code := c.initialize(
 		WithArguments(args),
 		WithFlags(c.Flags()),
-		WithCommandName("service-account create-oidc-token"),
+		WithCommandName("service-account create-token"),
 		WithInputValidator(c.validate),
 		WithClient(true),
 	); code != 0 {
@@ -46,11 +47,11 @@ func (c *serviceAccountCreateOIDCTokenCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateOIDCTokenRequest{
-		ServiceAccountId: c.arguments[0],
+		ServiceAccountId: toTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
 		Token:            c.token,
 	}
 
-	c.Logger.Debug("service-account create-oidc-token input", "input", input)
+	c.Logger.Debug("service-account create-token input", "input", input)
 
 	result, err := c.grpcClient.ServiceAccountsClient.CreateOIDCToken(c.Context, input)
 	if err != nil {
@@ -70,31 +71,31 @@ func (c *serviceAccountCreateOIDCTokenCommand) Run(args []string) int {
 	return 0
 }
 
-func (*serviceAccountCreateOIDCTokenCommand) Synopsis() string {
-	return "Create a token for a service account using OIDC."
+func (*serviceAccountCreateTokenCommand) Synopsis() string {
+	return "Create a token for a service account."
 }
 
-func (*serviceAccountCreateOIDCTokenCommand) Description() string {
+func (*serviceAccountCreateTokenCommand) Description() string {
 	return `
-   The service-account create-oidc-token command creates a token for a service account using OIDC authentication.
+   The service-account create-token command creates a token for a service account using OIDC authentication.
    The input token is issued by an identity provider specified in the service account's trust policy.
    The output token can be used to authenticate with the API.
 `
 }
 
-func (*serviceAccountCreateOIDCTokenCommand) Usage() string {
-	return "tharsis [global options] service-account create-oidc-token [options] <service-account-id>"
+func (*serviceAccountCreateTokenCommand) Usage() string {
+	return "tharsis [global options] service-account create-token [options] <service-account-id>"
 }
 
-func (*serviceAccountCreateOIDCTokenCommand) Example() string {
+func (*serviceAccountCreateTokenCommand) Example() string {
 	return `
-tharsis service-account create-oidc-token \
+tharsis service-account create-token \
   --token <oidc-token> \
-  trn:service_account:ops/my-sa
+  trn:service_account:<group_path>/<service_account_name>
 `
 }
 
-func (c *serviceAccountCreateOIDCTokenCommand) Flags() *flag.FlagSet {
+func (c *serviceAccountCreateTokenCommand) Flags() *flag.FlagSet {
 	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
 	f.StringVar(
 		&c.token,

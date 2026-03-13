@@ -7,6 +7,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceListMembershipsCommand struct {
@@ -25,7 +26,7 @@ func NewWorkspaceListMembershipsCommandFactory(baseCommand *BaseCommand) func() 
 }
 
 func (c *workspaceListMembershipsCommand) validate() error {
-	const message = "workspace-path is required"
+	const message = "workspace-id is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,
 			validation.Required.Error(message),
@@ -45,8 +46,17 @@ func (c *workspaceListMembershipsCommand) Run(args []string) int {
 		return code
 	}
 
+	// Ensure it's a workspace.
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+	})
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get group")
+		return 1
+	}
+
 	input := &pb.GetNamespaceMembershipsForNamespaceRequest{
-		NamespacePath: c.arguments[0],
+		NamespacePath: workspace.FullPath,
 	}
 
 	c.Logger.Debug("workspace list-memberships input", "input", input)
@@ -93,12 +103,12 @@ func (*workspaceListMembershipsCommand) Description() string {
 }
 
 func (*workspaceListMembershipsCommand) Usage() string {
-	return "tharsis [global options] workspace list-memberships [options] <workspace-path>"
+	return "tharsis [global options] workspace list-memberships [options] <id>"
 }
 
 func (*workspaceListMembershipsCommand) Example() string {
 	return `
-tharsis workspace list-memberships top-level/my-workspace
+tharsis workspace list-memberships trn:workspace:<workspace_path>
 `
 }
 

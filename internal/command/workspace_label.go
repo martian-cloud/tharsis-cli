@@ -3,10 +3,11 @@ package command
 import (
 	"flag"
 	"fmt"
+	"maps"
 	"strings"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceLabelCommand struct {
@@ -28,23 +29,33 @@ func NewWorkspaceLabelCommandFactory(baseCommand *BaseCommand) func() (Command, 
 }
 
 func (c *workspaceLabelCommand) validate() error {
-	const message = "workspace-id is required"
+	if len(c.arguments) < 2 {
+		return fmt.Errorf("workspace-id and at least one label operation are required")
+	}
 
-	for key, value := range c.labels {
-		if key == "" {
-			return fmt.Errorf("invalid label format: key cannot be empty")
-		}
-		if value != nil && *value == "" {
-			return fmt.Errorf("invalid label format: value cannot be empty for key %s", key)
+	// Validate label operations
+	for _, arg := range c.arguments[1:] {
+		if key, ok := strings.CutSuffix(arg, "-"); ok {
+			if key == "" {
+				return fmt.Errorf("invalid label format: key cannot be empty")
+			}
+			if c.overwrite {
+				return fmt.Errorf("label removal syntax (key-) cannot be used with --overwrite flag")
+			}
+		} else if strings.Contains(arg, "=") {
+			parts := strings.SplitN(arg, "=", 2)
+			if parts[0] == "" {
+				return fmt.Errorf("invalid label format: key cannot be empty")
+			}
+			if parts[1] == "" {
+				return fmt.Errorf("invalid label format: value cannot be empty for key %s", parts[0])
+			}
+		} else {
+			return fmt.Errorf("invalid label format: %s (expected key=value or key-)", arg)
 		}
 	}
 
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	return nil
 }
 
 func (c *workspaceLabelCommand) Run(args []string) int {
@@ -58,20 +69,28 @@ func (c *workspaceLabelCommand) Run(args []string) int {
 		return code
 	}
 
-	workspaceID := c.arguments[0]
-
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: workspaceID,
+		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
+	// Parse label operations from remaining arguments
+	for _, arg := range c.arguments[1:] {
+		if key, ok := strings.CutSuffix(arg, "-"); ok {
+			c.labels[key] = nil
+		} else {
+			parts := strings.SplitN(arg, "=", 2)
+			c.labels[parts[0]] = &parts[1]
+		}
+	}
+
 	newLabels := c.applyLabelOperations(workspace.Labels)
 
 	input := &pb.UpdateWorkspaceRequest{
-		Id:     workspaceID,
+		Id:     workspace.Metadata.Id,
 		Labels: newLabels,
 	}
 
@@ -92,9 +111,7 @@ func (c *workspaceLabelCommand) applyLabelOperations(existingLabels map[string]s
 		workingLabels = make(map[string]string)
 	} else {
 		workingLabels = make(map[string]string, len(existingLabels))
-		for k, v := range existingLabels {
-			workingLabels[k] = v
-		}
+		maps.Copy(workingLabels, existingLabels)
 	}
 
 	for key, value := range c.labels {
@@ -124,36 +141,21 @@ func (*workspaceLabelCommand) Description() string {
 }
 
 func (*workspaceLabelCommand) Usage() string {
-	return "tharsis [global options] workspace label [options] <workspace-id>"
+	return "tharsis [global options] workspace label [options] <workspace-id> <label-operation>..."
 }
 
 func (*workspaceLabelCommand) Example() string {
 	return `
 tharsis workspace label \
-  --label env=prod \
-  --label tier=frontend \
-  trn:workspace:ops/my-workspace
+  --overwrite \
+  trn:workspace:<workspace_path> \
+  env=prod \
+  tier=frontend
 `
 }
 
 func (c *workspaceLabelCommand) Flags() *flag.FlagSet {
 	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
-		"label",
-		"Label operation (key=value to add/update, key- to remove). Can be specified multiple times.",
-		func(s string) error {
-			if key, ok := strings.CutSuffix(s, "-"); ok {
-				c.labels[key] = nil
-			} else if strings.Contains(s, "=") {
-				parts := strings.SplitN(s, "=", 2)
-				c.labels[parts[0]] = &parts[1]
-			} else {
-				return fmt.Errorf("invalid label format: %s (expected key=value or key-)", s)
-			}
-
-			return nil
-		},
-	)
 	f.BoolVar(
 		&c.overwrite,
 		"overwrite",

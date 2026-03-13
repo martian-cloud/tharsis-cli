@@ -40,7 +40,7 @@ func TestSetVariable(t *testing.T) {
 				NamespaceID: "ws1",
 				Key:         "region",
 				Value:       "us-east-1",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
@@ -54,7 +54,7 @@ func TestSetVariable(t *testing.T) {
 				m.variables.On("CreateNamespaceVariable", mock.Anything, &pb.CreateNamespaceVariableRequest{
 					Key:           "region",
 					Value:         "us-east-1",
-					Category:      pb.VariableCategory_TERRAFORM,
+					Category:      pb.VariableCategory_terraform,
 					NamespacePath: "group/workspace",
 				}).Return(&pb.NamespaceVariable{
 					Metadata: &pb.ResourceMetadata{Id: "v1"},
@@ -69,7 +69,7 @@ func TestSetVariable(t *testing.T) {
 				NamespaceID: "ws1",
 				Key:         "region",
 				Value:       "us-east-1",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
@@ -86,7 +86,7 @@ func TestSetVariable(t *testing.T) {
 				NamespaceID: "ws1",
 				Key:         "PATH",
 				Value:       "/usr/bin",
-				Category:    "ENVIRONMENT",
+				Category:    "environment",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
@@ -128,7 +128,7 @@ func TestSetVariable(t *testing.T) {
 				NamespaceID: "group1",
 				Key:         "region",
 				Value:       "us-west-2",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "group1"}).
@@ -142,7 +142,7 @@ func TestSetVariable(t *testing.T) {
 				m.variables.On("CreateNamespaceVariable", mock.Anything, &pb.CreateNamespaceVariableRequest{
 					Key:           "region",
 					Value:         "us-west-2",
-					Category:      pb.VariableCategory_TERRAFORM,
+					Category:      pb.VariableCategory_terraform,
 					NamespacePath: "group1",
 				}).Return(&pb.NamespaceVariable{
 					Metadata: &pb.ResourceMetadata{Id: "v2"},
@@ -157,7 +157,7 @@ func TestSetVariable(t *testing.T) {
 				NamespaceID: "nonexistent",
 				Key:         "key",
 				Value:       "value",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "nonexistent"}).
@@ -219,7 +219,7 @@ func TestDeleteVariable(t *testing.T) {
 			input: &deleteVariableInput{
 				NamespaceID: "ws1",
 				Key:         "region",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
@@ -237,7 +237,7 @@ func TestDeleteVariable(t *testing.T) {
 			input: &deleteVariableInput{
 				NamespaceID: "ws1",
 				Key:         "region",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
@@ -262,7 +262,7 @@ func TestDeleteVariable(t *testing.T) {
 			input: &deleteVariableInput{
 				NamespaceID: "ws1",
 				Key:         "nonexistent",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
@@ -281,7 +281,7 @@ func TestDeleteVariable(t *testing.T) {
 			input: &deleteVariableInput{
 				NamespaceID: "group1",
 				Key:         "region",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "group1"}).
@@ -299,7 +299,7 @@ func TestDeleteVariable(t *testing.T) {
 			input: &deleteVariableInput{
 				NamespaceID: "nonexistent",
 				Key:         "key",
-				Category:    "TERRAFORM",
+				Category:    "terraform",
 			},
 			mockSetup: func(m *variableMocks) {
 				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "nonexistent"}).
@@ -379,7 +379,7 @@ instance_type = "t2.micro"`), 0600)
 				}, nil)
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
 				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
-					return req.NamespacePath == "group/workspace" && req.Category == pb.VariableCategory_TERRAFORM && len(req.Variables) == 2
+					return req.NamespacePath == "group/workspace" && req.Category == pb.VariableCategory_terraform && len(req.Variables) == 2
 				})).Return(nil, nil)
 			},
 			expectCount: 2,
@@ -446,7 +446,7 @@ instance_type = "t2.micro"`), 0600)
 					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
 				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
-					return req.NamespacePath == "group1" && req.Category == pb.VariableCategory_TERRAFORM && len(req.Variables) == 1
+					return req.NamespacePath == "group1" && req.Category == pb.VariableCategory_terraform && len(req.Variables) == 1
 				})).Return(nil, nil)
 			},
 			expectCount: 1,
@@ -525,7 +525,7 @@ HOME=/home/user`), 0600)
 				}, nil)
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
 				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
-					return req.NamespacePath == "group/workspace" && req.Category == pb.VariableCategory_ENVIRONMENT && len(req.Variables) == 2
+					return req.NamespacePath == "group/workspace" && req.Category == pb.VariableCategory_environment && len(req.Variables) == 2
 				})).Return(nil, nil)
 			},
 			expectCount: 2,
@@ -572,7 +572,7 @@ HOME=/home/user`), 0600)
 					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
 				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
-					return req.NamespacePath == "group1" && req.Category == pb.VariableCategory_ENVIRONMENT && len(req.Variables) == 1
+					return req.NamespacePath == "group1" && req.Category == pb.VariableCategory_environment && len(req.Variables) == 1
 				})).Return(nil, nil)
 			},
 			expectCount: 1,

@@ -57,11 +57,8 @@ func (c *groupGetTerraformVarCommand) Run(args []string) int {
 		return 1
 	}
 
-	// Build TRN: trn:variable:namespace-path/terraform/key
-	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, "terraform", c.key)
-
 	input := &pb.GetNamespaceVariableByIDRequest{
-		Id: variableTRN,
+		Id: trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), c.key),
 	}
 
 	c.Logger.Debug("group get-terraform-var input", "input", input)

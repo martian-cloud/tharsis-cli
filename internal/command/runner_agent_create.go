@@ -1,16 +1,19 @@
 package command
 
 import (
+	"errors"
 	"flag"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // runnerAgentCreateCommand is the top-level structure for the runner agent create command.
 type runnerAgentCreateCommand struct {
 	*BaseCommand
 
+	runnerName      string
 	groupID         string
 	description     string
 	runUntaggedJobs bool
@@ -21,12 +24,16 @@ type runnerAgentCreateCommand struct {
 var _ Command = (*runnerAgentCreateCommand)(nil)
 
 func (c *runnerAgentCreateCommand) validate() error {
-	const message = "name is required"
+	if len(c.arguments) > 0 && c.runnerName != "" {
+		return errors.New("must supply only one of runner name argument or option, not both")
+	}
+
+	if len(c.arguments) == 0 && c.runnerName == "" {
+		return errors.New("runner name argument or option is required")
+	}
+
 	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
+		validation.Field(&c.arguments, validation.Length(0, 1)),
 		validation.Field(&c.groupID, validation.Required),
 	)
 }
@@ -49,6 +56,10 @@ func (c *runnerAgentCreateCommand) Run(args []string) int {
 		WithClient(true),
 	); code != 0 {
 		return code
+	}
+
+	if c.runnerName != "" {
+		c.arguments = append(c.arguments, c.runnerName)
 	}
 
 	input := &pb.CreateRunnerRequest{
@@ -87,7 +98,7 @@ func (*runnerAgentCreateCommand) Description() string {
 func (*runnerAgentCreateCommand) Example() string {
 	return `
 tharsis runner-agent create \
-  --group-id trn:group:ops/my-group \
+  --group-id trn:group:<group_path> \
   --description "Production runner" \
   --run-untagged-jobs \
   --tag prod \
@@ -103,6 +114,20 @@ func (c *runnerAgentCreateCommand) Flags() *flag.FlagSet {
 		"group-id",
 		"",
 		"Group ID or TRN where the runner agent will be created.",
+	)
+	f.Func(
+		"group-path",
+		"Full path of group where runner will be created. Deprecated.",
+		func(s string) error {
+			c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return nil
+		},
+	)
+	f.StringVar(
+		&c.runnerName,
+		"runner-name",
+		"",
+		"Name of the new runner agent. Deprecated.",
 	)
 	f.StringVar(
 		&c.description,

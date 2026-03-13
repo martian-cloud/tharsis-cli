@@ -56,7 +56,7 @@ func (c *terraformProviderMirrorDeleteVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("Terraform provider version mirror %s deleted successfully", c.arguments[0])
+	c.UI.Successf("Terraform provider version mirror deleted successfully!")
 	return 0
 }
 
@@ -67,7 +67,9 @@ func (*terraformProviderMirrorDeleteVersionCommand) Synopsis() string {
 func (*terraformProviderMirrorDeleteVersionCommand) Description() string {
 	return `
    The terraform-provider-mirror delete-version command deletes a terraform provider
-   version and any associated platform binaries from a group's mirror.
+   version and any associated platform binaries from a group's mirror. The --force
+   option must be used when deleting a provider version which actively hosts
+   platform binaries.
 `
 }
 

@@ -20,7 +20,7 @@ type setVariableInput struct {
 	NamespaceID string `json:"namespace_id" jsonschema:"required,Workspace or group ID or TRN (e.g. Ul8yZ... or trn:workspace:group/workspace or trn:group:group/subgroup)"`
 	Key         string `json:"key" jsonschema:"required,Variable name/key"`
 	Value       string `json:"value" jsonschema:"required,Variable value"`
-	Category    string `json:"category" jsonschema:"required,Variable category: TERRAFORM or ENVIRONMENT"`
+	Category    string `json:"category" jsonschema:"required,Variable category: terraform or environment"`
 }
 
 // setVariableOutput is the output for setting a variable.
@@ -44,7 +44,7 @@ func setVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*setVariableInpu
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *setVariableInput) (*mcp.CallToolResult, *setVariableOutput, error) {
 		categoryValue, ok := pb.VariableCategory_value[input.Category]
 		if !ok {
-			return nil, nil, fmt.Errorf("invalid category: must be 'TERRAFORM' or 'ENVIRONMENT'")
+			return nil, nil, fmt.Errorf("invalid category: must be 'terraform' or 'environment'")
 		}
 
 		namespacePath, resourceType, err := getNamespacePath(ctx, tc.grpcClient, input.NamespaceID)
@@ -144,7 +144,7 @@ func setTerraformVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFo
 
 		if _, err = tc.grpcClient.NamespaceVariablesClient.SetNamespaceVariables(ctx, &pb.SetNamespaceVariablesRequest{
 			NamespacePath: namespacePath,
-			Category:      pb.VariableCategory_TERRAFORM,
+			Category:      pb.VariableCategory_terraform,
 			Variables:     setVars,
 		}); err != nil {
 			return nil, nil, fmt.Errorf("failed to set variables: %w", err)
@@ -213,7 +213,7 @@ func setEnvironmentVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandler
 
 		if _, err = tc.grpcClient.NamespaceVariablesClient.SetNamespaceVariables(ctx, &pb.SetNamespaceVariablesRequest{
 			NamespacePath: namespacePath,
-			Category:      pb.VariableCategory_ENVIRONMENT,
+			Category:      pb.VariableCategory_environment,
 			Variables:     setVars,
 		}); err != nil {
 			return nil, nil, fmt.Errorf("failed to set environment variables: %w", err)
@@ -233,7 +233,7 @@ func setEnvironmentVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandler
 type deleteVariableInput struct {
 	NamespaceID string `json:"namespace_id" jsonschema:"required,Workspace or group ID or TRN (e.g. Ul8yZ... or trn:workspace:group/workspace or trn:group:group/subgroup)"`
 	Key         string `json:"key" jsonschema:"required,Variable name/key to delete"`
-	Category    string `json:"category" jsonschema:"required,Variable category: TERRAFORM or ENVIRONMENT"`
+	Category    string `json:"category" jsonschema:"required,Variable category: terraform or environment"`
 }
 
 // deleteVariableOutput is the output for deleting a variable.
@@ -255,7 +255,7 @@ func deleteVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteVariab
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *deleteVariableInput) (*mcp.CallToolResult, *deleteVariableOutput, error) {
 		if _, ok := pb.VariableCategory_value[input.Category]; !ok {
-			return nil, nil, fmt.Errorf("invalid category: must be 'TERRAFORM' or 'ENVIRONMENT'")
+			return nil, nil, fmt.Errorf("invalid category: must be 'terraform' or 'environment'")
 		}
 
 		namespacePath, resourceType, err := getNamespacePath(ctx, tc.grpcClient, input.NamespaceID)

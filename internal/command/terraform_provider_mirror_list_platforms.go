@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
@@ -16,7 +15,7 @@ import (
 type terraformProviderMirrorListPlatformsCommand struct {
 	*BaseCommand
 
-	limit        *int32
+	limit        int
 	cursor       *string
 	os           *string
 	architecture *string
@@ -40,7 +39,7 @@ func (c *terraformProviderMirrorListPlatformsCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit), validation.When(c.limit != nil)),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
 	)
 }
 
@@ -55,15 +54,11 @@ func (c *terraformProviderMirrorListPlatformsCommand) Run(args []string) int {
 		return code
 	}
 
-	if c.limit == nil {
-		c.limit = ptr.Int32(maxPaginationLimit)
-	}
-
 	input := &pb.GetTerraformProviderPlatformMirrorsRequest{
 		VersionMirrorId: c.arguments[0],
 		Sort:            c.sortBy,
 		PaginationOptions: &pb.PaginationOptions{
-			First: c.limit,
+			First: ptr.Int32(int32(c.limit)),
 			After: c.cursor,
 		},
 		Os:           c.os,
@@ -134,7 +129,7 @@ tharsis terraform-provider-mirror list-platforms \
   --os linux \
   --architecture amd64 \
   --sort-by CREATED_AT_DESC \
-  trn:terraform_provider_version_mirror:ops/registry.terraform.io/hashicorp/time/0.13.1
+  trn:terraform_provider_version_mirror:<group_path>/<provider_namespace>/<provider_name>/<semantic_version>
 `
 }
 
@@ -148,17 +143,11 @@ func (c *terraformProviderMirrorListPlatformsCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.IntVar(
+		&c.limit,
 		"limit",
-		"Maximum number of result elements to return. Defaults to 100.",
-		func(s string) error {
-			i, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return err
-			}
-			c.limit = ptr.Int32(int32(i))
-			return nil
-		},
+		maxPaginationLimit,
+		"Maximum number of result elements to return.",
 	)
 	f.Func(
 		"sort-by",

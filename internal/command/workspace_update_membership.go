@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceUpdateMembershipCommand struct {
@@ -81,8 +82,8 @@ func (*workspaceUpdateMembershipCommand) Usage() string {
 func (*workspaceUpdateMembershipCommand) Example() string {
 	return `
 tharsis workspace update-membership \
-  --role-id trn:role:deployer \
-  trn:namespace_membership:ops/my-workspace/Tk1fZ...
+  --role-id trn:role:<role_name> \
+  <id>
 `
 }
 
@@ -93,6 +94,14 @@ func (c *workspaceUpdateMembershipCommand) Flags() *flag.FlagSet {
 		"role-id",
 		"",
 		"The role ID for the membership.",
+	)
+	f.Func(
+		"role",
+		"Role name for the membership. Deprecated.",
+		func(s string) error {
+			c.roleID = trn.NewResourceTRN(trn.ResourceTypeRole, s)
+			return nil
+		},
 	)
 	f.Func(
 		"version",

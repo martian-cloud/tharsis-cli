@@ -48,17 +48,16 @@ func (c *workspaceDeleteTerraformVarCommand) Run(args []string) int {
 	}
 
 	// Get workspace to retrieve full path
-	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
-	// Build TRN: trn:variable:namespace-path/terraform/key
-	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, "terraform", c.key)
-
 	deleteInput := &pb.DeleteNamespaceVariableRequest{
-		Id:      variableTRN,
+		Id:      trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, pb.VariableCategory_terraform.String(), c.key),
 		Version: c.version,
 	}
 
@@ -91,7 +90,7 @@ func (*workspaceDeleteTerraformVarCommand) Example() string {
 	return `
 tharsis workspace delete-terraform-var \
   --key region \
-  trn:workspace:ops/my-workspace
+  trn:workspace:<workspace_path>
 `
 }
 

@@ -74,7 +74,7 @@ func (*runnerAgentGetCommand) Description() string {
 
 func (*runnerAgentGetCommand) Example() string {
 	return `
-tharsis runner-agent get trn:runner:ops/prod-runner
+tharsis runner-agent get trn:runner:<group_path>/<runner_name>
 `
 }
 

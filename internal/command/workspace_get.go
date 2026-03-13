@@ -6,6 +6,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // workspaceGetCommand is the top-level structure for the workspace get command.
@@ -48,7 +49,7 @@ func (c *workspaceGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetWorkspaceByIDRequest{
-		Id: c.arguments[0],
+		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	}
 
 	c.Logger.Debug("workspace get input", "input", input)
@@ -79,7 +80,7 @@ func (*workspaceGetCommand) Description() string {
 
 func (*workspaceGetCommand) Example() string {
 	return `
-tharsis workspace get trn:workspace:ops/my-group/my-workspace
+tharsis workspace get trn:workspace:<workspace_path>
 `
 }
 

@@ -70,7 +70,7 @@ func (c *groupSetTerraformVarsCommand) Run(args []string) int {
 
 	input := &pb.SetNamespaceVariablesRequest{
 		NamespacePath: group.FullPath,
-		Category:      pb.VariableCategory_TERRAFORM,
+		Category:      pb.VariableCategory_terraform,
 		Variables:     pbVariables,
 	}
 
@@ -81,7 +81,7 @@ func (c *groupSetTerraformVarsCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("Terraform variables set successfully in group %s", group.FullPath)
+	c.UI.Successf("Terraform variables set successfully in group!")
 	return 0
 }
 

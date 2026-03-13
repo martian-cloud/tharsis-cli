@@ -3,8 +3,10 @@ package command
 import (
 	"flag"
 
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceAddMembershipCommand struct {
@@ -48,8 +50,16 @@ func (c *workspaceAddMembershipCommand) Run(args []string) int {
 		return code
 	}
 
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+	})
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
+		return 1
+	}
+
 	input := &pb.CreateNamespaceMembershipRequest{
-		NamespacePath:    c.arguments[0],
+		NamespacePath:    workspace.FullPath,
 		RoleId:           c.roleID,
 		UserId:           c.userID,
 		ServiceAccountId: c.serviceAccountID,
@@ -87,7 +97,7 @@ func (*workspaceAddMembershipCommand) Example() string {
 tharsis workspace add-membership \
   --role-id trn:role:owner \
   --user-id trn:user:john.smith \
-  trn:workspace:top-level/my-workspace
+  trn:workspace:<workspace_path>
 `
 }
 
@@ -104,6 +114,30 @@ func (c *workspaceAddMembershipCommand) Flags() *flag.FlagSet {
 		"The user ID for the membership.",
 		func(s string) error {
 			c.userID = &s
+			return nil
+		},
+	)
+	f.Func(
+		"role",
+		"Role name for new membership. Deprecated.",
+		func(s string) error {
+			c.roleID = trn.NewResourceTRN(trn.ResourceTypeRole, s)
+			return nil
+		},
+	)
+	f.Func(
+		"username",
+		"Username for the new membership. Deprecated.",
+		func(s string) error {
+			c.userID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeUser, s))
+			return nil
+		},
+	)
+	f.Func(
+		"team-name",
+		"Team name for the new membership. Deprecated.",
+		func(s string) error {
+			c.teamID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeTeam, s))
 			return nil
 		},
 	)

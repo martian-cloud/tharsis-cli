@@ -66,7 +66,7 @@ func (c *groupListEnvironmentVarsCommand) Run(args []string) int {
 	// Filter to only environment variables
 	var environmentVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
-		if v.Category == "environment" {
+		if v.Category == pb.VariableCategory_environment.String() {
 			environmentVars = append(environmentVars, v)
 		}
 	}

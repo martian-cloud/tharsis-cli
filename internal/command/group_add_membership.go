@@ -50,8 +50,14 @@ func (c *groupAddMembershipCommand) Run(args []string) int {
 		return code
 	}
 
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: toTRN(trn.ResourceTypeGroup, c.arguments[0])})
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get group")
+		return 1
+	}
+
 	input := &pb.CreateNamespaceMembershipRequest{
-		NamespacePath:    toTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		NamespacePath:    group.FullPath,
 		RoleId:           c.roleID,
 		UserId:           c.userID,
 		ServiceAccountId: c.serviceAccountID,

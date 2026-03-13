@@ -5,6 +5,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
 
@@ -45,7 +46,9 @@ func (c *workspaceSetEnvironmentVarsCommand) Run(args []string) int {
 		return code
 	}
 
-	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: c.arguments[0]})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0])},
+	)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
@@ -69,7 +72,7 @@ func (c *workspaceSetEnvironmentVarsCommand) Run(args []string) int {
 
 	input := &pb.SetNamespaceVariablesRequest{
 		NamespacePath: workspace.FullPath,
-		Category:      pb.VariableCategory_ENVIRONMENT,
+		Category:      pb.VariableCategory_environment,
 		Variables:     pbVariables,
 	}
 
@@ -80,7 +83,7 @@ func (c *workspaceSetEnvironmentVarsCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("Environment variables set successfully in workspace %s", workspace.FullPath)
+	c.UI.Successf("Environment variables set successfully in workspace!")
 	return 0
 }
 
@@ -104,7 +107,7 @@ func (*workspaceSetEnvironmentVarsCommand) Example() string {
 	return `
 tharsis workspace set-environment-vars \
   --env-var-file vars.env \
-  trn:workspace:ops/my-workspace
+  trn:workspace:<workspace_path>
 `
 }
 

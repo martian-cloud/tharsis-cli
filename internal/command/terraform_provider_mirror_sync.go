@@ -44,6 +44,7 @@ func (c *terraformProviderMirrorSyncCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
+		validation.Field(&c.rootGroupName, validation.Required),
 	)
 }
 
@@ -373,13 +374,37 @@ func (*terraformProviderMirrorSyncCommand) Synopsis() string {
 
 func (*terraformProviderMirrorSyncCommand) Description() string {
 	return `
-   The terraform-provider-mirror sync command syncs provider platforms
-   from an upstream Terraform registry to a Tharsis provider mirror.
+   The terraform-provider-mirror sync command downloads Terraform
+   provider platform packages from a registry and uploads them to
+   the Tharsis provider mirror. The --platform option can be used
+   multiple times to specify more than one platform. By default,
+   this command will sync all platforms for the latest version.
+
+   Command will only upload missing provider platform packages
+   so, if a package ever needs reuploading, the platform mirror
+   must be deleted via "tharsis terraform-provider-mirror
+   delete-platform" subcommand prior to running this subcommand.
+
+   For private registries, authentication tokens are resolved in
+   the following order:
+   1. CLI environment variable TF_TOKEN_<hostname>
+      (e.g., TF_TOKEN_registry_example_com)
+   2. Federated registry: runs service discovery and uses the
+      token from a matching CLI profile
+
+   Fully Qualified Name (FQN) must be formatted as:
+
+   [registry hostname/]{registry namespace}/{provider name}
+
+   The hostname can be omitted for providers from the default
+   public Terraform registry (registry.terraform.io).
+
+   Examples: registry.terraform.io/hashicorp/aws, hashicorp/aws
 `
 }
 
 func (*terraformProviderMirrorSyncCommand) Usage() string {
-	return "tharsis [global options] terraform-provider-mirror sync [options] <provider-fqn>"
+	return "tharsis [global options] terraform-provider-mirror sync [options] <provider_fqn>"
 }
 
 func (*terraformProviderMirrorSyncCommand) Example() string {
@@ -388,7 +413,7 @@ tharsis terraform-provider-mirror sync \
   --root-group-name my-group \
   --version 1.0.0 \
   --platform linux_amd64 \
-  registry.terraform.io/hashicorp/aws
+  hashicorp/aws
 `
 }
 
@@ -399,6 +424,12 @@ func (c *terraformProviderMirrorSyncCommand) Flags() *flag.FlagSet {
 		"root-group-name",
 		"",
 		"The name of the root group to create the mirror in.",
+	)
+	f.StringVar(
+		&c.rootGroupName,
+		"group-path",
+		"",
+		"Full path to the root group where this Terraform provider version will be mirrored. Deprecated.",
 	)
 	f.StringVar(
 		&c.version,

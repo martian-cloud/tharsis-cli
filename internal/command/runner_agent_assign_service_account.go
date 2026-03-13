@@ -10,9 +10,6 @@ import (
 
 type runnerAgentAssignServiceAccountCommand struct {
 	*BaseCommand
-
-	runnerID         string
-	serviceAccountID string
 }
 
 // NewRunnerAgentAssignServiceAccountCommandFactory returns a runnerAgentAssignServiceAccountCommand struct.
@@ -25,17 +22,18 @@ func NewRunnerAgentAssignServiceAccountCommandFactory(baseCommand *BaseCommand) 
 }
 
 func (c *runnerAgentAssignServiceAccountCommand) validate() error {
+	const message = "service account id and runner agent id are required"
 	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Required.When(c.runnerID == "" && c.serviceAccountID == "")),
-		validation.Field(&c.runnerID, validation.Required.When(len(c.arguments) == 0)),
-		validation.Field(&c.serviceAccountID, validation.Required.When(len(c.arguments) == 0)),
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(2, 2).Error(message),
+		),
 	)
 }
 
 func (c *runnerAgentAssignServiceAccountCommand) Run(args []string) int {
 	if code := c.initialize(
 		WithArguments(args),
-		WithFlags(c.Flags()),
 		WithCommandName("runner-agent assign-service-account"),
 		WithInputValidator(c.validate),
 		WithClient(true),
@@ -44,8 +42,8 @@ func (c *runnerAgentAssignServiceAccountCommand) Run(args []string) int {
 	}
 
 	input := &pb.AssignServiceAccountToRunnerRequest{
-		RunnerId:         toTRN(trn.ResourceTypeRunner, c.runnerID),
-		ServiceAccountId: toTRN(trn.ResourceTypeServiceAccount, c.serviceAccountID),
+		ServiceAccountId: toTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
+		RunnerId:         toTRN(trn.ResourceTypeRunner, c.arguments[1]),
 	}
 
 	c.Logger.Debug("runner-agent assign-service-account input", "input", input)
@@ -55,7 +53,7 @@ func (c *runnerAgentAssignServiceAccountCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("Service account %s assigned to runner agent successfully", c.serviceAccountID)
+	c.UI.Successf("Service account assigned to runner agent successfully!")
 	return 0
 }
 
@@ -70,31 +68,17 @@ func (*runnerAgentAssignServiceAccountCommand) Description() string {
 }
 
 func (*runnerAgentAssignServiceAccountCommand) Usage() string {
-	return "tharsis [global options] runner-agent assign-service-account [options]"
+	return "tharsis [global options] runner-agent assign-service-account <service-account-id> <runner-id>"
 }
 
 func (*runnerAgentAssignServiceAccountCommand) Example() string {
 	return `
 tharsis runner-agent assign-service-account \
-  --runner-id trn:runner:<group_path>/<runner_name> \
-  --service-account-id trn:service_account:<group_path>/<service_account_name>
+  trn:service_account:<group_path>/<service_account_name> \
+  trn:runner:<group_path>/<runner_name>
 `
 }
 
 func (c *runnerAgentAssignServiceAccountCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.StringVar(
-		&c.runnerID,
-		"runner-id",
-		"",
-		"The ID of the runner agent.",
-	)
-	f.StringVar(
-		&c.serviceAccountID,
-		"service-account-id",
-		"",
-		"The ID of the service account to assign.",
-	)
-
-	return f
+	return nil
 }

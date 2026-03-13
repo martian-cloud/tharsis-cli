@@ -66,7 +66,7 @@ func (c *workspaceListEnvironmentVarsCommand) Run(args []string) int {
 	// Filter to only environment variables
 	var environmentVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
-		if v.Category == "environment" {
+		if v.Category == pb.VariableCategory_environment.String() {
 			environmentVars = append(environmentVars, v)
 		}
 	}
@@ -113,7 +113,7 @@ func (*workspaceListEnvironmentVarsCommand) Usage() string {
 
 func (*workspaceListEnvironmentVarsCommand) Example() string {
 	return `
-tharsis workspace list-environment-vars --show-sensitive trn:workspace:ops/my-workspace
+tharsis workspace list-environment-vars --show-sensitive trn:workspace:<workspace_path>
 `
 }
 
