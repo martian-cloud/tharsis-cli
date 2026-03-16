@@ -260,7 +260,7 @@ Do operations on groups.
 - `delete                                   ` - Delete a group.
 - `delete-terraform-var                     ` - Delete a terraform variable from a group.
 - `get                                      ` - Get a single group.
-- `get-membership                           ` - Get a group membership by ID.
+- `get-membership                           ` - Get a group membership.
 - `get-terraform-var                        ` - Get a terraform variable for a group.
 - `list                                     ` - Retrieve a paginated list of groups.
 - `list-environment-vars                    ` - List all environment variables in a group.
@@ -357,7 +357,7 @@ tharsis [global options] group create [options] <name>
 tharsis group create \
   --parent-group-id trn:group:<group_path> \
   --description "Operations group" \
-  my-group
+  <name>
 ```
 :::
 
@@ -453,10 +453,10 @@ tharsis group get \
 
 #### group get-membership
 
-Get a group membership by ID.
+Get a group membership.
 
 ```bash
-tharsis [global options] group get-membership [options] <membership-id>
+tharsis [global options] group get-membership [options] <group-id>
 ```
 
    The group get-membership command retrieves details about a specific group membership.
@@ -466,17 +466,23 @@ tharsis [global options] group get-membership [options] <membership-id>
 
 - `--json` - Output in JSON format.
 
-- `--service-account-id` - Service account ID to find the group membership. Deprecated
+- `--service-account-id` - Service account ID to find the group membership for.
 
-- `--team-name` - Team name to find the group membership. Deprecated
+- `--team-id` - Team ID to find the group membership for. Deprecated
 
-- `--username` - Username to find the group membership. Deprecated
+- `--team-name` - Team name to find the group membership for. Deprecated
+
+- `--user-id` - User ID to find the group membership for.
+
+- `--username` - Username to find the group membership for. Deprecated
 
 </details>
 
 :::note Example
 ```bash
-tharsis group get-membership <id>
+tharsis group get-membership \
+  --user-id trn:user:<username> \
+  trn:group:<group_path>
 ```
 :::
 
@@ -532,7 +538,7 @@ tharsis [global options] group list [options]
 
 - `--json` - Show final output as JSON.
 
-- `--limit` - Maximum number of result elements to return. Defaults to 100.
+- `--limit` - Maximum number of result elements to return.
 
 - `--parent-id` - Filter to only direct sub-groups of this parent group.
 
@@ -1608,7 +1614,7 @@ tharsis [global options] module list [options]
 
 - `--json` - Show final output as JSON.
 
-- `--limit` - Maximum number of result elements to return. Defaults to 100.
+- `--limit` - Maximum number of result elements to return.
 
 - `--search` - Filter to only modules containing this substring in their path.
 
@@ -1649,7 +1655,7 @@ tharsis [global options] module list-attestations [options] <module-id>
 
 - `--json` - Show final output as JSON.
 
-- `--limit` - Maximum number of result elements to return. Defaults to 100.
+- `--limit` - Maximum number of result elements to return.
 
 - `--sort-by` - Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).
 
@@ -1688,7 +1694,7 @@ tharsis [global options] module list-versions [options] <module-id>
 
 - `--latest` - Filter to only the latest version.
 
-- `--limit` - Maximum number of result elements to return. Defaults to 100.
+- `--limit` - Maximum number of result elements to return.
 
 - `--search` - Filter to versions containing this substring.
 
@@ -1939,25 +1945,16 @@ and assign or unassign service accounts.
 Assign a service account to a runner agent.
 
 ```bash
-tharsis [global options] runner-agent assign-service-account [options]
+tharsis [global options] runner-agent assign-service-account <service-account-id> <runner-id>
 ```
 
    The runner-agent assign-service-account command assigns a service account to a runner agent.
 
-<details>
-<summary>Options</summary>
-
-- `--runner-id` - The ID of the runner agent.
-
-- `--service-account-id` - The ID of the service account to assign.
-
-</details>
-
 :::note Example
 ```bash
 tharsis runner-agent assign-service-account \
-  --runner-id trn:runner:<group_path>/<runner_name> \
-  --service-account-id trn:service_account:<group_path>/<service_account_name>
+  trn:service_account:<group_path>/<service_account_name> \
+  trn:runner:<group_path>/<runner_name>
 ```
 :::
 
@@ -1980,9 +1977,13 @@ tharsis [global options] runner-agent create [options] <name>
 
 - `--group-id` - Group ID or TRN where the runner agent will be created.
 
+- `--group-path` - Full path of group where runner will be created. Deprecated.
+
 - `--json` - Show final output as JSON.
 
 - `--run-untagged-jobs` - Allow the runner agent to execute jobs without tags.
+
+- `--runner-name` - Name of the new runner agent. Deprecated.
 
 - `--tag` - Tag for the runner agent. (This flag may be repeated)
 
@@ -1991,7 +1992,7 @@ tharsis [global options] runner-agent create [options] <name>
 :::note Example
 ```bash
 tharsis runner-agent create \
-  --group-id trn:group:ops/my-group \
+  --group-id trn:group:<group_path> \
   --description "Production runner" \
   --run-untagged-jobs \
   --tag prod \
@@ -2021,7 +2022,7 @@ tharsis [global options] runner-agent delete [options] <id>
 
 :::note Example
 ```bash
-tharsis runner-agent delete trn:runner:ops/prod-runner
+tharsis runner-agent delete trn:runner:<group_path>/<runner_name>
 ```
 :::
 
@@ -2046,7 +2047,7 @@ tharsis [global options] runner-agent get [options] <id>
 
 :::note Example
 ```bash
-tharsis runner-agent get trn:runner:ops/prod-runner
+tharsis runner-agent get trn:runner:<group_path>/<runner_name>
 ```
 :::
 
@@ -2057,25 +2058,16 @@ tharsis runner-agent get trn:runner:ops/prod-runner
 Unassign a service account from a runner agent.
 
 ```bash
-tharsis [global options] runner-agent unassign-service-account [options]
+tharsis [global options] runner-agent unassign-service-account <service-account-id> <runner-id>
 ```
 
    The runner-agent unassign-service-account command removes a service account from a runner agent.
 
-<details>
-<summary>Options</summary>
-
-- `--runner-id` - The ID of the runner agent.
-
-- `--service-account-id` - The ID of the service account to unassign.
-
-</details>
-
 :::note Example
 ```bash
 tharsis runner-agent unassign-service-account \
-  --runner-id trn:runner:ops/my-runner \
-  --service-account-id trn:service_account:ops/my-sa
+  trn:service_account:<group_path>/<service_account_name> \
+  trn:runner:<group_path>/<runner_name>
 ```
 :::
 
@@ -2115,7 +2107,7 @@ tharsis runner-agent update \
   --disabled true \
   --tag prod \
   --tag us-west-2 \
-  trn:runner:abc123
+  trn:runner:<group_path>/<runner_name>
 ```
 :::
 
@@ -2126,7 +2118,7 @@ tharsis runner-agent update \
 Create an authentication token for a service account.
 
 :::info Subcommands
-- `create-oidc-token                        ` - Create a token for a service account using OIDC.
+- `create-token                             ` - Create a token for a service account.
 :::
 
 Service accounts provide machine-to-machine authentication for
@@ -2135,15 +2127,15 @@ create authentication tokens.
 
 ---
 
-#### service-account create-oidc-token
+#### service-account create-token
 
-Create a token for a service account using OIDC.
+Create a token for a service account.
 
 ```bash
-tharsis [global options] service-account create-oidc-token [options] <service-account-id>
+tharsis [global options] service-account create-token [options] <service-account-id>
 ```
 
-   The service-account create-oidc-token command creates a token for a service account using OIDC authentication.
+   The service-account create-token command creates a token for a service account using OIDC authentication.
    The input token is issued by an identity provider specified in the service account's trust policy.
    The output token can be used to authenticate with the API.
 
@@ -2158,9 +2150,9 @@ tharsis [global options] service-account create-oidc-token [options] <service-ac
 
 :::note Example
 ```bash
-tharsis service-account create-oidc-token \
+tharsis service-account create-token \
   --token <oidc-token> \
-  trn:service_account:ops/my-sa
+  trn:service_account:<group_path>/<service_account_name>
 ```
 :::
 
@@ -2243,7 +2235,7 @@ tharsis [global options] terraform-provider create [options] <provider-name>
 :::note Example
 ```bash
 tharsis terraform-provider create \
-  --group-id trn:group:ops/my-group \
+  --group-id trn:group:<group_path> \
   --repository-url https://github.com/example/terraform-provider-example \
   my-provider
 ```
@@ -2273,7 +2265,7 @@ tharsis [global options] terraform-provider upload-version [options] <provider-i
 ```bash
 tharsis terraform-provider upload-version \
   --directory ./my-provider \
-  trn:terraform_provider:my-group/my-provider
+  trn:terraform_provider:<group_path>/<name>
 ```
 :::
 
@@ -2330,7 +2322,9 @@ tharsis [global options] terraform-provider-mirror delete-version [options] <ver
 ```
 
    The terraform-provider-mirror delete-version command deletes a terraform provider
-   version and any associated platform binaries from a group's mirror.
+   version and any associated platform binaries from a group's mirror. The --force
+   option must be used when deleting a provider version which actively hosts
+   platform binaries.
 
 <details>
 <summary>Options</summary>
@@ -2394,7 +2388,7 @@ tharsis [global options] terraform-provider-mirror list-platforms [options] <ver
 
 - `--json` - Show final output as JSON.
 
-- `--limit` - Maximum number of result elements to return. Defaults to 100.
+- `--limit` - Maximum number of result elements to return.
 
 - `--os` - Filter to platforms with this OS.
 
@@ -2408,7 +2402,7 @@ tharsis terraform-provider-mirror list-platforms \
   --os linux \
   --architecture amd64 \
   --sort-by CREATED_AT_DESC \
-  trn:terraform_provider_version_mirror:ops/registry.terraform.io/hashicorp/time/0.13.1
+  trn:terraform_provider_version_mirror:<group_path>/<provider_namespace>/<provider_name>/<semantic_version>
 ```
 :::
 
@@ -2432,7 +2426,7 @@ tharsis [global options] terraform-provider-mirror list-versions [options] <name
 
 - `--json` - Show final output as JSON.
 
-- `--limit` - Maximum number of result elements to return. Defaults to 100.
+- `--limit` - Maximum number of result elements to return.
 
 - `--sort-by` - Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).
 
@@ -2443,7 +2437,7 @@ tharsis [global options] terraform-provider-mirror list-versions [options] <name
 tharsis terraform-provider-mirror list-versions \
   --sort-by CREATED_AT_DESC \
   --limit 10 \
-  ops
+  <namespace_path>
 ```
 :::
 
@@ -2454,14 +2448,40 @@ tharsis terraform-provider-mirror list-versions \
 Sync provider platforms from upstream registry to mirror.
 
 ```bash
-tharsis [global options] terraform-provider-mirror sync [options] <provider-fqn>
+tharsis [global options] terraform-provider-mirror sync [options] <provider_fqn>
 ```
 
-   The terraform-provider-mirror sync command syncs provider platforms
-   from an upstream Terraform registry to a Tharsis provider mirror.
+   The terraform-provider-mirror sync command downloads Terraform
+   provider platform packages from a registry and uploads them to
+   the Tharsis provider mirror. The --platform option can be used
+   multiple times to specify more than one platform. By default,
+   this command will sync all platforms for the latest version.
+
+   Command will only upload missing provider platform packages
+   so, if a package ever needs reuploading, the platform mirror
+   must be deleted via "tharsis terraform-provider-mirror
+   delete-platform" subcommand prior to running this subcommand.
+
+   For private registries, authentication tokens are resolved in
+   the following order:
+   1. CLI environment variable TF_TOKEN_\<hostname\>
+      (e.g., TF_TOKEN_registry_example_com)
+   2. Federated registry: runs service discovery and uses the
+      token from a matching CLI profile
+
+   Fully Qualified Name (FQN) must be formatted as:
+
+   \[registry hostname/\]{registry namespace}/{provider name}
+
+   The hostname can be omitted for providers from the default
+   public Terraform registry (registry.terraform.io).
+
+   Examples: registry.terraform.io/hashicorp/aws, hashicorp/aws
 
 <details>
 <summary>Options</summary>
+
+- `--group-path` - Full path to the root group where this Terraform provider version will be mirrored. Deprecated.
 
 - `--platform` - Platform to sync (format: os_arch). Can be specified multiple times. If not specified, syncs all platforms.
 
@@ -2477,7 +2497,7 @@ tharsis terraform-provider-mirror sync \
   --root-group-name my-group \
   --version 1.0.0 \
   --platform linux_amd64 \
-  registry.terraform.io/hashicorp/aws
+  hashicorp/aws
 ```
 :::
 
@@ -2520,7 +2540,7 @@ Do operations on workspaces.
 - `delete-terraform-var                     ` - Delete a terraform variable from a workspace.
 - `get                                      ` - Get a single workspace.
 - `get-assigned-managed-identities          ` - Get assigned managed identities for a workspace.
-- `get-membership                           ` - Get a workspace membership by ID.
+- `get-membership                           ` - Get a workspace membership.
 - `get-terraform-var                        ` - Get a terraform variable for a workspace.
 - `label                                    ` - Manage labels on a workspace.
 - `list                                     ` - Retrieve a paginated list of workspaces.
@@ -2561,13 +2581,19 @@ tharsis [global options] workspace add-membership [options] <workspace-id>
 
 - `--json` - Output in JSON format.
 
+- `--role` - Role name for new membership. Deprecated.
+
 - `--role-id` - The role ID for the membership.
 
 - `--service-account-id` - The service account ID for the membership.
 
 - `--team-id` - The team ID for the membership.
 
+- `--team-name` - Team name for the new membership. Deprecated.
+
 - `--user-id` - The user ID for the membership.
+
+- `--username` - Username for the new membership. Deprecated.
 
 </details>
 
@@ -2576,7 +2602,7 @@ tharsis [global options] workspace add-membership [options] <workspace-id>
 tharsis workspace add-membership \
   --role-id trn:role:owner \
   --user-id trn:user:john.smith \
-  trn:workspace:top-level/my-workspace
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2587,25 +2613,16 @@ tharsis workspace add-membership \
 Assign a managed identity to a workspace.
 
 ```bash
-tharsis [global options] workspace assign-managed-identity [options]
+tharsis [global options] workspace assign-managed-identity <workspace-id> <identity-id>
 ```
 
    The workspace assign-managed-identity command assigns a managed identity to a workspace.
 
-<details>
-<summary>Options</summary>
-
-- `--managed-identity-id` - The ID of the managed identity to assign.
-
-- `--workspace-id` - The ID of the workspace.
-
-</details>
-
 :::note Example
 ```bash
 tharsis workspace assign-managed-identity \
-  --workspace-id trn:workspace:ops/my-workspace \
-  --managed-identity-id trn:managed_identity:ops/my-identity
+  trn:workspace:<workspace_path> \
+  trn:managed_identity:<group_path>/<identity_name>
 ```
 :::
 
@@ -2651,15 +2668,15 @@ tharsis [global options] workspace create [options] <name>
 :::note Example
 ```bash
 tharsis workspace create \
-  --parent-group-id trn:group:ops/my-group \
+  --parent-group-id trn:group:<group_path> \
   --description "Production workspace" \
   --terraform-version "1.5.0" \
   --max-job-duration 60 \
   --prevent-destroy-plan \
-  --managed-identity trn:managed_identity:ops/aws-prod \
+  --managed-identity trn:managed_identity:<group_path>/<identity_name> \
   --label env=prod \
   --label team=platform \
-  my-workspace
+  <name>
 ```
 :::
 
@@ -2690,7 +2707,7 @@ tharsis [global options] workspace delete [options] <id>
 
 :::note Example
 ```bash
-tharsis workspace delete --force trn:workspace:ops/my-group/my-workspace
+tharsis workspace delete --force trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2719,7 +2736,7 @@ tharsis [global options] workspace delete-terraform-var [options] <workspace-id>
 ```bash
 tharsis workspace delete-terraform-var \
   --key region \
-  trn:workspace:ops/my-workspace
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2745,7 +2762,7 @@ tharsis [global options] workspace get [options] <id>
 
 :::note Example
 ```bash
-tharsis workspace get trn:workspace:ops/my-group/my-workspace
+tharsis workspace get trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2770,7 +2787,7 @@ tharsis [global options] workspace get-assigned-managed-identities [options] <wo
 
 :::note Example
 ```bash
-tharsis workspace get-assigned-managed-identities trn:workspace:ops/my-workspace
+tharsis workspace get-assigned-managed-identities trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2778,10 +2795,10 @@ tharsis workspace get-assigned-managed-identities trn:workspace:ops/my-workspace
 
 #### workspace get-membership
 
-Get a workspace membership by ID.
+Get a workspace membership.
 
 ```bash
-tharsis [global options] workspace get-membership [options] <membership-id>
+tharsis [global options] workspace get-membership [options] <workspace-id>
 ```
 
    The workspace get-membership command retrieves details about a specific workspace membership.
@@ -2791,11 +2808,23 @@ tharsis [global options] workspace get-membership [options] <membership-id>
 
 - `--json` - Output in JSON format.
 
+- `--service-account-id` - Service account ID to find the workspace membership for.
+
+- `--team-id` - Team ID to find the workspace membership for. Deprecated
+
+- `--team-name` - Team name to find the workspace membership for. Deprecated
+
+- `--user-id` - User ID to find the workspace membership for.
+
+- `--username` - Username to find the workspace membership for. Deprecated
+
 </details>
 
 :::note Example
 ```bash
-tharsis workspace get-membership trn:namespace_membership:ops/my-workspace/Tk1fZj
+tharsis workspace get-membership \
+  --user-id trn:user:<username> \
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2826,7 +2855,7 @@ tharsis [global options] workspace get-terraform-var [options] <workspace-id>
 ```bash
 tharsis workspace get-terraform-var \
   --key region \
-  trn:workspace:ops/my-workspace
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2837,7 +2866,7 @@ tharsis workspace get-terraform-var \
 Manage labels on a workspace.
 
 ```bash
-tharsis [global options] workspace label [options] <workspace-id>
+tharsis [global options] workspace label [options] <workspace-id> <label-operation>...
 ```
 
    The workspace label command manages labels on a workspace.
@@ -2852,8 +2881,6 @@ tharsis [global options] workspace label [options] <workspace-id>
 
 - `--json` - Output in JSON format.
 
-- `--label` - Label operation (key=value to add/update, key- to remove). Can be specified multiple times.
-
 - `--overwrite` - Replace all existing labels with the specified labels.
 
 </details>
@@ -2861,9 +2888,10 @@ tharsis [global options] workspace label [options] <workspace-id>
 :::note Example
 ```bash
 tharsis workspace label \
-  --label env=prod \
-  --label tier=frontend \
-  trn:workspace:ops/my-workspace
+  --overwrite \
+  trn:workspace:<workspace_path> \
+  env=prod \
+  tier=frontend
 ```
 :::
 
@@ -2888,22 +2916,26 @@ tharsis [global options] workspace list [options]
 
 - `--group-id` - Filter to only workspaces in this group.
 
+- `--group-path` - Filter to only workspaces in this group path. Deprecated.
+
 - `--json` - Show final output as JSON.
 
 - `--label` - Filter by label (key=value). This flag may be repeated.
 
-- `--limit` - Maximum number of result elements to return. Defaults to 100.
+- `--limit` - Maximum number of result elements to return.
 
 - `--search` - Filter to only workspaces containing this substring in their path.
 
 - `--sort-by` - Sort by this field (e.g., UPDATED_AT_ASC, UPDATED_AT_DESC, FULL_PATH_ASC, FULL_PATH_DESC).
+
+- `--sort-order` - Sort in this direction, ASC or DESC. Deprecated
 
 </details>
 
 :::note Example
 ```bash
 tharsis workspace list \
-  --group-id trn:group:top-level \
+  --group-id trn:group:<group_path> \
   --label env=prod \
   --label team=platform \
   --sort-by FULL_PATH_ASC \
@@ -2936,7 +2968,7 @@ tharsis [global options] workspace list-environment-vars [options] <workspace-id
 
 :::note Example
 ```bash
-tharsis workspace list-environment-vars --show-sensitive trn:workspace:ops/my-workspace
+tharsis workspace list-environment-vars --show-sensitive trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2947,7 +2979,7 @@ tharsis workspace list-environment-vars --show-sensitive trn:workspace:ops/my-wo
 Retrieve a list of workspace memberships.
 
 ```bash
-tharsis [global options] workspace list-memberships [options] <workspace-path>
+tharsis [global options] workspace list-memberships [options] <id>
 ```
 
    The workspace list-memberships command prints information about
@@ -2962,7 +2994,7 @@ tharsis [global options] workspace list-memberships [options] <workspace-path>
 
 :::note Example
 ```bash
-tharsis workspace list-memberships top-level/my-workspace
+tharsis workspace list-memberships trn:workspace:<workspace_path>
 ```
 :::
 
@@ -2990,7 +3022,7 @@ tharsis [global options] workspace list-terraform-vars [options] <workspace-id>
 
 :::note Example
 ```bash
-tharsis workspace list-terraform-vars --show-sensitive trn:workspace:ops/my-workspace
+tharsis workspace list-terraform-vars --show-sensitive trn:workspace:<workspace_path>
 ```
 :::
 
@@ -3018,8 +3050,8 @@ tharsis [global options] workspace migrate [options] <workspace-id>
 :::note Example
 ```bash
 tharsis workspace migrate \
-  --new-group-id trn:group:ops/infrastructure \
-  trn:workspace:ops/my-workspace
+  --new-group-id trn:group:<group_path> \
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -3057,7 +3089,7 @@ tharsis [global options] workspace outputs [options] <workspace-id>
 
 :::note Example
 ```bash
-tharsis workspace outputs trn:workspace:ops/my-workspace
+tharsis workspace outputs trn:workspace:<workspace_path>
 ```
 :::
 
@@ -3082,7 +3114,7 @@ tharsis [global options] workspace remove-membership [options] <membership-id>
 
 :::note Example
 ```bash
-tharsis workspace remove-membership trn:namespace_membership:ops/my-workspace/Tk1fZ...
+tharsis workspace remove-membership <id>
 ```
 :::
 
@@ -3111,7 +3143,7 @@ tharsis [global options] workspace set-environment-vars [options] <workspace-id>
 ```bash
 tharsis workspace set-environment-vars \
   --env-var-file vars.env \
-  trn:workspace:ops/my-workspace
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -3143,7 +3175,7 @@ tharsis [global options] workspace set-terraform-var [options] <workspace-id>
 tharsis workspace set-terraform-var \
   --key region \
   --value us-east-1 \
-  trn:workspace:ops/my-workspace
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -3172,7 +3204,7 @@ tharsis [global options] workspace set-terraform-vars [options] <workspace-id>
 ```bash
 tharsis workspace set-terraform-vars \
   --tf-var-file terraform.tfvars \
-  trn:workspace:ops/my-workspace
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -3183,25 +3215,16 @@ tharsis workspace set-terraform-vars \
 Unassign a managed identity from a workspace.
 
 ```bash
-tharsis [global options] workspace unassign-managed-identity [options]
+tharsis [global options] workspace unassign-managed-identity <workspace-id> <identity-id>
 ```
 
    The workspace unassign-managed-identity command removes a managed identity from a workspace.
 
-<details>
-<summary>Options</summary>
-
-- `--managed-identity-id` - The ID of the managed identity to unassign.
-
-- `--workspace-id` - The ID of the workspace.
-
-</details>
-
 :::note Example
 ```bash
 tharsis workspace unassign-managed-identity \
-  --workspace-id trn:workspace:ops/my-workspace \
-  --managed-identity-id trn:managed_identity:ops/my-identity
+  trn:workspace:<workspace_path> \
+  trn:managed_identity:<group_path>/<identity_name>
 ```
 :::
 
@@ -3246,7 +3269,7 @@ tharsis workspace update \
   --terraform-version "1.6.0" \
   --max-job-duration 120 \
   --prevent-destroy-plan true \
-  trn:workspace:ops/my-group/my-workspace
+  trn:workspace:<workspace_path>
 ```
 :::
 
@@ -3267,6 +3290,8 @@ tharsis [global options] workspace update-membership [options] <membership-id>
 
 - `--json` - Output in JSON format.
 
+- `--role` - Role name for the membership. Deprecated.
+
 - `--role-id` - The role ID for the membership.
 
 - `--version` - Metadata version of the resource to be updated. In most cases, this is not required.
@@ -3276,8 +3301,8 @@ tharsis [global options] workspace update-membership [options] <membership-id>
 :::note Example
 ```bash
 tharsis workspace update-membership \
-  --role-id trn:role:deployer \
-  trn:namespace_membership:ops/my-workspace/Tk1fZ...
+  --role-id trn:role:<role_name> \
+  <id>
 ```
 :::
 

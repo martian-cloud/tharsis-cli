@@ -55,8 +55,6 @@ func (c *groupListEnvironmentVarsCommand) Run(args []string) int {
 		NamespacePath: group.FullPath,
 	}
 
-	c.Logger.Debug("group list-environment-vars input", "input", input)
-
 	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to list environment variables")

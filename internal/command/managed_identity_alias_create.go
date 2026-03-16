@@ -62,8 +62,6 @@ func (c *managedIdentityAliasCreateCommand) Run(args []string) int {
 		GroupId:       c.groupID,
 	}
 
-	c.Logger.Debug("managed identity alias create input", "input", input)
-
 	createdAlias, err := c.grpcClient.ManagedIdentitiesClient.CreateManagedIdentityAlias(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a managed identity alias")

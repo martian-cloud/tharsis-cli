@@ -56,8 +56,6 @@ func (c *groupUpdateCommand) Run(args []string) int {
 		Version:     c.version,
 	}
 
-	c.Logger.Debug("group update input", "input", input)
-
 	updatedGroup, err := c.grpcClient.GroupsClient.UpdateGroup(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update a group")

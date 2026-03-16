@@ -352,29 +352,26 @@ func (c *BaseCommand) migrateSettings() error {
 // returns as is if it's already a TRN or a GID lookalike.
 // This is deprecated. Remove after users are on the latest CLI.
 func toTRN(rt trn.ResourceType, p string) string {
-	// If it's already a TRN, return as-is
 	if trn.IsTRN(p) {
 		return p
 	}
 
-	// Check if it's a valid GID by attempting to decode
-	if _, err := base64.StdEncoding.DecodeString(p); err == nil {
-		// It's a valid base64 string, assume it's a GID
+	// Check if it's a valid GID (base64-encoded "CODE_UUID")
+	if decoded, err := base64.RawURLEncoding.DecodeString(p); err == nil && strings.Contains(string(decoded), "_") {
 		return p
 	}
 
-	// Otherwise, assume it's a path and convert to TRN
 	return trn.NewResourceTRN(rt, p)
 }
 
-// extractParentPath returns the parent path from a given path.
+// extractParentPath returns the parent and child from a given path.
 // This is deprecated. Remove after users are on the latest CLI.
-func extractParentPath(p string) string {
+func extractParentPath(p string) (parent, child string) {
 	if index := strings.LastIndex(p, "/"); index != -1 {
-		return p[:index]
+		return p[:index], p[index+1:]
 	}
 
-	return ""
+	return "", p
 }
 
 // parseSortField converts a sort string to an enum value, handling deprecated separate sort-by and sort-order flags.

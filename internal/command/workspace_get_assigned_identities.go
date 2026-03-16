@@ -49,8 +49,6 @@ func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 		WorkspaceId: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	}
 
-	c.Logger.Debug("workspace get-assigned-managed-identities input", "input", input)
-
 	result, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentitiesForWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get assigned managed identities")

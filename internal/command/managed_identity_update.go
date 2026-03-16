@@ -2,7 +2,6 @@ package command
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"flag"
 	"fmt"
 
@@ -16,14 +15,14 @@ import (
 type managedIdentityUpdateCommand struct {
 	*BaseCommand
 
-	description                      *string
-	awsFederatedRole                 *string
-	azureFederatedClientID           *string
-	azureFederatedTenantID           *string
-	tharsisFederatedServiceAccountID *string
-	kubernetesFederatedAudience      *string
-	updateIdentityData               bool
-	toJSON                           bool
+	description                        *string
+	awsFederatedRole                   *string
+	azureFederatedClientID             *string
+	azureFederatedTenantID             *string
+	tharsisFederatedServiceAccountPath *string
+	kubernetesFederatedAudience        *string
+	updateIdentityData                 bool
+	toJSON                             bool
 }
 
 var _ Command = (*managedIdentityUpdateCommand)(nil)
@@ -71,19 +70,19 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 		// Build data based on identity type and provided fields
 		var data string
 		switch identity.Type {
-		case pb.ManagedIdentityType_AWS_FEDERATED.String():
+		case pb.ManagedIdentityType_aws_federated.String():
 			if c.awsFederatedRole != nil {
 				data = fmt.Sprintf(`{"role":"%s"}`, *c.awsFederatedRole)
 			}
-		case pb.ManagedIdentityType_AZURE_FEDERATED.String():
+		case pb.ManagedIdentityType_azure_federated.String():
 			if c.azureFederatedClientID != nil && c.azureFederatedTenantID != nil {
 				data = fmt.Sprintf(`{"clientId":"%s","tenantId":"%s"}`, *c.azureFederatedClientID, *c.azureFederatedTenantID)
 			}
-		case pb.ManagedIdentityType_THARSIS_FEDERATED.String():
-			if c.tharsisFederatedServiceAccountID != nil {
-				data = fmt.Sprintf(`{"serviceAccountId":"%s"}`, *c.tharsisFederatedServiceAccountID)
+		case pb.ManagedIdentityType_tharsis_federated.String():
+			if c.tharsisFederatedServiceAccountPath != nil {
+				data = fmt.Sprintf(`{"serviceAccountPath":"%s"}`, *c.tharsisFederatedServiceAccountPath)
 			}
-		case pb.ManagedIdentityType_KUBERNETES_FEDERATED.String():
+		case pb.ManagedIdentityType_kubernetes_federated.String():
 			if c.kubernetesFederatedAudience != nil {
 				data = fmt.Sprintf(`{"audience":"%s"}`, *c.kubernetesFederatedAudience)
 			}
@@ -93,17 +92,11 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 		}
 
 		if data == "" {
-			c.UI.Errorf("no valid managed identity data provided")
+			c.UI.Errorf("no valid data provided for managed identity type %s", identity.Type)
 			return 1
 		}
 
-		marshalled, err := json.Marshal(data)
-		if err != nil {
-			c.UI.ErrorWithSummary(err, "failed to marshal managed identity data")
-			return 1
-		}
-
-		encodedData = ptr.String(base64.StdEncoding.EncodeToString(marshalled))
+		encodedData = ptr.String(base64.StdEncoding.EncodeToString([]byte(data)))
 	}
 
 	input := &pb.UpdateManagedIdentityRequest{
@@ -111,8 +104,6 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 		Description: c.description,
 		Data:        encodedData,
 	}
-
-	c.Logger.Debug("managed identity update input", "input", input)
 
 	updatedIdentity, err := c.grpcClient.ManagedIdentitiesClient.UpdateManagedIdentity(c.Context, input)
 	if err != nil {
@@ -186,19 +177,11 @@ func (c *managedIdentityUpdateCommand) Flags() *flag.FlagSet {
 		},
 	)
 	f.Func(
-		"tharsis-federated-service-account-id",
-		"Tharsis service account ID or TRN. (Only if type is tharsis_federated)",
-		func(s string) error {
-			c.tharsisFederatedServiceAccountID = &s
-			c.updateIdentityData = true
-			return nil
-		},
-	)
-	f.Func(
 		"tharsis-federated-service-account-path",
-		"Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated). Deprecated.",
+		"Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated)",
 		func(s string) error {
-			c.tharsisFederatedServiceAccountID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeServiceAccount, s))
+			c.tharsisFederatedServiceAccountPath = &s
+			c.updateIdentityData = true
 			return nil
 		},
 	)

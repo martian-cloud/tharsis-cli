@@ -60,8 +60,6 @@ func (c *workspaceGetTerraformVarCommand) Run(args []string) int {
 		Id: trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, pb.VariableCategory_terraform.String(), c.key),
 	}
 
-	c.Logger.Debug("workspace get-terraform-var input", "input", input)
-
 	variable, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get terraform variable")

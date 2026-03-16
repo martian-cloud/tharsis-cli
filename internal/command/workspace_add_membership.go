@@ -66,8 +66,6 @@ func (c *workspaceAddMembershipCommand) Run(args []string) int {
 		TeamId:           c.teamID,
 	}
 
-	c.Logger.Debug("workspace add-membership input", "input", input)
-
 	membership, err := c.grpcClient.NamespaceMembershipsClient.CreateNamespaceMembership(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to add workspace membership")
@@ -84,7 +82,7 @@ func (*workspaceAddMembershipCommand) Synopsis() string {
 func (*workspaceAddMembershipCommand) Description() string {
 	return `
    The workspace add-membership command adds a membership to a workspace.
-   Exactly one of --user-id, --service-account-id, or --team-id must be specified.
+   Exactly one of -user-id, -service-account-id, or -team-id must be specified.
 `
 }
 

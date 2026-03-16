@@ -60,8 +60,6 @@ func (c *runCancelCommand) Run(args []string) int {
 		Force: &c.force,
 	}
 
-	c.Logger.Debug("run cancel input", "input", input)
-
 	if _, err = c.grpcClient.RunsClient.CancelRun(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to cancel run")
 		return 1

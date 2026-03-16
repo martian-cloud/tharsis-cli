@@ -11,13 +11,11 @@ import (
 	"net/url"
 	"os"
 
-	svchost "github.com/hashicorp/terraform-svchost"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/provider"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
 )
 
 const (
-	tfeV2Service           = "tfe.v2"
 	contentTypeOctetStream = "application/octet-stream"
 )
 
@@ -93,9 +91,10 @@ type RESTClient interface {
 
 // restClient handles REST API calls to the upstream Terraform-compatible API
 type restClient struct {
-	baseURL     *url.URL
-	tokenGetter tokenGetter
-	httpClient  *http.Client
+	baseURL           *url.URL
+	tokenGetter       tokenGetter
+	httpClient        *http.Client
+	serviceDiscoverer provider.ServiceDiscoverer
 }
 
 // NewRESTClient creates a new REST client for interacting with the upstream Terraform REST API
@@ -106,29 +105,42 @@ func NewRESTClient(endpoint string, tokenGetter tokenGetter, httpClient *http.Cl
 	}
 
 	return &restClient{
-		baseURL:     baseURL,
-		tokenGetter: tokenGetter,
-		httpClient:  httpClient,
+		baseURL:           baseURL,
+		tokenGetter:       tokenGetter,
+		httpClient:        httpClient,
+		serviceDiscoverer: provider.NewServiceDiscoverer(httpClient),
 	}, nil
 }
 
 // UploadConfigurationVersion uploads a directory as a tar.gz file
 func (c *restClient) UploadConfigurationVersion(ctx context.Context, input *UploadConfigurationVersionInput) error {
-	serviceURL, err := provider.NewQuietDisco().DiscoverServiceURL(svchost.Hostname(c.baseURL.Host), tfeV2Service)
+	discovered, err := c.serviceDiscoverer.DiscoverTFEServices(ctx, c.baseURL.String())
 	if err != nil {
 		return fmt.Errorf("failed to discover tfe v2 service: %w", err)
+	}
+
+	serviceURL, ok := discovered.Services[provider.TFEServiceID]
+	if !ok {
+		return fmt.Errorf("service url for %q not found", provider.TFEServiceID)
 	}
 
 	tarFile, err := os.CreateTemp("", "config-version-*.tar.gz")
 	if err != nil {
 		return fmt.Errorf("failed to create temp tar file: %w", err)
 	}
-	defer os.Remove(tarFile.Name())
-	tarFile.Close()
+	tarPath := tarFile.Name()
+	tarFile.Close() // Close immediately, NewSlug will reopen it
+	defer os.Remove(tarPath)
 
-	s, err := slug.NewSlug(input.DirectoryPath, tarFile.Name())
+	s, err := slug.NewSlug(input.DirectoryPath, tarPath)
 	if err != nil {
 		return fmt.Errorf("failed to create slug: %w", err)
+	}
+
+	// Get actual file size
+	fileInfo, err := os.Stat(tarPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat slug file: %w", err)
 	}
 
 	reader, err := s.Open()
@@ -139,7 +151,7 @@ func (c *restClient) UploadConfigurationVersion(ctx context.Context, input *Uplo
 
 	uploadURL := c.baseURL.ResolveReference(serviceURL).JoinPath("workspaces", input.WorkspaceID, "configuration-versions", input.ConfigVersionID, "upload").String()
 
-	return c.doPut(ctx, uploadURL, reader, s.Size)
+	return c.doPut(ctx, uploadURL, reader, fileInfo.Size())
 }
 
 // DownloadConfigurationVersion downloads a configuration version

@@ -79,8 +79,6 @@ func (c *moduleListVersionsCommand) Run(args []string) int {
 		SemanticVersion: c.semanticVersion,
 	}
 
-	c.Logger.Debug("module list-versions input", "input", input)
-
 	result, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleVersions(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of module versions")
@@ -177,9 +175,11 @@ func (c *moduleListVersionsCommand) Flags() *flag.FlagSet {
 				pb.TerraformModuleVersionSortableField_UPDATED_AT_ASC.String(),
 				pb.TerraformModuleVersionSortableField_UPDATED_AT_DESC.String():
 				c.sortBy = &v
+			default:
+				return fmt.Errorf("unknown sort by option %s", s)
 			}
 
-			return fmt.Errorf("unknown sort by option %s", s)
+			return nil
 		},
 	)
 	f.Func(
@@ -218,9 +218,11 @@ func (c *moduleListVersionsCommand) Flags() *flag.FlagSet {
 			switch v := strings.ToUpper(s); v {
 			case "ASC", "DESC":
 				c.sortBy = &v
+			default:
+				return fmt.Errorf("invalid sort-order value: %s", s)
 			}
 
-			return fmt.Errorf("invalid sort-order value: %s", s)
+			return nil
 		},
 	)
 	f.BoolVar(

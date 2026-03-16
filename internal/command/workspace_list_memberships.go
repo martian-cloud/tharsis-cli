@@ -59,8 +59,6 @@ func (c *workspaceListMembershipsCommand) Run(args []string) int {
 		NamespacePath: workspace.FullPath,
 	}
 
-	c.Logger.Debug("workspace list-memberships input", "input", input)
-
 	result, err := c.grpcClient.NamespaceMembershipsClient.GetNamespaceMembershipsForNamespace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of workspace memberships")

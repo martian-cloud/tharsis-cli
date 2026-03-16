@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
@@ -60,8 +61,6 @@ func (c *terraformProviderMirrorListVersionsCommand) Run(args []string) int {
 			After: c.cursor,
 		},
 	}
-
-	c.Logger.Debug("terraform-provider-mirror list-versions input", "input", input)
 
 	result, err := c.grpcClient.TerraformProviderMirrorsClient.GetTerraformProviderVersionMirrors(c.Context, input)
 	if err != nil {
@@ -151,7 +150,7 @@ func (c *terraformProviderMirrorListVersionsCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			value, ok := pb.TerraformProviderVersionMirrorSortableField_value[strings.ToUpper(s)]
 			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, maps.Keys(pb.TerraformProviderVersionMirrorSortableField_value))
+				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, slices.Collect(maps.Keys(pb.TerraformProviderVersionMirrorSortableField_value)))
 			}
 			c.sortBy = pb.TerraformProviderVersionMirrorSortableField(value).Enum()
 			return nil

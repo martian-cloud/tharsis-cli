@@ -47,14 +47,12 @@ func (c *managedIdentityAccessRuleDeleteCommand) Run(args []string) int {
 		Id: c.arguments[0],
 	}
 
-	c.Logger.Debug("managed identity access rule delete input", "input", input)
-
 	if _, err := c.grpcClient.ManagedIdentitiesClient.DeleteManagedIdentityAccessRule(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete managed identity access rule")
 		return 1
 	}
 
-	c.UI.Output("Managed identity access rule deleted successfully!")
+	c.UI.Successf("Managed identity access rule deleted successfully!")
 
 	return 0
 }

@@ -46,8 +46,6 @@ func (c *runnerAgentUnassignServiceAccountCommand) Run(args []string) int {
 		RunnerId:         toTRN(trn.ResourceTypeRunner, c.arguments[1]),
 	}
 
-	c.Logger.Debug("runner-agent unassign-service-account input", "input", input)
-
 	if _, err := c.grpcClient.RunnersClient.UnassignServiceAccountFromRunner(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to unassign service account from runner agent")
 		return 1

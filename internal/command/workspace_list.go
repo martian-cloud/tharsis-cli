@@ -74,8 +74,6 @@ func (c *workspaceListCommand) Run(args []string) int {
 		LabelFilters: c.labelFilters,
 	}
 
-	c.Logger.Debug("workspace list input", "input", input)
-
 	result, err := c.grpcClient.WorkspacesClient.GetWorkspaces(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of workspaces")
@@ -174,9 +172,11 @@ func (c *workspaceListCommand) Flags() *flag.FlagSet {
 				pb.WorkspaceSortableField_UPDATED_AT_ASC.String(),
 				pb.WorkspaceSortableField_UPDATED_AT_DESC.String():
 				c.sortBy = &v
+			default:
+				return fmt.Errorf("unknown sort by option %s", s)
 			}
 
-			return fmt.Errorf("unknown sort by option %s", s)
+			return nil
 		},
 	)
 	f.Func(
@@ -222,9 +222,11 @@ func (c *workspaceListCommand) Flags() *flag.FlagSet {
 			switch strings.ToUpper(s) {
 			case "ASC", "DESC":
 				c.sortOrder = &s
+			default:
+				return fmt.Errorf("unknown sort order %s", s)
 			}
 
-			return fmt.Errorf("unknown sort order %s", s)
+			return nil
 		},
 	)
 	f.BoolVar(

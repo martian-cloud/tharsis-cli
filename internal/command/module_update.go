@@ -58,8 +58,6 @@ func (c *moduleUpdateCommand) Run(args []string) int {
 		Version:       c.version,
 	}
 
-	c.Logger.Debug("module update input", "input", input)
-
 	updatedModule, err := c.grpcClient.TerraformModulesClient.UpdateTerraformModule(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update a module")

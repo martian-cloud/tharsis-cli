@@ -64,8 +64,6 @@ func (c *groupAddMembershipCommand) Run(args []string) int {
 		TeamId:           c.teamID,
 	}
 
-	c.Logger.Debug("group add-membership input", "input", input)
-
 	membership, err := c.grpcClient.NamespaceMembershipsClient.CreateNamespaceMembership(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to add group membership")
@@ -82,7 +80,7 @@ func (*groupAddMembershipCommand) Synopsis() string {
 func (*groupAddMembershipCommand) Description() string {
 	return `
    The group add-membership command adds a membership to a group.
-   Exactly one of --user-id, --service-account-id, or --team-id must be specified.
+   Exactly one of -user-id, -service-account-id, or -team-id must be specified.
 `
 }
 

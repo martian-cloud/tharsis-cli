@@ -168,7 +168,7 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 	}
 
 	if !strings.HasPrefix(finalRun.Status, runStatusPlannedPrefix) {
-		return nil, fmt.Errorf("plan failed with status: %s", finalRun.Status)
+		return nil, fmt.Errorf("plan ended with status: %s", finalRun.Status)
 	}
 
 	return finalRun, nil
@@ -206,7 +206,7 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 	}
 
 	if finalRun.Status != runStatusApplied {
-		return nil, fmt.Errorf("apply failed with status: %s", finalRun.Status)
+		return nil, fmt.Errorf("apply ended with status: %s", finalRun.Status)
 	}
 
 	return finalRun, nil

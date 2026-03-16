@@ -72,8 +72,6 @@ func (c *managedIdentityAccessRuleUpdateCommand) Run(args []string) int {
 		ModuleAttestationPolicies: policies,
 	}
 
-	c.Logger.Debug("managed identity access rule update input", "input", input)
-
 	updatedRule, err := c.grpcClient.ManagedIdentitiesClient.UpdateManagedIdentityAccessRule(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update managed identity access rule")

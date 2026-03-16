@@ -46,8 +46,6 @@ func (c *workspaceAssignManagedIdentityCommand) Run(args []string) int {
 		ManagedIdentityId: toTRN(trn.ResourceTypeManagedIdentity, c.arguments[1]),
 	}
 
-	c.Logger.Debug("workspace assign-managed-identity input", "input", input)
-
 	if _, err := c.grpcClient.ManagedIdentitiesClient.AssignManagedIdentityToWorkspace(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to assign managed identity to workspace")
 		return 1

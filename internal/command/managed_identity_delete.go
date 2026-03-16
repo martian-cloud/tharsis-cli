@@ -53,8 +53,6 @@ func (c *managedIdentityDeleteCommand) Run(args []string) int {
 		Force: &c.force,
 	}
 
-	c.Logger.Debug("managed identity delete input", "input", input)
-
 	if _, err := c.grpcClient.ManagedIdentitiesClient.DeleteManagedIdentity(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete a managed identity")
 		return 1

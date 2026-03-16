@@ -68,8 +68,6 @@ func (c *workspaceUpdateCommand) Run(args []string) int {
 		Labels:             c.labels,
 	}
 
-	c.Logger.Debug("workspace update input", "input", input)
-
 	updatedWorkspace, err := c.grpcClient.WorkspacesClient.UpdateWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update a workspace")

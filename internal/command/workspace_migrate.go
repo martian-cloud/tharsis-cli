@@ -50,8 +50,6 @@ func (c *workspaceMigrateCommand) Run(args []string) int {
 		NewGroupId:  c.newGroupID,
 	}
 
-	c.Logger.Debug("workspace migrate input", "input", input)
-
 	workspace, err := c.grpcClient.WorkspacesClient.MigrateWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to migrate workspace")

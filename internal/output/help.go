@@ -16,7 +16,7 @@ import (
 
 var (
 	reHelpHeader = regexp.MustCompile(`^[a-zA-Z0-9_-].*:$`)             // matches "Section:" style headers
-	reHelpFlag   = regexp.MustCompile(`(\s|^|")(-[\w-]+)(\s|$|")`)      // matches -flag style options
+	reHelpFlag   = regexp.MustCompile(`(\s|^|")(-[\w-]+)(\W|$)`)        // matches -flag style options
 	reCodeBlock  = regexp.MustCompile("(?s)([ ]*)```(\\w*)\\n(.*?)```") // matches ```lang\ncode``` with optional indent
 )
 

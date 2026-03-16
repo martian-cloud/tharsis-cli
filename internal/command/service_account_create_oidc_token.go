@@ -51,8 +51,6 @@ func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
 		Token:            c.token,
 	}
 
-	c.Logger.Debug("service-account create-token input", "input", input)
-
 	result, err := c.grpcClient.ServiceAccountsClient.CreateOIDCToken(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create token for service account")

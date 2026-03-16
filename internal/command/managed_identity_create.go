@@ -2,10 +2,10 @@ package command
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -17,16 +17,16 @@ import (
 type managedIdentityCreateCommand struct {
 	*BaseCommand
 
-	name                             *string
-	groupID                          string
-	identityType                     pb.ManagedIdentityType
-	description                      string
-	awsFederatedRole                 string
-	azureFederatedClientID           string
-	azureFederatedTenantID           string
-	tharsisFederatedServiceAccountID string
-	kubernetesFederatedAudience      string
-	toJSON                           bool
+	name                               *string
+	groupID                            string
+	identityType                       *pb.ManagedIdentityType
+	description                        string
+	awsFederatedRole                   string
+	azureFederatedClientID             string
+	azureFederatedTenantID             string
+	tharsisFederatedServiceAccountPath string
+	kubernetesFederatedAudience        string
+	toJSON                             bool
 }
 
 var _ Command = (*managedIdentityCreateCommand)(nil)
@@ -39,21 +39,21 @@ func (c *managedIdentityCreateCommand) validate() error {
 		),
 		validation.Field(&c.name, validation.Required.When(len(c.arguments) == 0).Error(message)),
 		validation.Field(&c.groupID, validation.Required),
-		validation.Field(&c.identityType, validation.Required),
+		validation.Field(&c.identityType, validation.NotNil),
 		validation.Field(&c.awsFederatedRole,
-			validation.When(c.identityType == pb.ManagedIdentityType_AWS_FEDERATED, validation.Required),
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_aws_federated, validation.Required),
 		),
 		validation.Field(&c.azureFederatedClientID,
-			validation.When(c.identityType == pb.ManagedIdentityType_AZURE_FEDERATED, validation.Required),
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_azure_federated, validation.Required),
 		),
 		validation.Field(&c.azureFederatedTenantID,
-			validation.When(c.identityType == pb.ManagedIdentityType_AZURE_FEDERATED, validation.Required),
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_azure_federated, validation.Required),
 		),
-		validation.Field(&c.tharsisFederatedServiceAccountID,
-			validation.When(c.identityType == pb.ManagedIdentityType_THARSIS_FEDERATED, validation.Required),
+		validation.Field(&c.tharsisFederatedServiceAccountPath,
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_tharsis_federated, validation.Required),
 		),
 		validation.Field(&c.kubernetesFederatedAudience,
-			validation.When(c.identityType == pb.ManagedIdentityType_KUBERNETES_FEDERATED, validation.Required),
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_kubernetes_federated, validation.Required),
 		),
 	)
 }
@@ -89,14 +89,12 @@ func (c *managedIdentityCreateCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateManagedIdentityRequest{
-		Type:        c.identityType,
+		Type:        *c.identityType,
 		Name:        c.arguments[0],
 		Description: c.description,
 		GroupId:     c.groupID,
 		Data:        encodedData,
 	}
-
-	c.Logger.Debug("managed identity create input", "input", input)
 
 	createdIdentity, err := c.grpcClient.ManagedIdentitiesClient.CreateManagedIdentity(c.Context, input)
 	if err != nil {
@@ -109,23 +107,18 @@ func (c *managedIdentityCreateCommand) Run(args []string) int {
 
 func (c *managedIdentityCreateCommand) encodeIdentityData() (string, error) {
 	dataMap := map[pb.ManagedIdentityType]string{
-		pb.ManagedIdentityType_AWS_FEDERATED:        fmt.Sprintf(`{"role":"%s"}`, c.awsFederatedRole),
-		pb.ManagedIdentityType_AZURE_FEDERATED:      fmt.Sprintf(`{"clientId":"%s","tenantId":"%s"}`, c.azureFederatedClientID, c.azureFederatedTenantID),
-		pb.ManagedIdentityType_THARSIS_FEDERATED:    fmt.Sprintf(`{"serviceAccountId":"%s"}`, c.tharsisFederatedServiceAccountID),
-		pb.ManagedIdentityType_KUBERNETES_FEDERATED: fmt.Sprintf(`{"audience":"%s"}`, c.kubernetesFederatedAudience),
+		pb.ManagedIdentityType_aws_federated:        fmt.Sprintf(`{"role":"%s"}`, c.awsFederatedRole),
+		pb.ManagedIdentityType_azure_federated:      fmt.Sprintf(`{"clientId":"%s","tenantId":"%s"}`, c.azureFederatedClientID, c.azureFederatedTenantID),
+		pb.ManagedIdentityType_tharsis_federated:    fmt.Sprintf(`{"serviceAccountPath":"%s"}`, c.tharsisFederatedServiceAccountPath),
+		pb.ManagedIdentityType_kubernetes_federated: fmt.Sprintf(`{"audience":"%s"}`, c.kubernetesFederatedAudience),
 	}
 
-	dataToEncode, ok := dataMap[c.identityType]
+	dataToEncode, ok := dataMap[*c.identityType]
 	if !ok {
-		return "", fmt.Errorf("unknown managed identity type %s", c.identityType)
+		return "", fmt.Errorf("unknown managed identity type %s", *c.identityType)
 	}
 
-	data, err := json.Marshal(dataToEncode)
-	if err != nil {
-		return "", fmt.Errorf("failed to encode data: %s", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(data), nil
+	return base64.StdEncoding.EncodeToString([]byte(dataToEncode)), nil
 }
 
 func (*managedIdentityCreateCommand) Synopsis() string {
@@ -181,11 +174,11 @@ func (c *managedIdentityCreateCommand) Flags() *flag.FlagSet {
 		"type",
 		"The type of managed identity: aws_federated, azure_federated, tharsis_federated, kubernetes_federated.",
 		func(s string) error {
-			val, ok := pb.ManagedIdentityType_value[strings.ToUpper(s)]
+			val, ok := pb.ManagedIdentityType_value[strings.ToLower(s)]
 			if !ok {
-				return fmt.Errorf("invalid identity type: %s (valid types: %v)", s, maps.Keys(pb.ManagedIdentityType_value))
+				return fmt.Errorf("invalid identity type: %s (valid types: %v)", s, slices.Collect(maps.Keys(pb.ManagedIdentityType_value)))
 			}
-			c.identityType = pb.ManagedIdentityType(val)
+			c.identityType = pb.ManagedIdentityType(val).Enum()
 			return nil
 		},
 	)
@@ -214,18 +207,10 @@ func (c *managedIdentityCreateCommand) Flags() *flag.FlagSet {
 		"Azure tenant ID. (Only if type is azure_federated)",
 	)
 	f.StringVar(
-		&c.tharsisFederatedServiceAccountID,
-		"tharsis-federated-service-account-id",
-		"",
-		"Tharsis service account ID or TRN this managed identity will assume. (Only if type is tharsis_federated)",
-	)
-	f.Func(
+		&c.tharsisFederatedServiceAccountPath,
 		"tharsis-federated-service-account-path",
-		"Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated). Deprecated.",
-		func(s string) error {
-			c.tharsisFederatedServiceAccountID = trn.NewResourceTRN(trn.ResourceTypeServiceAccount, s)
-			return nil
-		},
+		"",
+		"Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated)",
 	)
 	f.StringVar(
 		&c.kubernetesFederatedAudience,

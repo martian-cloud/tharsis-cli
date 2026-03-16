@@ -52,8 +52,6 @@ func (c *groupGetCommand) Run(args []string) int {
 		Id: toTRN(trn.ResourceTypeGroup, c.arguments[0]),
 	}
 
-	c.Logger.Debug("group get input", "input", input)
-
 	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")

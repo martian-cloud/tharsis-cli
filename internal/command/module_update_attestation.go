@@ -52,8 +52,6 @@ func (c *moduleUpdateAttestationCommand) Run(args []string) int {
 		Description: c.description,
 	}
 
-	c.Logger.Debug("module update attestation input", "input", input)
-
 	updatedAttestation, err := c.grpcClient.TerraformModulesClient.UpdateTerraformModuleAttestation(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update module attestation")

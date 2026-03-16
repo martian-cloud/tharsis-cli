@@ -61,8 +61,6 @@ func (c *groupGetTerraformVarCommand) Run(args []string) int {
 		Id: trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), c.key),
 	}
 
-	c.Logger.Debug("group get-terraform-var input", "input", input)
-
 	variable, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get terraform variable")

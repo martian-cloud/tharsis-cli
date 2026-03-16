@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"slices"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -17,8 +18,8 @@ type managedIdentityAccessRuleCreateCommand struct {
 	*BaseCommand
 
 	managedIdentityID         string
-	ruleType                  pb.ManagedIdentityAccessRuleType
-	runStage                  pb.JobType
+	ruleType                  *pb.ManagedIdentityAccessRuleType
+	runStage                  *pb.JobType
 	allowedUsers              []string
 	allowedServiceAccounts    []string
 	allowedTeams              []string
@@ -32,8 +33,8 @@ var _ Command = (*managedIdentityAccessRuleCreateCommand)(nil)
 func (c *managedIdentityAccessRuleCreateCommand) validate() error {
 	return validation.ValidateStruct(c,
 		validation.Field(&c.managedIdentityID, validation.Required),
-		validation.Field(&c.ruleType, validation.Required),
-		validation.Field(&c.runStage, validation.Required),
+		validation.Field(&c.ruleType, validation.NotNil),
+		validation.Field(&c.runStage, validation.NotNil),
 	)
 }
 
@@ -64,8 +65,8 @@ func (c *managedIdentityAccessRuleCreateCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateManagedIdentityAccessRuleRequest{
-		Type:                      c.ruleType,
-		RunStage:                  c.runStage,
+		Type:                      *c.ruleType,
+		RunStage:                  *c.runStage,
 		ManagedIdentityId:         c.managedIdentityID,
 		AllowedUsers:              c.allowedUsers,
 		AllowedServiceAccounts:    c.allowedServiceAccounts,
@@ -73,8 +74,6 @@ func (c *managedIdentityAccessRuleCreateCommand) Run(args []string) int {
 		VerifyStateLineage:        c.verifyStateLineage,
 		ModuleAttestationPolicies: policies,
 	}
-
-	c.Logger.Debug("managed identity access rule create input", "input", input)
 
 	createdRule, err := c.grpcClient.ManagedIdentitiesClient.CreateManagedIdentityAccessRule(c.Context, input)
 	if err != nil {
@@ -130,11 +129,11 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"rule-type",
 		"The type of access rule: eligible_principals or module_attestation.",
 		func(s string) error {
-			val, ok := pb.ManagedIdentityAccessRuleType_value[strings.ToUpper(s)]
+			val, ok := pb.ManagedIdentityAccessRuleType_value[strings.ToLower(s)]
 			if !ok {
-				return fmt.Errorf("invalid rule type: %s (valid types: %v)", s, maps.Keys(pb.ManagedIdentityAccessRuleType_value))
+				return fmt.Errorf("invalid rule type: %s (valid types: %v)", s, slices.Collect(maps.Keys(pb.ManagedIdentityAccessRuleType_value)))
 			}
-			c.ruleType = pb.ManagedIdentityAccessRuleType(val)
+			c.ruleType = pb.ManagedIdentityAccessRuleType(val).Enum()
 			return nil
 		},
 	)
@@ -142,11 +141,11 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"run-stage",
 		"The run stage: plan or apply.",
 		func(s string) error {
-			val, ok := pb.JobType_value[strings.ToUpper(s)]
+			val, ok := pb.JobType_value[strings.ToLower(s)]
 			if !ok {
-				return fmt.Errorf("invalid run stage: %s (valid stages: %v)", s, maps.Keys(pb.JobType_value))
+				return fmt.Errorf("invalid run stage: %s (valid stages: %v)", s, slices.Collect(maps.Keys(pb.JobType_value)))
 			}
-			c.runStage = pb.JobType(val)
+			c.runStage = pb.JobType(val).Enum()
 			return nil
 		},
 	)

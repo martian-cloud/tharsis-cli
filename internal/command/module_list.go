@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
@@ -61,8 +62,6 @@ func (c *moduleListCommand) Run(args []string) int {
 		GroupId:          c.groupID,
 		IncludeInherited: c.includeInherited,
 	}
-
-	c.Logger.Debug("module list input", "input", input)
 
 	result, err := c.grpcClient.TerraformModulesClient.GetTerraformModules(c.Context, input)
 	if err != nil {
@@ -154,7 +153,7 @@ func (c *moduleListCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			value, ok := pb.TerraformModuleSortableField_value[strings.ToUpper(s)]
 			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, maps.Keys(pb.TerraformModuleSortableField_value))
+				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, slices.Collect(maps.Keys(pb.TerraformModuleSortableField_value)))
 			}
 			c.sortBy = pb.TerraformModuleSortableField(value).Enum()
 			return nil

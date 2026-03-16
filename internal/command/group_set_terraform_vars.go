@@ -74,8 +74,6 @@ func (c *groupSetTerraformVarsCommand) Run(args []string) int {
 		Variables:     pbVariables,
 	}
 
-	c.Logger.Debug("group set-terraform-vars input", "input", input)
-
 	if _, err = c.grpcClient.NamespaceVariablesClient.SetNamespaceVariables(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to set terraform variables")
 		return 1

@@ -124,7 +124,7 @@ func (c *destroyCommand) Run(args []string) int {
 			c.UI.Output("Approval response was negative. Will NOT destroy resources.")
 			return 0
 		}
-		c.UI.Output("\n\n")
+		c.UI.Output("\n")
 	}
 
 	// Apply the destroy run

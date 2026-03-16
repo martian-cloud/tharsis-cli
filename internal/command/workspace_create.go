@@ -66,7 +66,9 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 
 	if c.parentGroupID == "" {
 		// Handle deprecated syntax where full path of the workspace is passed into the argument.
-		c.parentGroupID = trn.NewResourceTRN(trn.ResourceTypeGroup, extractParentPath(name))
+		parent, child := extractParentPath(name)
+		c.parentGroupID = trn.NewResourceTRN(trn.ResourceTypeGroup, parent)
+		name = child
 	}
 
 	if c.ifNotExists {
@@ -103,8 +105,6 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 		Labels:             c.labels,
 	}
 
-	c.Logger.Debug("workspace create input", "input", input)
-
 	createdWorkspace, err := c.grpcClient.WorkspacesClient.CreateWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a workspace")
@@ -116,8 +116,6 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 			ManagedIdentityId: toTRN(trn.ResourceTypeManagedIdentity, *c.managedIdentityID),
 			WorkspaceId:       createdWorkspace.Metadata.Id,
 		}
-
-		c.Logger.Debug("assigning managed identity", "input", assignInput)
 
 		if _, err := c.grpcClient.ManagedIdentitiesClient.AssignManagedIdentityToWorkspace(c.Context, assignInput); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to assign managed identity to workspace")

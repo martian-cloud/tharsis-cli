@@ -53,8 +53,6 @@ func (c *moduleGetCommand) Run(args []string) int {
 		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 	}
 
-	c.Logger.Debug("module get input", "input", input)
-
 	module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get module")

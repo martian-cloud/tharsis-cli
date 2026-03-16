@@ -52,8 +52,6 @@ func (c *workspaceGetCommand) Run(args []string) int {
 		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	}
 
-	c.Logger.Debug("workspace get input", "input", input)
-
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
