@@ -13,9 +13,9 @@ import (
 type moduleCreateAttestationCommand struct {
 	*BaseCommand
 
-	description     string
-	attestationData string
-	toJSON          bool
+	description string
+	data        string
+	toJSON      bool
 }
 
 var _ Command = (*moduleCreateAttestationCommand)(nil)
@@ -27,7 +27,7 @@ func (c *moduleCreateAttestationCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.attestationData, validation.Required),
+		validation.Field(&c.data, validation.Required),
 	)
 }
 
@@ -54,10 +54,8 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 	input := &pb.CreateTerraformModuleAttestationRequest{
 		ModuleId:        toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 		Description:     c.description,
-		AttestationData: c.attestationData,
+		AttestationData: c.data,
 	}
-
-	c.Logger.Debug("module create attestation input", "input", input)
 
 	createdAttestation, err := c.grpcClient.TerraformModulesClient.CreateTerraformModuleAttestation(c.Context, input)
 	if err != nil {
@@ -86,7 +84,7 @@ func (*moduleCreateAttestationCommand) Example() string {
 	return `
 tharsis module create-attestation \
   --description "Attestation for v1.0.0" \
-  --attestation-data aGVsbG8sIHdvcmxk \
+  --data aGVsbG8sIHdvcmxk \
   trn:terraform_module:<module_path>
 `
 }
@@ -100,8 +98,8 @@ func (c *moduleCreateAttestationCommand) Flags() *flag.FlagSet {
 		"Description for the attestation.",
 	)
 	f.StringVar(
-		&c.attestationData,
-		"attestation-data",
+		&c.data,
+		"data",
 		"",
 		"The attestation data (must be a Base64-encoded string).",
 	)

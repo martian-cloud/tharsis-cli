@@ -52,8 +52,6 @@ func (c *runnerAgentDeleteCommand) Run(args []string) int {
 		Version: c.version,
 	}
 
-	c.Logger.Debug("runner agent delete input", "input", input)
-
 	if _, err := c.grpcClient.RunnersClient.DeleteRunner(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete runner agent")
 		return 1

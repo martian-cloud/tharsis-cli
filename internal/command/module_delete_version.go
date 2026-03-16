@@ -51,8 +51,6 @@ func (c *moduleDeleteVersionCommand) Run(args []string) int {
 		Version: c.version,
 	}
 
-	c.Logger.Debug("module delete version input", "input", input)
-
 	_, err := c.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete module version")

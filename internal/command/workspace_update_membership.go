@@ -54,8 +54,6 @@ func (c *workspaceUpdateMembershipCommand) Run(args []string) int {
 		Version: c.version,
 	}
 
-	c.Logger.Debug("workspace update-membership input", "input", input)
-
 	membership, err := c.grpcClient.NamespaceMembershipsClient.UpdateNamespaceMembership(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update workspace membership")

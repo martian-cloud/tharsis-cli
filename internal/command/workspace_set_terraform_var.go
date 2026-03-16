@@ -96,8 +96,6 @@ func (c *workspaceSetTerraformVarCommand) Run(args []string) int {
 			Sensitive:     c.sensitive,
 		}
 
-		c.Logger.Debug("workspace set-terraform-var input", "input", createInput)
-
 		if _, err = c.grpcClient.NamespaceVariablesClient.CreateNamespaceVariable(c.Context, createInput); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to set terraform variable")
 			return 1

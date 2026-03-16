@@ -74,8 +74,6 @@ func (c *moduleListAttestationsCommand) Run(args []string) int {
 		Digest: c.digest,
 	}
 
-	c.Logger.Debug("module list-attestations input", "input", input)
-
 	result, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleAttestations(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get a list of module attestations")
@@ -170,9 +168,11 @@ func (c *moduleListAttestationsCommand) Flags() *flag.FlagSet {
 				pb.TerraformModuleAttestationSortableField_PREDICATE_ASC.String(),
 				pb.TerraformModuleAttestationSortableField_PREDICATE_DESC.String():
 				c.sortBy = &v
+			default:
+				return fmt.Errorf("unknown sort by option %s", s)
 			}
 
-			return fmt.Errorf("unknown sort by option %s", s)
+			return nil
 		},
 	)
 	f.Func(
@@ -190,9 +190,11 @@ func (c *moduleListAttestationsCommand) Flags() *flag.FlagSet {
 			switch v := strings.ToUpper(s); v {
 			case "ASC", "DESC":
 				c.sortBy = &v
+			default:
+				return fmt.Errorf("invalid sort-order value: %s", s)
 			}
 
-			return fmt.Errorf("invalid sort-order value: %s", s)
+			return nil
 		},
 	)
 	f.BoolVar(

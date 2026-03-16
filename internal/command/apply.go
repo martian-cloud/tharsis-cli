@@ -130,7 +130,7 @@ func (c *applyCommand) Run(args []string) int {
 			c.UI.Output("Approval response was negative. Will NOT apply the plan.")
 			return 0
 		}
-		c.UI.Output("\n\n")
+		c.UI.Output("\n")
 	}
 
 	// Apply the run

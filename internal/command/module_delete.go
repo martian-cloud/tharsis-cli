@@ -48,8 +48,6 @@ func (c *moduleDeleteCommand) Run(args []string) int {
 		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 	}
 
-	c.Logger.Debug("module delete input", "input", input)
-
 	if _, err := c.grpcClient.TerraformModulesClient.DeleteTerraformModule(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete a module")
 		return 1

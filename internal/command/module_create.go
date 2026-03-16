@@ -115,8 +115,6 @@ func (c *moduleCreateCommand) Run(args []string) int {
 		Private:       c.private,
 	}
 
-	c.Logger.Debug("module create input", "input", input)
-
 	createdModule, err := c.grpcClient.TerraformModulesClient.CreateTerraformModule(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create a module")

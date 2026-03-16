@@ -10,7 +10,6 @@ import (
 	"github.com/apparentlymart/go-versions/versions"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	tfaddr "github.com/hashicorp/terraform-registry-address"
-	svchost "github.com/hashicorp/terraform-svchost"
 	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/provider"
@@ -281,10 +280,16 @@ func (c *terraformProviderMirrorSyncCommand) resolveRegistryToken(hostname strin
 	}
 
 	// 2. Run service discovery and look for a federated registry match.
-	serviceURL, err := provider.NewQuietDisco().DiscoverServiceURL(svchost.Hostname(hostname), provider.ProvidersServiceID)
+	discovered, err := provider.NewServiceDiscoverer(c.HTTPClient).DiscoverTFEServices(c.Context, hostname)
 	if err != nil {
 		// Discovery failed, assume public registry.
 		return nil, nil
+	}
+
+	serviceURL, ok := discovered.Services[provider.ProvidersServiceID]
+	if !ok {
+		// We'll error out here since this should never happen unless there's a misconfiguration.
+		return nil, fmt.Errorf("service url for %q not found", provider.ProvidersServiceID)
 	}
 
 	curSettings, err := c.getCurrentSettings()

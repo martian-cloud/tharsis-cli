@@ -49,8 +49,6 @@ func (c *terraformProviderMirrorDeleteVersionCommand) Run(args []string) int {
 		Force: c.force,
 	}
 
-	c.Logger.Debug("terraform-provider-mirror delete-version input", "input", input)
-
 	if _, err := c.grpcClient.TerraformProviderMirrorsClient.DeleteTerraformProviderVersionMirror(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete terraform provider version mirror")
 		return 1

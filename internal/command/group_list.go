@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
@@ -60,8 +61,6 @@ func (c *groupListCommand) Run(args []string) int {
 		Search:   c.search,
 		ParentId: c.parentID,
 	}
-
-	c.Logger.Debug("group list input", "input", input)
 
 	result, err := c.grpcClient.GroupsClient.GetGroups(c.Context, input)
 	if err != nil {
@@ -152,7 +151,7 @@ func (c *groupListCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			value, ok := pb.GroupSortableField_value[strings.ToUpper(s)]
 			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, maps.Keys(pb.GroupSortableField_value))
+				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, slices.Collect(maps.Keys(pb.GroupSortableField_value)))
 			}
 			c.sortBy = pb.GroupSortableField(value).Enum()
 			return nil
@@ -191,9 +190,11 @@ func (c *groupListCommand) Flags() *flag.FlagSet {
 				c.sortBy = pb.GroupSortableField_FULL_PATH_ASC.Enum()
 			case "DESC":
 				c.sortBy = pb.GroupSortableField_FULL_PATH_DESC.Enum()
+			default:
+				return fmt.Errorf("unknown sort order %s", s)
 			}
 
-			return fmt.Errorf("unknown sort order %s", s)
+			return nil
 		},
 	)
 	f.BoolVar(

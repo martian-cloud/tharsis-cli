@@ -94,8 +94,6 @@ func (c *workspaceLabelCommand) Run(args []string) int {
 		Labels: newLabels,
 	}
 
-	c.Logger.Debug("workspace label input", "input", input)
-
 	updatedWorkspace, err := c.grpcClient.WorkspacesClient.UpdateWorkspace(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update workspace")

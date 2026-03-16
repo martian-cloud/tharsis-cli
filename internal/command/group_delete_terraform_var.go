@@ -59,8 +59,6 @@ func (c *groupDeleteTerraformVarCommand) Run(args []string) int {
 		Version: c.version,
 	}
 
-	c.Logger.Debug("group delete-terraform-var input", "input", deleteInput)
-
 	if _, err = c.grpcClient.NamespaceVariablesClient.DeleteNamespaceVariable(c.Context, deleteInput); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete terraform variable")
 		return 1

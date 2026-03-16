@@ -87,8 +87,9 @@ func (c *groupCreateCommand) Run(args []string) int {
 
 	if c.parentGroupID == nil {
 		// Deprecated. Attempt to extract parent path from the argument.
-		if p := extractParentPath(name); p != "" {
-			c.parentGroupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, p))
+		if parent, child := extractParentPath(name); parent != "" {
+			c.parentGroupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, parent))
+			name = child
 		}
 	}
 
@@ -97,8 +98,6 @@ func (c *groupCreateCommand) Run(args []string) int {
 		ParentId:    c.parentGroupID,
 		Description: c.description,
 	}
-
-	c.Logger.Debug("group create input", "input", input)
 
 	createdGroup, err := c.grpcClient.GroupsClient.CreateGroup(c.Context, input)
 	if err != nil {

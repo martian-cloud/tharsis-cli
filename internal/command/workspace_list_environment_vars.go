@@ -55,8 +55,6 @@ func (c *workspaceListEnvironmentVarsCommand) Run(args []string) int {
 		NamespacePath: workspace.FullPath,
 	}
 
-	c.Logger.Debug("workspace list-environment-vars input", "input", input)
-
 	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to list environment variables")

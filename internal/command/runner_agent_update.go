@@ -61,8 +61,6 @@ func (c *runnerAgentUpdateCommand) Run(args []string) int {
 		Version:         c.version,
 	}
 
-	c.Logger.Debug("runner agent update input", "input", input)
-
 	updatedRunner, err := c.grpcClient.RunnersClient.UpdateRunner(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to update runner agent")

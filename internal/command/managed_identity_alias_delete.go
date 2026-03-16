@@ -53,8 +53,6 @@ func (c *managedIdentityAliasDeleteCommand) Run(args []string) int {
 		Force: &c.force,
 	}
 
-	c.Logger.Debug("managed identity alias delete input", "input", input)
-
 	if _, err := c.grpcClient.ManagedIdentitiesClient.DeleteManagedIdentityAlias(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete managed identity alias")
 		return 1

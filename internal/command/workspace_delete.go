@@ -56,8 +56,6 @@ func (c *workspaceDeleteCommand) Run(args []string) int {
 		Force:   &c.force,
 	}
 
-	c.Logger.Debug("workspace delete input", "input", input)
-
 	if _, err := c.grpcClient.WorkspacesClient.DeleteWorkspace(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete a workspace")
 		return 1

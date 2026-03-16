@@ -67,8 +67,9 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 		}
 
 		// Handle deprecated syntax by extracting name and group path.
-		providerName = parts[len(parts)-1]
-		c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, extractParentPath(providerName))
+		parent, child := extractParentPath(providerName)
+		providerName = child
+		c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, parent)
 	}
 
 	input := &pb.CreateTerraformProviderRequest{
@@ -77,8 +78,6 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 		RepositoryUrl: c.repositoryURL,
 		Private:       c.private,
 	}
-
-	c.Logger.Debug("terraform-provider create input", "input", input)
 
 	provider, err := c.grpcClient.TerraformProvidersClient.CreateTerraformProvider(c.Context, input)
 	if err != nil {

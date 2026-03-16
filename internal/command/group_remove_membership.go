@@ -63,8 +63,6 @@ func (c *groupRemoveMembershipCommand) Run(args []string) int {
 		Version: c.version,
 	}
 
-	c.Logger.Debug("group remove-membership input", "input", input)
-
 	if _, err := c.grpcClient.NamespaceMembershipsClient.DeleteNamespaceMembership(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to remove group membership")
 		return 1

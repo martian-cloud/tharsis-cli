@@ -59,8 +59,6 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 		NamespacePath: group.FullPath,
 	}
 
-	c.Logger.Debug("group list-terraform-vars input", "input", input)
-
 	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to list terraform variables")
@@ -149,7 +147,7 @@ func outputNamespaceVariables(ui terminal.UI, toJSON bool, showSensitive bool, v
 	}
 
 	if len(variables) == 0 {
-		ui.Output("No variables found")
+		ui.Warnf("No variables found")
 		return 0
 	}
 

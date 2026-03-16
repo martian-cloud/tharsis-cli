@@ -56,8 +56,6 @@ func (c *groupDeleteCommand) Run(args []string) int {
 		Version: c.version,
 	}
 
-	c.Logger.Debug("group delete input", "input", input)
-
 	if _, err := c.grpcClient.GroupsClient.DeleteGroup(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete group")
 		return 1
