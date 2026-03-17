@@ -120,8 +120,6 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		configVersionID = &id
 	}
 
-	m.ui.Output("Waiting on run to start")
-
 	// Create run
 	createRunInput := &pb.CreateRunRequest{
 		WorkspaceId:            workspace.Metadata.Id,
@@ -143,6 +141,8 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 	if err != nil {
 		return nil, fmt.Errorf("failed to create run: %w", err)
 	}
+
+	m.ui.Output("Waiting on run to start")
 
 	m.logger.Debug("created run", "run_id", createdRun.Metadata.Id)
 

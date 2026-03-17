@@ -3,8 +3,6 @@ package command
 import (
 	"flag"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
@@ -21,7 +19,8 @@ type moduleListCommand struct {
 	search           *string
 	groupID          *string
 	includeInherited bool
-	sortBy           *pb.TerraformModuleSortableField
+	sortOrder        *string
+	sortBy           *string
 	toJSON           bool
 }
 
@@ -52,8 +51,18 @@ func (c *moduleListCommand) Run(args []string) int {
 		return code
 	}
 
+	sortByEnum, err := parseSortField[pb.TerraformModuleSortableField](
+		c.sortBy,
+		c.sortOrder,
+		pb.TerraformModuleSortableField_value,
+	)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to parse sort field")
+		return 1
+	}
+
 	input := &pb.GetTerraformModulesRequest{
-		Sort: c.sortBy,
+		Sort: sortByEnum,
 		PaginationOptions: &pb.PaginationOptions{
 			First: ptr.Int32(int32(c.limit)),
 			After: c.cursor,
@@ -149,13 +158,38 @@ func (c *moduleListCommand) Flags() *flag.FlagSet {
 	)
 	f.Func(
 		"sort-by",
-		"Sort by this field (e.g., NAME_ASC, NAME_DESC, UPDATED_AT_ASC, UPDATED_AT_DESC).",
+		"Sort by this field (e.g., NAME_ASC, NAME_DESC, GROUP_LEVEL_ASC, GROUP_LEVEL_DESC, UPDATED_AT_ASC, UPDATED_AT_DESC).",
 		func(s string) error {
-			value, ok := pb.TerraformModuleSortableField_value[strings.ToUpper(s)]
-			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, slices.Collect(maps.Keys(pb.TerraformModuleSortableField_value)))
+			// TODO: Update to use PB types and validate with PB map once deprecation is done.
+			switch v := strings.ToUpper(s); v {
+			case "NAME", // DEPRECATED
+				pb.TerraformModuleSortableField_GROUP_LEVEL_ASC.String(),
+				pb.TerraformModuleSortableField_GROUP_LEVEL_DESC.String(),
+				pb.TerraformModuleSortableField_NAME_ASC.String(),
+				pb.TerraformModuleSortableField_NAME_DESC.String(),
+				pb.TerraformModuleSortableField_UPDATED_AT_ASC.String(),
+				pb.TerraformModuleSortableField_UPDATED_AT_DESC.String():
+				c.sortBy = &v
+			case "UPDATED": // Deprecated
+				c.sortBy = ptr.String("UPDATED_AT")
+			default:
+				return fmt.Errorf("unknown sort by option %s", s)
 			}
-			c.sortBy = pb.TerraformModuleSortableField(value).Enum()
+
+			return nil
+		},
+	)
+	f.Func(
+		"sort-order",
+		"Sort in this direction, ASC or DESC. Deprecated",
+		func(s string) error {
+			switch v := strings.ToUpper(s); v {
+			case "ASC", "DESC":
+				c.sortOrder = &v
+			default:
+				return fmt.Errorf("invalid sort-order value: %s", s)
+			}
+
 			return nil
 		},
 	)

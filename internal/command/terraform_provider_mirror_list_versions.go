@@ -156,6 +156,22 @@ func (c *terraformProviderMirrorListVersionsCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
+	f.Func(
+		"sort-order",
+		"Sort in this direction, ASC or DESC. Deprecated",
+		func(s string) error {
+			switch v := strings.ToUpper(s); v {
+			case "ASC":
+				c.sortBy = pb.TerraformProviderVersionMirrorSortableField_CREATED_AT_ASC.Enum()
+			case "DESC":
+				c.sortBy = pb.TerraformProviderVersionMirrorSortableField_CREATED_AT_DESC.Enum()
+			default:
+				return fmt.Errorf("invalid sort-order value: %s", s)
+			}
+
+			return nil
+		},
+	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",

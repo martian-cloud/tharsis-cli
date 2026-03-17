@@ -3,6 +3,7 @@ package command
 import (
 	"errors"
 	"flag"
+	"strconv"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -13,11 +14,12 @@ import (
 type runnerAgentCreateCommand struct {
 	*BaseCommand
 
+	disabled        *bool
 	runnerName      string
 	groupID         string
 	description     string
-	runUntaggedJobs bool
 	tags            []string
+	runUntaggedJobs bool
 	toJSON          bool
 }
 
@@ -68,6 +70,7 @@ func (c *runnerAgentCreateCommand) Run(args []string) int {
 		GroupId:         c.groupID,
 		RunUntaggedJobs: c.runUntaggedJobs,
 		Tags:            c.tags,
+		Disabled:        c.disabled,
 	}
 
 	createdRunner, err := c.grpcClient.RunnersClient.CreateRunner(c.Context, input)
@@ -121,6 +124,18 @@ func (c *runnerAgentCreateCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
+	f.BoolFunc(
+		"disabled",
+		"Whether the runner is disabled.",
+		func(s string) error {
+			v, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+
+			c.disabled = &v
+			return nil
+		})
 	f.StringVar(
 		&c.runnerName,
 		"runner-name",

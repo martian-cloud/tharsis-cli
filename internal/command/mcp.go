@@ -255,7 +255,7 @@ func (c *mcpCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.BoolFunc(
 		"read-only",
 		"Enable read-only mode (disables write tools).",
 		func(s string) error {

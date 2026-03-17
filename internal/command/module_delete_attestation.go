@@ -52,7 +52,7 @@ func (c *moduleDeleteAttestationCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Output("Module attestation deleted successfully!")
+	c.UI.Successf("Module attestation deleted successfully!")
 
 	return 0
 }

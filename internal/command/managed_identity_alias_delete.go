@@ -58,7 +58,7 @@ func (c *managedIdentityAliasDeleteCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Output("Managed identity alias deleted successfully!")
+	c.UI.Successf("Managed identity alias deleted successfully!")
 
 	return 0
 }

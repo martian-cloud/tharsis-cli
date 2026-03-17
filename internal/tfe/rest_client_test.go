@@ -194,6 +194,7 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, http.MethodGet, r.Method)
+					assert.Equal(t, "/v1/configuration-versions/cv-123/download", r.URL.Path)
 					assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 					w.WriteHeader(http.StatusOK)
 					_, err := w.Write([]byte("test content"))
@@ -245,6 +246,7 @@ func TestUploadModuleVersion(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Equal(t, "/v1/module-registry/versions/mv-123/upload", r.URL.Path)
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		body, _ := io.ReadAll(r.Body)
 		assert.Equal(t, "module content", string(body))
@@ -269,6 +271,7 @@ func TestUploadProviderReadme(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Equal(t, "/v1/provider-registry/versions/pv-123/readme/upload", r.URL.Path)
 		body, _ := io.ReadAll(r.Body)
 		assert.Equal(t, "# Provider", string(body))
 		w.WriteHeader(http.StatusOK)
@@ -290,7 +293,8 @@ func TestUploadProviderChecksums(t *testing.T) {
 	checksumsFile := filepath.Join(tmpDir, "checksums.txt")
 	require.NoError(t, os.WriteFile(checksumsFile, []byte("checksums"), 0600))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/provider-registry/versions/pv-123/checksums/upload", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -310,7 +314,8 @@ func TestUploadProviderChecksumSignature(t *testing.T) {
 	sigFile := filepath.Join(tmpDir, "checksums.sig")
 	require.NoError(t, os.WriteFile(sigFile, []byte("signature"), 0600))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/provider-registry/versions/pv-123/checksums-signature/upload", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -330,7 +335,8 @@ func TestUploadProviderPlatformBinary(t *testing.T) {
 	binaryFile := filepath.Join(tmpDir, "provider")
 	require.NoError(t, os.WriteFile(binaryFile, []byte("binary"), 0600))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/provider-registry/platforms/plat-123/upload", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -348,6 +354,7 @@ func TestUploadProviderPlatformBinary(t *testing.T) {
 func TestUploadProviderPlatformPackageToMirror(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Equal(t, "/v1/provider-mirror/providers/vm-123/linux/amd64/upload", r.URL.Path)
 		body, _ := io.ReadAll(r.Body)
 		assert.Equal(t, "package data", string(body))
 		w.WriteHeader(http.StatusOK)

@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
-	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
@@ -68,7 +67,7 @@ func (c *workspaceRemoveMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Output("Workspace membership removed successfully!", terminal.WithSuccessStyle())
+	c.UI.Successf("Workspace membership removed successfully!")
 	return 0
 }
 

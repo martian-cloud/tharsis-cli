@@ -82,7 +82,7 @@ func (c *runCancelCommand) Run(args []string) int {
 
 			switch event.Run.Status {
 			case "canceled":
-				c.UI.Successf("Run canceled successfully")
+				c.UI.Successf("Run canceled successfully!")
 				return 0
 			case "applied", "planned", "planned_and_finished", "errored":
 				c.UI.Errorf("Run completed with status: %s", event.Run.Status)

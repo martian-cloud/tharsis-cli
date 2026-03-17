@@ -252,7 +252,7 @@ func (c *restClient) UploadProviderPlatformBinary(ctx context.Context, input *Up
 
 // UploadProviderPlatformPackageToMirror uploads a provider platform package to mirror
 func (c *restClient) UploadProviderPlatformPackageToMirror(ctx context.Context, input *UploadProviderPlatformPackageToMirrorInput) error {
-	uploadURL := c.baseURL.JoinPath("v1", "provider-mirror", "versions", input.VersionMirrorID, "platforms", input.OS, input.Arch, "upload").String()
+	uploadURL := c.baseURL.JoinPath("v1", "provider-mirror", "providers", input.VersionMirrorID, input.OS, input.Arch, "upload").String()
 
 	return c.doPut(ctx, uploadURL, input.Reader, -1)
 }

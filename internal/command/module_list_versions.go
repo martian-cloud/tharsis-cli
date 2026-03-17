@@ -168,13 +168,15 @@ func (c *moduleListVersionsCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			// TODO: Update to use PB types and validate with PB map once deprecation is done.
 			switch v := strings.ToUpper(s); v {
-			case "UPDATED", // Deprecated
-				"CREATED", // Deprecated
-				pb.TerraformModuleVersionSortableField_CREATED_AT_ASC.String(),
+			case pb.TerraformModuleVersionSortableField_CREATED_AT_ASC.String(),
 				pb.TerraformModuleVersionSortableField_CREATED_AT_DESC.String(),
 				pb.TerraformModuleVersionSortableField_UPDATED_AT_ASC.String(),
 				pb.TerraformModuleVersionSortableField_UPDATED_AT_DESC.String():
 				c.sortBy = &v
+			case "UPDATED": // Deprecated
+				c.sortBy = ptr.String("UPDATED_AT")
+			case "CREATED": // Deprecated
+				c.sortBy = ptr.String("CREATED_AT")
 			default:
 				return fmt.Errorf("unknown sort by option %s", s)
 			}
@@ -190,7 +192,7 @@ func (c *moduleListVersionsCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.BoolFunc(
 		"latest",
 		"Filter to only the latest version.",
 		func(s string) error {
@@ -217,7 +219,7 @@ func (c *moduleListVersionsCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			switch v := strings.ToUpper(s); v {
 			case "ASC", "DESC":
-				c.sortBy = &v
+				c.sortOrder = &v
 			default:
 				return fmt.Errorf("invalid sort-order value: %s", s)
 			}

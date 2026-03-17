@@ -3,6 +3,7 @@ package command
 import (
 	"encoding/hex"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -70,123 +71,151 @@ func (c *moduleUploadVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	step := c.sg.Add("Get module")
-	module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{
-		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
-	})
+	module, err := c.getModule()
 	if err != nil {
-		step.Abort()
 		c.UI.ErrorWithSummary(err, "failed to get module")
 		return 1
 	}
-	step.Done()
 
-	step = c.sg.Add("Create module package")
-	slugFile, err := os.CreateTemp("", "terraform-slug.tgz")
+	slugFile, shaSum, err := c.createModulePackage()
 	if err != nil {
-		step.Abort()
-		c.UI.ErrorWithSummary(err, "failed to create module version")
-		return 1
-	}
-	defer os.Remove(slugFile.Name())
-
-	slug, err := slug.NewSlug(c.directoryPath, slugFile.Name())
-	if err != nil {
-		step.Abort()
 		c.UI.ErrorWithSummary(err, "failed to create module package")
 		return 1
 	}
-	step.Done()
+	defer os.Remove(slugFile)
 
-	step = c.sg.Add("Create module version %q", c.version)
-	moduleVersion, err := c.grpcClient.TerraformModulesClient.CreateTerraformModuleVersion(c.Context, &pb.CreateTerraformModuleVersionRequest{
-		ModuleId: module.Metadata.Id,
-		Version:  c.version,
-		ShaSum:   hex.EncodeToString(slug.SHASum),
-	})
+	moduleVersion, err := c.createModuleVersion(module.Metadata.Id, shaSum)
 	if err != nil {
-		step.Abort()
 		c.UI.ErrorWithSummary(err, "failed to create module version")
 		return 1
 	}
-	step.Done()
 
-	step = c.sg.Add("Upload module version")
+	if err = c.uploadModuleVersion(moduleVersion.Metadata.Id, slugFile); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to upload module version")
+
+		if _, dErr := c.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(c.Context, &pb.DeleteTerraformModuleVersionRequest{
+			Id: moduleVersion.Metadata.Id,
+		}); dErr != nil {
+			c.UI.ErrorWithSummary(dErr, "failed to delete module version")
+		}
+
+		return 1
+	}
+
+	c.sg.Wait()
+	c.UI.Successf("\nModule version uploaded successfully!")
+	return 0
+}
+
+func (c *moduleUploadVersionCommand) getModule() (module *pb.TerraformModule, err error) {
+	step := c.sg.Add("Get module")
+	defer func() { c.finalizeStep(step, err) }()
+
+	module, err = c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{
+		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	step.Update("Get module (%s)", module.Name)
+
+	return module, nil
+}
+
+func (c *moduleUploadVersionCommand) createModulePackage() (slugPath string, shaSum []byte, err error) {
+	step := c.sg.Add("Create module package")
+	defer func() { c.finalizeStep(step, err) }()
+
+	slugFile, err := os.CreateTemp("", "terraform-slug.tgz")
+	if err != nil {
+		return "", nil, err
+	}
+
+	s, err := slug.NewSlug(c.directoryPath, slugFile.Name())
+	if err != nil {
+		os.Remove(slugFile.Name())
+		return "", nil, err
+	}
+
+	return slugFile.Name(), s.SHASum, nil
+}
+
+func (c *moduleUploadVersionCommand) createModuleVersion(moduleID string, shaSum []byte) (version *pb.TerraformModuleVersion, err error) {
+	step := c.sg.Add("Create module version %q", c.version)
+	defer func() { c.finalizeStep(step, err) }()
+
+	version, err = c.grpcClient.TerraformModulesClient.CreateTerraformModuleVersion(c.Context, &pb.CreateTerraformModuleVersionRequest{
+		ModuleId: moduleID,
+		Version:  c.version,
+		ShaSum:   hex.EncodeToString(shaSum),
+	})
+
+	return version, err
+}
+
+func (c *moduleUploadVersionCommand) uploadModuleVersion(moduleVersionID, slugPath string) (err error) {
+	step := c.sg.Add("Upload module version")
+	defer func() { c.finalizeStep(step, err) }()
+
 	uploadStartTime := time.Now()
 
 	curSettings, err := c.getCurrentSettings()
 	if err != nil {
-		step.Abort()
-		c.UI.ErrorWithSummary(err, "failed to get settings")
-		return 1
+		return err
 	}
 
 	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
 	if err != nil {
-		step.Abort()
-		c.UI.ErrorWithSummary(err, "failed to get token getter")
-		return 1
+		return err
 	}
 
 	tfeClient, err := tfe.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenGetter, c.HTTPClient)
 	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to create REST client")
-		return 1
+		return err
 	}
 
 	if err = tfeClient.UploadModuleVersion(c.Context, &tfe.UploadModuleVersionInput{
-		ModuleVersionID: moduleVersion.Metadata.Id,
-		PackagePath:     slugFile.Name(),
+		ModuleVersionID: moduleVersionID,
+		PackagePath:     slugPath,
 	}); err != nil {
-		step.Abort()
-		c.UI.ErrorWithSummary(err, "failed to upload module version")
-
-		if _, err = c.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(c.Context, &pb.DeleteTerraformModuleVersionRequest{
-			Id: moduleVersion.Metadata.Id,
-		}); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to delete module version")
-		}
-
-		return 1
+		return err
 	}
 
-	var updatedModuleVersion *pb.TerraformModuleVersion
+	// Poll for upload completion.
 	for {
-		updatedModuleVersion, err = c.grpcClient.TerraformModulesClient.GetTerraformModuleVersionByID(c.Context, &pb.GetTerraformModuleVersionByIDRequest{
-			Id: moduleVersion.Metadata.Id,
+		updatedVersion, pErr := c.grpcClient.TerraformModulesClient.GetTerraformModuleVersionByID(c.Context, &pb.GetTerraformModuleVersionByIDRequest{
+			Id: moduleVersionID,
 		})
-		if err != nil {
-			step.Abort()
-			c.UI.ErrorWithSummary(err, "failed to check module version upload status")
-			return 1
+		if pErr != nil {
+			return pErr
 		}
 
-		if updatedModuleVersion.Status == moduleVersionStatusUploaded || updatedModuleVersion.Status == moduleVersionStatusErrored {
+		if updatedVersion.Status == moduleVersionStatusErrored {
+			return fmt.Errorf("module version upload failed: %s\n%s", updatedVersion.Error, updatedVersion.Diagnostics)
+		}
+
+		if updatedVersion.Status == moduleVersionStatusUploaded {
 			break
 		}
 
 		time.Sleep(2 * time.Second)
 	}
 
-	if updatedModuleVersion.Status == moduleVersionStatusErrored {
+	step.Update("Upload module version (elapsed: %s)", time.Since(uploadStartTime))
+
+	return nil
+}
+
+func (c *moduleUploadVersionCommand) finalizeStep(step terminal.Step, err error) {
+	if err != nil {
 		step.Abort()
-		c.UI.Errorf("module version upload failed: %s", updatedModuleVersion.Error)
-		c.UI.Output(updatedModuleVersion.Diagnostics)
+		c.sg.Wait()
 
-		if _, err = c.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(c.Context, &pb.DeleteTerraformModuleVersionRequest{
-			Id: moduleVersion.Metadata.Id,
-		}); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to delete module version")
-		}
-
-		return 1
+		return
 	}
 
 	step.Done()
-
-	c.UI.Successf("\nModule version uploaded successfully! (elapsed: %s)", time.Since(uploadStartTime))
-
-	return 0
 }
 
 func (*moduleUploadVersionCommand) Synopsis() string {

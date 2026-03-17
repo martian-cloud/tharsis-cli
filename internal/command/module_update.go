@@ -102,7 +102,7 @@ func (c *moduleUpdateCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.BoolFunc(
 		"private",
 		"Whether the module is private.",
 		func(s string) error {

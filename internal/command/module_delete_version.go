@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
-	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
@@ -13,7 +12,6 @@ type moduleDeleteVersionCommand struct {
 	*BaseCommand
 
 	version *int64
-	force   bool
 }
 
 // NewModuleDeleteVersionCommandFactory returns a moduleDeleteVersionCommand struct.
@@ -51,13 +49,12 @@ func (c *moduleDeleteVersionCommand) Run(args []string) int {
 		Version: c.version,
 	}
 
-	_, err := c.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(c.Context, input)
-	if err != nil {
+	if _, err := c.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(c.Context, input); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to delete module version")
 		return 1
 	}
 
-	c.UI.Output("Module version deleted successfully!", terminal.WithSuccessStyle())
+	c.UI.Successf("Module version deleted successfully!")
 	return 0
 }
 
@@ -95,12 +92,6 @@ func (c *moduleDeleteVersionCommand) Flags() *flag.FlagSet {
 			c.version = &v
 			return nil
 		},
-	)
-	f.BoolVar(
-		&c.force,
-		"force",
-		false,
-		"Force deletion without confirmation.",
 	)
 	return f
 }

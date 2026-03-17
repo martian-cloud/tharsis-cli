@@ -108,7 +108,7 @@ func (c *groupMigrateCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.BoolFunc(
 		"to-top-level",
 		"Migrate group to top level. Deprecated.",
 		func(s string) error {
