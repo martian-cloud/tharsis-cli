@@ -51,7 +51,7 @@ func (c *runnerAgentUnassignServiceAccountCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("Service account unassigned from runner agent successfully")
+	c.UI.Successf("Service account unassigned from runner agent successfully!")
 	return 0
 }
 

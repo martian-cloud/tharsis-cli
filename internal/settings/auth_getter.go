@@ -8,11 +8,13 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/qiangxue/go-env"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type tokenGetterOptions struct {
 	ServiceAccountToken string `env:"SERVICE_ACCOUNT_TOKEN,secret"`
 	ServiceAccountID    string `env:"SERVICE_ACCOUNT_ID"`
+	ServiceAccountPath  string `env:"SERVICE_ACCOUNT_PATH"`
 	StaticToken         string `env:"STATIC_TOKEN,secret"`
 }
 
@@ -37,6 +39,15 @@ func createTokenGetter(
 
 	if err := c.load(); err != nil {
 		return nil, err
+	}
+
+	if c.ServiceAccountID != "" && c.ServiceAccountPath != "" {
+		return nil, fmt.Errorf("THARSIS_SERVICE_ACCOUNT_ID and THARSIS_SERVICE_ACCOUNT_PATH cannot both be set")
+	}
+
+	// SERVICE_ACCOUNT_PATH is deprecated; convert to TRN for backwards compatibility.
+	if c.ServiceAccountPath != "" {
+		c.ServiceAccountID = trn.NewResourceTRN(trn.ResourceTypeServiceAccount, c.ServiceAccountPath)
 	}
 
 	if c.ServiceAccountID != "" && c.ServiceAccountToken != "" {

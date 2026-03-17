@@ -129,9 +129,9 @@ func (c *managedIdentityAccessRuleUpdateCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.BoolFunc(
 		"verify-state-lineage",
-		"Verify state lineage (true or false).",
+		"Verify state lineage.",
 		func(s string) error {
 			val, err := strconv.ParseBool(s)
 			if err != nil {

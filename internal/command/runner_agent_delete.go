@@ -57,8 +57,7 @@ func (c *runnerAgentDeleteCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Output("Runner agent deleted successfully!")
-
+	c.UI.Successf("Runner agent deleted successfully!")
 	return 0
 }
 

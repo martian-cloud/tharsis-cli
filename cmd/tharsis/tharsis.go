@@ -178,12 +178,7 @@ func realMain() int {
 	// Create HTTP client with retry logic
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 3
-	retryClient.RequestLogHook = func(_ retryablehttp.Logger, r *http.Request, i int) {
-		if i > 0 {
-			log.Debug("HTTP request retry", "method", r.Method, "url", r.URL, "attempt", i)
-		}
-	}
-	retryClient.Logger = nil
+	retryClient.Logger = log
 	retryClient.RetryWaitMin = 10 * time.Second
 	retryClient.RetryWaitMax = 60 * time.Second
 	httpClient := retryClient.StandardClient()

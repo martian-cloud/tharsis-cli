@@ -162,12 +162,13 @@ func (c *moduleListAttestationsCommand) Flags() *flag.FlagSet {
 			// TODO: Update to use PB types and validate with PB map once deprecation is done.
 			switch v := strings.ToUpper(s); v {
 			case "PREDICATE", // Deprecated
-				"CREATED", // Deprecated
 				pb.TerraformModuleAttestationSortableField_CREATED_AT_ASC.String(),
 				pb.TerraformModuleAttestationSortableField_CREATED_AT_DESC.String(),
 				pb.TerraformModuleAttestationSortableField_PREDICATE_ASC.String(),
 				pb.TerraformModuleAttestationSortableField_PREDICATE_DESC.String():
 				c.sortBy = &v
+			case "CREATED": // Deprecated
+				c.sortBy = ptr.String("CREATED_AT")
 			default:
 				return fmt.Errorf("unknown sort by option %s", s)
 			}
@@ -189,7 +190,7 @@ func (c *moduleListAttestationsCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			switch v := strings.ToUpper(s); v {
 			case "ASC", "DESC":
-				c.sortBy = &v
+				c.sortOrder = &v
 			default:
 				return fmt.Errorf("invalid sort-order value: %s", s)
 			}

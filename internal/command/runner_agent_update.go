@@ -105,9 +105,9 @@ func (c *runnerAgentUpdateCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.BoolFunc(
 		"disabled",
-		"Enable or disable the runner agent (true or false).",
+		"Enable or disable the runner agent.",
 		func(s string) error {
 			val, err := strconv.ParseBool(s)
 			if err != nil {
@@ -117,9 +117,9 @@ func (c *runnerAgentUpdateCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.BoolFunc(
 		"run-untagged-jobs",
-		"Allow the runner agent to execute jobs without tags (true or false).",
+		"Allow the runner agent to execute jobs without tags.",
 		func(s string) error {
 			val, err := strconv.ParseBool(s)
 			if err != nil {

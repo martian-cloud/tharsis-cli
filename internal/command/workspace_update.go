@@ -135,7 +135,7 @@ func (c *workspaceUpdateCommand) Flags() *flag.FlagSet {
 			return nil
 		},
 	)
-	f.Func(
+	f.BoolFunc(
 		"prevent-destroy-plan",
 		"Whether a run/plan will be prevented from destroying deployed resources.",
 		func(s string) error {

@@ -21,7 +21,6 @@ type planCommand struct {
 	envVariables     []string
 	targetAddresses  []string
 	destroy          bool
-	speculative      bool
 	refresh          bool
 	refreshOnly      bool
 }
@@ -86,7 +85,7 @@ func (c *planCommand) Run(args []string) int {
 		EnvVariables:     c.envVariables,
 		TargetAddresses:  c.targetAddresses,
 		IsDestroy:        c.destroy,
-		IsSpeculative:    c.speculative,
+		IsSpeculative:    true,
 		Refresh:          c.refresh,
 		RefreshOnly:      c.refreshOnly,
 	})
@@ -178,12 +177,6 @@ func (c *planCommand) Flags() *flag.FlagSet {
 		"destroy",
 		false,
 		"Designates this run as a destroy operation.",
-	)
-	f.BoolVar(
-		&c.speculative,
-		"speculative",
-		true,
-		"Whether this is a speculative plan.",
 	)
 	f.BoolVar(
 		&c.refresh,
