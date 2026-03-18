@@ -149,14 +149,24 @@ func (c *restClient) UploadConfigurationVersion(ctx context.Context, input *Uplo
 	}
 	defer reader.Close()
 
-	uploadURL := c.baseURL.ResolveReference(serviceURL).JoinPath("workspaces", input.WorkspaceID, "configuration-versions", input.ConfigVersionID, "upload").String()
+	uploadURL := serviceURL.JoinPath("workspaces", input.WorkspaceID, "configuration-versions", input.ConfigVersionID, "upload").String()
 
 	return c.doPut(ctx, uploadURL, reader, fileInfo.Size())
 }
 
 // DownloadConfigurationVersion downloads a configuration version
 func (c *restClient) DownloadConfigurationVersion(ctx context.Context, input *DownloadConfigurationVersionInput) error {
-	downloadURL := c.baseURL.JoinPath("v1", "configuration-versions", input.ConfigVersionID, "download").String()
+	discovered, err := c.serviceDiscoverer.DiscoverTFEServices(ctx, c.baseURL.String())
+	if err != nil {
+		return fmt.Errorf("failed to discover tfe v2 service: %w", err)
+	}
+
+	serviceURL, ok := discovered.Services[provider.TFEServiceID]
+	if !ok {
+		return fmt.Errorf("service url for %q not found", provider.TFEServiceID)
+	}
+
+	downloadURL := serviceURL.JoinPath("configuration-versions", input.ConfigVersionID, "content").String()
 	return c.doGet(ctx, downloadURL, input.Writer, contentTypeOctetStream)
 }
 

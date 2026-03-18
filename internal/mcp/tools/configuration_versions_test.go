@@ -118,6 +118,26 @@ func TestCreateConfigurationVersion(t *testing.T) {
 			},
 		},
 		{
+			name: "upload uses resolved workspace ID from response",
+			input: &createConfigurationVersionInput{
+				WorkspaceID:   "trn:workspace:group/my-workspace",
+				DirectoryPath: "/path/to/config",
+			},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:workspace:group/my-workspace", trn.ResourceTypeWorkspace).Return(nil)
+				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, &pb.CreateConfigurationVersionRequest{
+					WorkspaceId: "trn:workspace:group/my-workspace",
+				}).Return(&pb.ConfigurationVersion{
+					Metadata:    &pb.ResourceMetadata{Id: "cv1", Trn: "trn:configuration_version:cv1"},
+					Status:      "pending",
+					WorkspaceId: "resolved-ws-id",
+				}, nil)
+				m.tfe.On("UploadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.UploadConfigurationVersionInput) bool {
+					return input.WorkspaceID == "resolved-ws-id" && input.ConfigVersionID == "cv1"
+				})).Return(nil)
+			},
+		},
+		{
 			name: "authorization failure",
 			input: &createConfigurationVersionInput{
 				WorkspaceID:   "ws1",
@@ -206,6 +226,11 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 			name:  "download configuration version successfully",
 			input: &downloadConfigurationVersionInput{ID: "cv1"},
 			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, &pb.GetConfigurationVersionByIDRequest{Id: "cv1"}).
+					Return(&pb.ConfigurationVersion{
+						Metadata:    &pb.ResourceMetadata{Id: "cv1"},
+						WorkspaceId: "ws1",
+					}, nil)
 				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.DownloadConfigurationVersionInput) bool {
 					if input.ConfigVersionID != "cv1" {
 						return false
@@ -220,9 +245,44 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 			},
 		},
 		{
+			name:  "download resolves TRN to metadata ID",
+			input: &downloadConfigurationVersionInput{ID: "trn:configuration_version:group/ws/cv1"},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, &pb.GetConfigurationVersionByIDRequest{Id: "trn:configuration_version:group/ws/cv1"}).
+					Return(&pb.ConfigurationVersion{
+						Metadata:    &pb.ResourceMetadata{Id: "resolved-cv-id"},
+						WorkspaceId: "ws1",
+					}, nil)
+				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.DownloadConfigurationVersionInput) bool {
+					if input.ConfigVersionID != "resolved-cv-id" {
+						return false
+					}
+					gzWriter := gzip.NewWriter(input.Writer)
+					tarWriter := tar.NewWriter(gzWriter)
+					_ = tarWriter.Close()
+					_ = gzWriter.Close()
+					return true
+				})).Return(nil)
+			},
+		},
+		{
+			name:  "get configuration version fails",
+			input: &downloadConfigurationVersionInput{ID: "cv1"},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, mock.Anything).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+			},
+			expectError: true,
+		},
+		{
 			name:  "download fails",
 			input: &downloadConfigurationVersionInput{ID: "cv1"},
 			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, mock.Anything).
+					Return(&pb.ConfigurationVersion{
+						Metadata:    &pb.ResourceMetadata{Id: "cv1"},
+						WorkspaceId: "ws1",
+					}, nil)
 				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.Anything).
 					Return(status.Error(codes.NotFound, "not found"))
 			},
@@ -233,7 +293,8 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			testMocks := &configurationVersionMocks{
-				tfe: tfe.NewMockRESTClient(t),
+				configurationVersions: mocks.NewConfigurationVersionsClient(t),
+				tfe:                   tfe.NewMockRESTClient(t),
 			}
 
 			if tc.mockSetup != nil {
@@ -241,6 +302,9 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					ConfigurationVersionsClient: testMocks.configurationVersions,
+				},
 				tfeClient: testMocks.tfe,
 			}
 
