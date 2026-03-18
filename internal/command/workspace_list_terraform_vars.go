@@ -4,6 +4,7 @@ import (
 	"flag"
 	"time"
 
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
@@ -68,6 +69,10 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 	var terraformVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
 		if v.Category == pb.VariableCategory_terraform.String() {
+			if v.Sensitive && !c.showSensitive {
+				v.Value = ptr.String("[SENSITIVE]")
+			}
+
 			terraformVars = append(terraformVars, v)
 		}
 	}
@@ -94,7 +99,7 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, c.toJSON, c.showSensitive, terraformVars)
+	return outputNamespaceVariables(c.UI, c.toJSON, terraformVars)
 }
 
 func (*workspaceListTerraformVarsCommand) Synopsis() string {

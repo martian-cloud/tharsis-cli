@@ -203,3 +203,88 @@ func TestProcessDirectoryPath(t *testing.T) {
 		})
 	}
 }
+
+func TestReAnsi(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{
+			name:   "plain text",
+			input:  "no colors here",
+			expect: "no colors here",
+		},
+		{
+			name:   "bold",
+			input:  "\x1b[1mBold\x1b[0m",
+			expect: "Bold",
+		},
+		{
+			name:   "terraform plan output",
+			input:  "\x1b[0m\x1b[1m\x1b[32mApply complete! Resources: 1 added, 0 changed, 0 destroyed.\x1b[0m",
+			expect: "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+		},
+		{
+			name:   "256 color",
+			input:  "\x1b[38;5;196mred text\x1b[0m",
+			expect: "red text",
+		},
+		{
+			name:   "24-bit true color",
+			input:  "\x1b[38;2;255;0;0mred\x1b[0m",
+			expect: "red",
+		},
+		{
+			name:   "cursor movement",
+			input:  "\x1b[2K\x1b[1A\x1b[2Krefreshing...",
+			expect: "refreshing...",
+		},
+		{
+			name:   "mixed content",
+			input:  "Plan: \x1b[32m1 to add\x1b[0m, \x1b[33m0 to change\x1b[0m, \x1b[31m0 to destroy\x1b[0m.",
+			expect: "Plan: 1 to add, 0 to change, 0 to destroy.",
+		},
+		{
+			name:   "empty string",
+			input:  "",
+			expect: "",
+		},
+		{
+			name:   "hyperlink",
+			input:  "\x1b]8;;https://example.com\x07click here\x1b]8;;\x07",
+			expect: "click here",
+		},
+		{
+			name:   "terraform error with bold red",
+			input:  "\x1b[0m\x1b[1m\x1b[31mError: \x1b[0m\x1b[0m\x1b[1mInsufficient features blocks\x1b[0m",
+			expect: "Error: Insufficient features blocks",
+		},
+		{
+			name:   "only escape codes",
+			input:  "\x1b[0m\x1b[1m\x1b[0m",
+			expect: "",
+		},
+		{
+			name:   "tab and newline preserved",
+			input:  "\x1b[32m+\x1b[0m resource\n\t\x1b[33m~\x1b[0m attribute",
+			expect: "+ resource\n\t~ attribute",
+		},
+		{
+			name:   "CSI with question mark (show/hide cursor)",
+			input:  "\x1b[?25lhidden cursor\x1b[?25h",
+			expect: "hidden cursor",
+		},
+		{
+			name:   "multiple resets in sequence",
+			input:  "\x1b[0m\x1b[0m\x1b[0mtext\x1b[0m\x1b[0m",
+			expect: "text",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expect, reAnsi.ReplaceAllString(test.input, ""))
+		})
+	}
+}
