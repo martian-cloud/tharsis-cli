@@ -107,7 +107,7 @@ func createConfigurationVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*
 		}
 
 		if err := tc.tfeClient.UploadConfigurationVersion(ctx, &tfe.UploadConfigurationVersionInput{
-			WorkspaceID:     input.WorkspaceID,
+			WorkspaceID:     cv.WorkspaceId,
 			ConfigVersionID: cv.Metadata.Id,
 			DirectoryPath:   input.DirectoryPath,
 		}); err != nil {
@@ -145,6 +145,13 @@ func downloadConfigurationVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *downloadConfigurationVersionInput) (*mcp.CallToolResult, *downloadConfigurationVersionOutput, error) {
+		cv, err := tc.grpcClient.ConfigurationVersionsClient.GetConfigurationVersionByID(ctx, &pb.GetConfigurationVersionByIDRequest{
+			Id: input.ID,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get configuration version %q: %w", input.ID, err)
+		}
+
 		outputDir, err := os.MkdirTemp("", "config-version-*")
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create temp directory for configuration version %q: %w", input.ID, err)
@@ -158,7 +165,7 @@ func downloadConfigurationVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor
 		defer tarFile.Close()
 
 		if err := tc.tfeClient.DownloadConfigurationVersion(ctx, &tfe.DownloadConfigurationVersionInput{
-			ConfigVersionID: input.ID,
+			ConfigVersionID: cv.Metadata.Id,
 			Writer:          tarFile,
 		}); err != nil {
 			return nil, nil, fmt.Errorf("failed to download configuration version %q: %w", input.ID, err)

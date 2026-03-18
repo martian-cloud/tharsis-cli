@@ -178,11 +178,48 @@ func TestUploadConfigurationVersion(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+
+	// Verify service discovery URL is used directly, not resolved against baseURL.
+	t.Run("uses service discovery URL not base URL", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/v2/tfe/workspaces/ws-123/configuration-versions/cv-456/upload", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		serverURL, _ := url.Parse(server.URL)
+		wrongBaseURL, _ := url.Parse("https://wrong-host.example.com")
+
+		mockDiscoverer := provider.NewMockServiceDiscoverer(t)
+		mockDiscoverer.On("DiscoverTFEServices", mock.Anything, wrongBaseURL.String()).Return(&provider.TFEServices{
+			Services: map[provider.ServiceID]*url.URL{
+				provider.TFEServiceID: serverURL.JoinPath("/v2/tfe"),
+			},
+		}, nil)
+
+		configDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(configDir, "main.tf"), []byte("resource \"test\" {}"), 0600))
+
+		client := &restClient{
+			baseURL:           wrongBaseURL,
+			tokenGetter:       &mockTokenGetter{token: "test-token"},
+			httpClient:        http.DefaultClient,
+			serviceDiscoverer: mockDiscoverer,
+		}
+
+		err := client.UploadConfigurationVersion(t.Context(), &UploadConfigurationVersionInput{
+			WorkspaceID:     "ws-123",
+			ConfigVersionID: "cv-456",
+			DirectoryPath:   configDir,
+		})
+		require.NoError(t, err)
+	})
 }
 
 func TestDownloadConfigurationVersion(t *testing.T) {
 	type testCase struct {
 		name         string
+		setupMock    func(*testing.T, *provider.MockServiceDiscoverer, *httptest.Server)
 		setupServer  func() *httptest.Server
 		expectError  bool
 		expectOutput string
@@ -191,10 +228,18 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 	testCases := []testCase{
 		{
 			name: "successful download",
+			setupMock: func(_ *testing.T, mockDiscoverer *provider.MockServiceDiscoverer, server *httptest.Server) {
+				baseURL, _ := url.Parse(server.URL)
+				mockDiscoverer.On("DiscoverTFEServices", mock.Anything, baseURL.String()).Return(&provider.TFEServices{
+					Services: map[provider.ServiceID]*url.URL{
+						provider.TFEServiceID: baseURL.JoinPath("/v2/tfe"),
+					},
+				}, nil)
+			},
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, http.MethodGet, r.Method)
-					assert.Equal(t, "/v1/configuration-versions/cv-123/download", r.URL.Path)
+					assert.Equal(t, "/v2/tfe/configuration-versions/cv-123/content", r.URL.Path)
 					assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 					w.WriteHeader(http.StatusOK)
 					_, err := w.Write([]byte("test content"))
@@ -205,6 +250,14 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 		},
 		{
 			name: "download fails",
+			setupMock: func(_ *testing.T, mockDiscoverer *provider.MockServiceDiscoverer, server *httptest.Server) {
+				baseURL, _ := url.Parse(server.URL)
+				mockDiscoverer.On("DiscoverTFEServices", mock.Anything, baseURL.String()).Return(&provider.TFEServices{
+					Services: map[provider.ServiceID]*url.URL{
+						provider.TFEServiceID: baseURL.JoinPath("/v2/tfe"),
+					},
+				}, nil)
+			},
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusNotFound)
@@ -219,8 +272,13 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 			server := tc.setupServer()
 			defer server.Close()
 
+			mockDiscoverer := provider.NewMockServiceDiscoverer(t)
+			tc.setupMock(t, mockDiscoverer, server)
+
 			client, err := NewRESTClient(server.URL, &mockTokenGetter{token: "test-token"}, http.DefaultClient)
 			require.NoError(t, err)
+
+			client.(*restClient).serviceDiscoverer = mockDiscoverer
 
 			var buf bytes.Buffer
 			err = client.DownloadConfigurationVersion(t.Context(), &DownloadConfigurationVersionInput{
@@ -237,6 +295,40 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 			assert.Equal(t, tc.expectOutput, buf.String())
 		})
 	}
+
+	// Verify service discovery URL is used directly, not resolved against baseURL.
+	t.Run("uses service discovery URL not base URL", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/v2/tfe/configuration-versions/cv-123/content", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}))
+		defer server.Close()
+
+		serverURL, _ := url.Parse(server.URL)
+		wrongBaseURL, _ := url.Parse("https://wrong-host.example.com")
+
+		mockDiscoverer := provider.NewMockServiceDiscoverer(t)
+		mockDiscoverer.On("DiscoverTFEServices", mock.Anything, wrongBaseURL.String()).Return(&provider.TFEServices{
+			Services: map[provider.ServiceID]*url.URL{
+				provider.TFEServiceID: serverURL.JoinPath("/v2/tfe"),
+			},
+		}, nil)
+
+		client := &restClient{
+			baseURL:           wrongBaseURL,
+			tokenGetter:       &mockTokenGetter{token: "test-token"},
+			httpClient:        http.DefaultClient,
+			serviceDiscoverer: mockDiscoverer,
+		}
+
+		var buf bytes.Buffer
+		err := client.DownloadConfigurationVersion(t.Context(), &DownloadConfigurationVersionInput{
+			ConfigVersionID: "cv-123",
+			Writer:          &buf,
+		})
+		require.NoError(t, err)
+	})
 }
 
 func TestUploadModuleVersion(t *testing.T) {
