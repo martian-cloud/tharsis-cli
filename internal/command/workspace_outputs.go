@@ -1,12 +1,15 @@
 package command
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"sort"
 
+	"github.com/alecthomas/chroma/v2/quick"
+	"github.com/fatih/color"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
@@ -88,15 +91,15 @@ func (c *workspaceOutputsCommand) Run(args []string) int {
 		return 1
 	}
 
-	if len(result.StateVersionOutputs) == 0 {
-		c.UI.Output("workspace does not have any state version outputs")
-		return 1
-	}
-
 	return c.displayWorkspaceOutput(result.StateVersionOutputs)
 }
 
 func (c *workspaceOutputsCommand) displayWorkspaceOutput(outputs []*pb.StateVersionOutput) int {
+	if len(outputs) == 0 {
+		c.UI.Warnf("workspace does not have any state version outputs")
+		return 1
+	}
+
 	valueMap := make(map[string]*stateOutputValue, len(outputs))
 
 	for _, output := range outputs {
@@ -149,9 +152,9 @@ func (c *workspaceOutputsCommand) displayWorkspaceOutput(outputs []*pb.StateVers
 
 		if c.outputName == "" {
 			if v.Sensitive {
-				valueFormatted = "<sensitive>"
+				valueFormatted = "[SENSITIVE]"
 			}
-			c.UI.Output(fmt.Sprintf("%s = %s", v.Name, valueFormatted))
+			c.outputHighlighted(fmt.Sprintf("%s = %s", v.Name, valueFormatted))
 		} else if c.raw {
 			if v.Name != c.outputName {
 				continue
@@ -170,11 +173,23 @@ func (c *workspaceOutputsCommand) displayWorkspaceOutput(outputs []*pb.StateVers
 
 			fmt.Fprint(os.Stdout, valueString.AsString())
 		} else if v.Name == c.outputName {
-			c.UI.Output(valueFormatted)
+			c.outputHighlighted(valueFormatted)
 		}
 	}
 
 	return 0
+}
+
+func (c *workspaceOutputsCommand) outputHighlighted(text string) {
+	if !color.NoColor {
+		var buf bytes.Buffer
+		if err := quick.Highlight(&buf, text, "hcl", "terminal16m", "monokai"); err == nil {
+			fmt.Fprintln(color.Output, buf.String())
+			return
+		}
+	}
+
+	c.UI.Output(text)
 }
 
 func (*workspaceOutputsCommand) Synopsis() string {

@@ -69,6 +69,10 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 	var terraformVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
 		if v.Category == pb.VariableCategory_terraform.String() {
+			if v.Sensitive && !c.showSensitive {
+				v.Value = ptr.String("[SENSITIVE]")
+			}
+
 			terraformVars = append(terraformVars, v)
 		}
 	}
@@ -95,7 +99,7 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, c.toJSON, c.showSensitive, terraformVars)
+	return outputNamespaceVariables(c.UI, c.toJSON, terraformVars)
 }
 
 func (*groupListTerraformVarsCommand) Synopsis() string {
@@ -137,7 +141,7 @@ func (c *groupListTerraformVarsCommand) Flags() *flag.FlagSet {
 	return f
 }
 
-func outputNamespaceVariables(ui terminal.UI, toJSON bool, showSensitive bool, variables []*pb.NamespaceVariable) int {
+func outputNamespaceVariables(ui terminal.UI, toJSON bool, variables []*pb.NamespaceVariable) int {
 	if toJSON {
 		if err := ui.JSON(variables); err != nil {
 			ui.ErrorWithSummary(err, "failed to get JSON output")
@@ -153,14 +157,9 @@ func outputNamespaceVariables(ui terminal.UI, toJSON bool, showSensitive bool, v
 
 	t := terminal.NewTable("key", "value", "namespace_path", "sensitive")
 	for _, v := range variables {
-		displayValue := ptr.ToString(v.Value)
-		if v.Sensitive && !showSensitive {
-			displayValue = "[SENSITIVE]"
-		}
-
 		t.Rich([]string{
 			v.Key,
-			displayValue,
+			ptr.ToString(v.Value),
 			v.NamespacePath,
 			fmt.Sprintf("%t", v.Sensitive),
 		}, nil)

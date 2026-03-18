@@ -4,6 +4,7 @@ import (
 	"flag"
 	"time"
 
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
@@ -65,6 +66,10 @@ func (c *workspaceListEnvironmentVarsCommand) Run(args []string) int {
 	var environmentVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
 		if v.Category == pb.VariableCategory_environment.String() {
+			if v.Sensitive && !c.showSensitive {
+				v.Value = ptr.String("[SENSITIVE]")
+			}
+
 			environmentVars = append(environmentVars, v)
 		}
 	}
@@ -91,7 +96,7 @@ func (c *workspaceListEnvironmentVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, c.toJSON, c.showSensitive, environmentVars)
+	return outputNamespaceVariables(c.UI, c.toJSON, environmentVars)
 }
 
 func (*workspaceListEnvironmentVarsCommand) Synopsis() string {

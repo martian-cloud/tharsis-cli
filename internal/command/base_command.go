@@ -298,6 +298,14 @@ func (c *BaseCommand) migrateSettings() error {
 
 	c.UI.Output("Migrating settings to new format...")
 
+	// Backup the original settings file before migrating.
+	backupPath := settingsPath + ".bak"
+	if err := os.WriteFile(backupPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to create settings backup: %w", err)
+	}
+
+	c.UI.Output("  Backup saved to %s", backupPath)
+
 	// Migrate to new format
 	newProfiles := make(map[string]settings.Profile)
 	tokens := make(map[string]string)

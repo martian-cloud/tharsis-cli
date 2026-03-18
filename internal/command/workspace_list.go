@@ -165,14 +165,15 @@ func (c *workspaceListCommand) Flags() *flag.FlagSet {
 		func(s string) error {
 			// TODO: Update to use PB types and validate with PB map once deprecation is done.
 			switch v := strings.ToUpper(s); v {
-			case "PATH", // Deprecated.
-				pb.WorkspaceSortableField_FULL_PATH_ASC.String(),
+			case pb.WorkspaceSortableField_FULL_PATH_ASC.String(),
 				pb.WorkspaceSortableField_FULL_PATH_DESC.String(),
 				pb.WorkspaceSortableField_UPDATED_AT_ASC.String(),
 				pb.WorkspaceSortableField_UPDATED_AT_DESC.String():
 				c.sortBy = &v
 			case "UPDATED": // Deprecated.
 				c.sortBy = ptr.String("UPDATED_AT")
+			case "PATH": // Deprecated.
+				c.sortBy = ptr.String("FULL_PATH")
 			default:
 				return fmt.Errorf("unknown sort by option %s", s)
 			}
