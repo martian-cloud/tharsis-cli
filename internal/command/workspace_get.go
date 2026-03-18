@@ -101,12 +101,11 @@ func outputWorkspace(ui terminal.UI, toJSON bool, workspace *pb.Workspace) int {
 			return 1
 		}
 	} else {
-		t := terminal.NewTable("id", "name", "description", "terraform version", "full_path")
+		t := terminal.NewTable("id", "name", "description", "full_path")
 		t.Rich([]string{
 			workspace.Metadata.Id,
 			workspace.Name,
 			workspace.Description,
-			workspace.TerraformVersion,
 			workspace.FullPath,
 		}, nil)
 
