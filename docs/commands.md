@@ -292,7 +292,7 @@ tharsis [global options] group add-membership [options] <group-id>
 ```
 
    The group add-membership command adds a membership to a group.
-   Exactly one of --user-id, --service-account-id, or --team-id must be specified.
+   Exactly one of -user-id, -service-account-id, or -team-id must be specified.
 
 <details>
 <summary>Options</summary>
@@ -910,9 +910,7 @@ tharsis [global options] managed-identity create [options] <name>
 
 - `--name` - The name of the managed identity. Deprecated
 
-- `--tharsis-federated-service-account-id` - Tharsis service account ID or TRN this managed identity will assume. (Only if type is tharsis_federated)
-
-- `--tharsis-federated-service-account-path` - Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated). Deprecated.
+- `--tharsis-federated-service-account-path` - Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated)
 
 - `--type` - The type of managed identity: aws_federated, azure_federated, tharsis_federated, kubernetes_federated.
 
@@ -1011,9 +1009,7 @@ tharsis [global options] managed-identity update [options] <id>
 
 - `--kubernetes-federated-audience` - Kubernetes federated audience. The audience should match the client_id configured in your EKS OIDC identity provider. (Only if type is kubernetes_federated)
 
-- `--tharsis-federated-service-account-id` - Tharsis service account ID or TRN. (Only if type is tharsis_federated)
-
-- `--tharsis-federated-service-account-path` - Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated). Deprecated.
+- `--tharsis-federated-service-account-path` - Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated)
 
 </details>
 
@@ -1191,7 +1187,7 @@ tharsis [global options] managed-identity-access-rule update [options] <id>
 
 - `--module-attestation-policy` - Module attestation policy in format "[PredicateType=someval,]PublicKeyFile=/path/to/file". (This flag may be repeated)
 
-- `--verify-state-lineage` - Verify state lineage (true or false).
+- `--verify-state-lineage` - Verify state lineage.
 
 </details>
 
@@ -1457,7 +1453,7 @@ tharsis [global options] module create-attestation [options] <module-id>
 <details>
 <summary>Options</summary>
 
-- `--attestation-data` - The attestation data (must be a Base64-encoded string).
+- `--data` - The attestation data (must be a Base64-encoded string).
 
 - `--description` - Description for the attestation.
 
@@ -1469,7 +1465,7 @@ tharsis [global options] module create-attestation [options] <module-id>
 ```bash
 tharsis module create-attestation \
   --description "Attestation for v1.0.0" \
-  --attestation-data aGVsbG8sIHdvcmxk \
+  --data aGVsbG8sIHdvcmxk \
   trn:terraform_module:<module_path>
 ```
 :::
@@ -1524,8 +1520,6 @@ tharsis [global options] module delete-version [options] <version-id>
 
 <details>
 <summary>Options</summary>
-
-- `--force` - Force deletion without confirmation.
 
 - `--version` - Metadata version of the resource to be deleted. In most cases, this is not required.
 
@@ -1618,7 +1612,9 @@ tharsis [global options] module list [options]
 
 - `--search` - Filter to only modules containing this substring in their path.
 
-- `--sort-by` - Sort by this field (e.g., NAME_ASC, NAME_DESC, UPDATED_AT_ASC, UPDATED_AT_DESC).
+- `--sort-by` - Sort by this field (e.g., NAME_ASC, NAME_DESC, GROUP_LEVEL_ASC, GROUP_LEVEL_DESC, UPDATED_AT_ASC, UPDATED_AT_DESC).
+
+- `--sort-order` - Sort in this direction, ASC or DESC. Deprecated
 
 </details>
 
@@ -1861,8 +1857,6 @@ tharsis [global options] plan [options] <workspace-id>
 
 - `--refresh-only` - Whether to do ONLY a refresh operation.
 
-- `--speculative` - Whether this is a speculative plan.
-
 - `--target` - The Terraform address of the resources to be acted upon.
 
 - `--terraform-version` - The Terraform CLI version to use for the run.
@@ -1974,6 +1968,8 @@ tharsis [global options] runner-agent create [options] <name>
 <summary>Options</summary>
 
 - `--description` - Description for the runner agent.
+
+- `--disabled` - Whether the runner is disabled.
 
 - `--group-id` - Group ID or TRN where the runner agent will be created.
 
@@ -2088,11 +2084,11 @@ tharsis [global options] runner-agent update [options] <id>
 
 - `--description` - Description for the runner agent.
 
-- `--disabled` - Enable or disable the runner agent (true or false).
+- `--disabled` - Enable or disable the runner agent.
 
 - `--json` - Show final output as JSON.
 
-- `--run-untagged-jobs` - Allow the runner agent to execute jobs without tags (true or false).
+- `--run-untagged-jobs` - Allow the runner agent to execute jobs without tags.
 
 - `--tag` - Tag for the runner agent. (This flag may be repeated)
 
@@ -2430,6 +2426,8 @@ tharsis [global options] terraform-provider-mirror list-versions [options] <name
 
 - `--sort-by` - Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).
 
+- `--sort-order` - Sort in this direction, ASC or DESC. Deprecated
+
 </details>
 
 :::note Example
@@ -2481,11 +2479,11 @@ tharsis [global options] terraform-provider-mirror sync [options] <provider_fqn>
 <details>
 <summary>Options</summary>
 
+- `--group-id` - The ID of the root group to create the mirror in.
+
 - `--group-path` - Full path to the root group where this Terraform provider version will be mirrored. Deprecated.
 
 - `--platform` - Platform to sync (format: os_arch). Can be specified multiple times. If not specified, syncs all platforms.
-
-- `--root-group-name` - The name of the root group to create the mirror in.
 
 - `--version` - The provider version to sync. If not specified, uses the latest version.
 
@@ -2494,7 +2492,7 @@ tharsis [global options] terraform-provider-mirror sync [options] <provider_fqn>
 :::note Example
 ```bash
 tharsis terraform-provider-mirror sync \
-  --root-group-name my-group \
+  --group-id my-group \
   --version 1.0.0 \
   --platform linux_amd64 \
   hashicorp/aws
@@ -2574,7 +2572,7 @@ tharsis [global options] workspace add-membership [options] <workspace-id>
 ```
 
    The workspace add-membership command adds a membership to a workspace.
-   Exactly one of --user-id, --service-account-id, or --team-id must be specified.
+   Exactly one of -user-id, -service-account-id, or -team-id must be specified.
 
 <details>
 <summary>Options</summary>
