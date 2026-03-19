@@ -26,6 +26,9 @@ import (
 const (
 	// maxPaginationLimit is the default (and max) limit for paginated list commands.
 	maxPaginationLimit = 100
+
+	// humanTimeFormat is the format used for displaying timestamps in human-readable output.
+	humanTimeFormat = "January 2 2006, 3:04:05 PM MST"
 )
 
 // baseOptions contains the different ways to configure the behavior of BaseCommand.

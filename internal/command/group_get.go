@@ -104,15 +104,16 @@ func outputGroup(ui terminal.UI, toJSON bool, group *pb.Group) int {
 			return 1
 		}
 	} else {
-		t := terminal.NewTable("id", "name", "description", "full_path")
-		t.Rich([]string{
-			group.Metadata.Id,
-			group.Name,
-			group.Description,
-			group.FullPath,
-		}, nil)
-
-		ui.Table(t)
+		ui.NamedValues([]terminal.NamedValue{
+			{Name: "ID", Value: group.Metadata.Id},
+			{Name: "TRN", Value: group.Metadata.Trn},
+			{Name: "Name", Value: group.Name},
+			{Name: "Full Path", Value: group.FullPath},
+			{Name: "Description", Value: group.Description},
+			{Name: "Created By", Value: group.CreatedBy},
+			{Name: "Created At", Value: group.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
+			{Name: "Updated At", Value: group.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
+		})
 	}
 
 	return 0

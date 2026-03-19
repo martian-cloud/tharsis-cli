@@ -2,6 +2,7 @@ package command
 
 import (
 	"flag"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -101,15 +102,29 @@ func outputWorkspace(ui terminal.UI, toJSON bool, workspace *pb.Workspace) int {
 			return 1
 		}
 	} else {
-		t := terminal.NewTable("id", "name", "description", "full_path")
-		t.Rich([]string{
-			workspace.Metadata.Id,
-			workspace.Name,
-			workspace.Description,
-			workspace.FullPath,
-		}, nil)
+		values := []terminal.NamedValue{
+			{Name: "ID", Value: workspace.Metadata.Id},
+			{Name: "TRN", Value: workspace.Metadata.Trn},
+			{Name: "Name", Value: workspace.Name},
+			{Name: "Full Path", Value: workspace.FullPath},
+			{Name: "Description", Value: workspace.Description},
+			{Name: "Locked", Value: workspace.Locked},
+			{Name: "Dirty State", Value: workspace.DirtyState},
+			{Name: "Created By", Value: workspace.CreatedBy},
+			{Name: "Created At", Value: workspace.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
+			{Name: "Updated At", Value: workspace.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
+		}
 
-		ui.Table(t)
+		if len(workspace.Labels) > 0 {
+			labels := make([]string, 0, len(workspace.Labels))
+			for k, v := range workspace.Labels {
+				labels = append(labels, k+"="+v)
+			}
+
+			values = append(values, terminal.NamedValue{Name: "Labels", Value: strings.Join(labels, ", ")})
+		}
+
+		ui.NamedValues(values)
 	}
 
 	return 0

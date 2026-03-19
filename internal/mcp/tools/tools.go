@@ -1,7 +1,7 @@
 // Package tools provides MCP tool implementations for Tharsis CLI.
 package tools
 
-//go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name CallerClient --output mocks --outpkg mocks --filename mock_caller_client.go
+//go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name CallerIdentityClient --output mocks --outpkg mocks --filename mock_caller_client.go
 //go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name ConfigurationVersionsClient --output mocks --outpkg mocks --filename mock_configuration_versions_client.go
 //go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name GroupsClient --output mocks --outpkg mocks --filename mock_groups_client.go
 //go:generate go tool mockery --srcpkg gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen --name JobsClient --output mocks --outpkg mocks --filename mock_jobs_client.go

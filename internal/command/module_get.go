@@ -2,7 +2,6 @@ package command
 
 import (
 	"flag"
-	"fmt"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -101,16 +100,17 @@ func outputModule(ui terminal.UI, toJSON bool, module *pb.TerraformModule) int {
 			return 1
 		}
 	} else {
-		t := terminal.NewTable("id", "name", "system", "group_id", "private")
-		t.Rich([]string{
-			module.Metadata.Id,
-			module.Name,
-			module.System,
-			module.GroupId,
-			fmt.Sprintf("%t", module.Private),
-		}, nil)
-
-		ui.Table(t)
+		ui.NamedValues([]terminal.NamedValue{
+			{Name: "ID", Value: module.Metadata.Id},
+			{Name: "TRN", Value: module.Metadata.Trn},
+			{Name: "Name", Value: module.Name},
+			{Name: "System", Value: module.System},
+			{Name: "Private", Value: module.Private},
+			{Name: "Repository URL", Value: module.RepositoryUrl},
+			{Name: "Created By", Value: module.CreatedBy},
+			{Name: "Created At", Value: module.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
+			{Name: "Updated At", Value: module.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
+		})
 	}
 
 	return 0

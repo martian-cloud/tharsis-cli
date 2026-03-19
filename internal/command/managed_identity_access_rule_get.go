@@ -2,7 +2,7 @@ package command
 
 import (
 	"flag"
-	"fmt"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -98,15 +98,27 @@ func outputManagedIdentityAccessRule(ui terminal.UI, toJSON bool, rule *pb.Manag
 			return 1
 		}
 	} else {
-		t := terminal.NewTable("id", "type", "run_stage", "verify_state_lineage")
-		t.Rich([]string{
-			rule.Metadata.Id,
-			rule.Type,
-			rule.RunStage,
-			fmt.Sprintf("%t", rule.VerifyStateLineage),
-		}, nil)
+		values := []terminal.NamedValue{
+			{Name: "ID", Value: rule.Metadata.Id},
+			{Name: "TRN", Value: rule.Metadata.Trn},
+			{Name: "Type", Value: rule.Type},
+			{Name: "Run Stage", Value: rule.RunStage},
+			{Name: "Verify State Lineage", Value: rule.VerifyStateLineage},
+		}
 
-		ui.Table(t)
+		if len(rule.AllowedUsers) > 0 {
+			values = append(values, terminal.NamedValue{Name: "Allowed Users", Value: strings.Join(rule.AllowedUsers, ", ")})
+		}
+
+		if len(rule.AllowedServiceAccounts) > 0 {
+			values = append(values, terminal.NamedValue{Name: "Allowed Service Accounts", Value: strings.Join(rule.AllowedServiceAccounts, ", ")})
+		}
+
+		if len(rule.AllowedTeams) > 0 {
+			values = append(values, terminal.NamedValue{Name: "Allowed Teams", Value: strings.Join(rule.AllowedTeams, ", ")})
+		}
+
+		ui.NamedValues(values)
 	}
 
 	return 0
