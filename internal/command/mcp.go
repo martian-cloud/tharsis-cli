@@ -3,6 +3,7 @@ package command
 import (
 	"flag"
 	"log/slog"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -131,6 +132,12 @@ func (c *mcpCommand) Run(args []string) int {
 		return 1
 	}
 
+	var normalizedProfileName string
+	if c.CurrentProfileName != "default" {
+		// Normalize the profile name so it conforms to tool naming.
+		normalizedProfileName = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(c.CurrentProfileName), "_") + "_"
+	}
+
 	server, err := mcp.NewServer(&mcp.ServerConfig{
 		Name:            "tharsis-cli",
 		Title:           "Tharsis CLI MCP Server",
@@ -139,6 +146,7 @@ func (c *mcpCommand) Run(args []string) int {
 		Instructions:    mcp.DefaultInstructions(),
 		EnabledToolsets: cfg.Toolsets,
 		EnabledTools:    cfg.Tools,
+		Prefix:          normalizedProfileName,
 		ReadOnly:        ptr.ToBool(cfg.ReadOnly),
 	}, toolsetGroup)
 	if err != nil {
