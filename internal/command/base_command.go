@@ -17,9 +17,9 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -215,7 +215,7 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 // getCurrentSettings returns the current settings in use for the CLI.
 func (c *BaseCommand) getCurrentSettings() (*settings.Settings, error) {
 	// TODO: Remove migration after a few releases when all users have migrated
-	// Migrate old Tharsis settings format to new Phobos-compatible format
+	// Migrate old Tharsis settings format to new format
 	if err := c.migrateSettings(); err != nil {
 		return nil, err
 	}
@@ -256,7 +256,7 @@ These methods help us preserve the command / option behavior from
 the former Graphql-driven CLI / SDK.
 */
 
-// migrateSettings migrates old Tharsis settings format to new Phobos-compatible format.
+// migrateSettings migrates old Tharsis settings format to new format.
 // Remove this migration once deprecation is done.
 func (c *BaseCommand) migrateSettings() error {
 	settingsPath, err := settings.DefaultSettingsFilepath()

@@ -389,9 +389,9 @@ import (
 	"github.com/hashicorp/go-hclog"
 	uuid "github.com/hashicorp/go-uuid"
 	"github.com/pkg/browser"
-	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"golang.org/x/oauth2"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
