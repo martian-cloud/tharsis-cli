@@ -140,6 +140,14 @@ func (c *configureCommand) updateOneProfile(oldSettings *settings.Settings) int 
 		c.httpEndpoint = fmt.Sprintf("https://%s", c.httpEndpoint)
 	}
 
+	// Check for duplicate endpoints across profiles.
+	for name, p := range oldSettings.Profiles {
+		if p.Endpoint == c.httpEndpoint && name != c.profileName {
+			c.UI.Errorf("Endpoint %s is already used by profile %q. Each profile must have a unique endpoint.", c.httpEndpoint, name)
+			return 1
+		}
+	}
+
 	// Show the values before they're written.
 
 	c.UI.Output("Setting profile:")

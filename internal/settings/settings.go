@@ -14,6 +14,7 @@ import (
 	"os/user"
 	"path/filepath"
 
+	"github.com/aws/smithy-go/ptr"
 	"github.com/hashicorp/go-hclog"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 )
@@ -135,6 +136,17 @@ func readFile(name *string, defaultFunc func() (string, error)) ([]byte, error) 
 	}
 
 	return bytes, nil
+}
+
+// FindProfileByEndpoint returns the profile name and profile matching the given endpoint.
+func (s *Settings) FindProfileByEndpoint(endpoint string) (string, *Profile, error) {
+	for name, profile := range s.Profiles {
+		if profile.Endpoint == endpoint {
+			return name, &profile, nil
+		}
+	}
+
+	return "", nil, fmt.Errorf("no profile found for endpoint %q", endpoint)
 }
 
 // SetCurrentProfile sets the current profile pointer in a settings object.
@@ -260,8 +272,31 @@ func defaultSettingsDirectory() (string, error) {
 }
 
 // NewTokenGetter creates a new token getter for the profile.
+// When the token originates from the credentials file, the returned getter
+// re-reads the file on each call so long-lived processes (e.g. MCP server)
+// pick up tokens refreshed by a concurrent `sso login`.
 func (p *Profile) NewTokenGetter(ctx context.Context) (client.TokenGetter, error) {
-	tokenGetter, err := createTokenGetter(ctx, p.token, p.Endpoint, p.TLSSkipVerify)
+	var defaultTokenFunc func() (string, error)
+	if p.token != nil {
+		endpoint := p.Endpoint
+		defaultTokenFunc = func() (string, error) {
+			s, err := ReadSettings(nil)
+			if err != nil {
+				return "", fmt.Errorf("failed to re-read settings: %w", err)
+			}
+
+			_, profile, err := s.FindProfileByEndpoint(endpoint)
+			if err != nil {
+				return "", err
+			}
+
+			// Token may be nil if credentials were cleared; returns empty
+			// string since this isn't an error.
+			return ptr.ToString(profile.token), nil
+		}
+	}
+
+	tokenGetter, err := createTokenGetter(ctx, defaultTokenFunc, p.Endpoint, p.TLSSkipVerify)
 	if err != nil {
 		return nil, err
 	}

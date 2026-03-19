@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/aws/smithy-go/ptr"
 	"github.com/qiangxue/go-env"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
@@ -29,12 +28,21 @@ func (c *tokenGetterOptions) load() error {
 
 func createTokenGetter(
 	ctx context.Context,
-	defaultStaticToken *string,
+	defaultTokenFunc func() (string, error),
 	httpEndpoint string,
 	tlsSkipVerify bool,
 ) (client.TokenGetter, error) {
+	var defaultToken string
+	if defaultTokenFunc != nil {
+		var err error
+		defaultToken, err = defaultTokenFunc()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	c := &tokenGetterOptions{
-		StaticToken: ptr.ToString(defaultStaticToken),
+		StaticToken: defaultToken,
 	}
 
 	if err := c.load(); err != nil {
@@ -51,7 +59,6 @@ func createTokenGetter(
 	}
 
 	if c.ServiceAccountID != "" && c.ServiceAccountToken != "" {
-		// A service account token getter from environment variables.
 		serviceAccountGetter, err := newServiceAccountTokenGetter(
 			ctx,
 			c.ServiceAccountID,
@@ -69,13 +76,14 @@ func createTokenGetter(
 	}
 
 	if c.StaticToken != "" {
-		// A static token getter from an environment variable.
-		staticGetter, err := newStaticTokenGetter(c.StaticToken)
-		if err != nil {
-			return nil, fmt.Errorf("failed to obtain a static token getter: %w", err)
+		// Use defaultTokenFunc to re-read from credentials file on each call.
+		// If the env var overrode the default, use the fixed env var value.
+		if defaultTokenFunc != nil && c.StaticToken == defaultToken {
+			return newStaticTokenGetter(defaultTokenFunc)
 		}
 
-		return staticGetter, nil
+		staticToken := c.StaticToken
+		return newStaticTokenGetter(func() (string, error) { return staticToken, nil })
 	}
 
 	return nil, fmt.Errorf("missing authentication credentials: either use tharsis sso login to get a token or set the required environment variables: " +

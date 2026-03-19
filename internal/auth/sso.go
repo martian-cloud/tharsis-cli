@@ -525,15 +525,8 @@ func (a *ssoAuthenticator) StoreToken(token *oauth2.Token) error {
 	}
 
 	// Find the profile that matches the Tharsis URL
-	var foundName string
-	for name, profile := range currentSettings.Profiles {
-		if profile.Endpoint == a.tharsisURL {
-			foundName = name
-			break
-		}
-	}
-
-	if foundName == "" {
+	foundName, _, err := currentSettings.FindProfileByEndpoint(a.tharsisURL)
+	if err != nil {
 		return fmt.Errorf("no profile found for Tharsis URL: %s", a.tharsisURL)
 	}
 
