@@ -8,15 +8,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/hashicorp/go-hclog"
-	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
@@ -25,11 +24,6 @@ const (
 	runStatusPlannedPrefix = "planned"
 	runStatusApplied       = "applied"
 )
-
-// reAnsi matches ANSI escape sequences for stripping color from job logs.
-// Job logs from the server contain Terraform's ANSI color codes which must
-// be removed when --no-color is set. Enhanced from Phobos terminal package.
-var reAnsi = regexp.MustCompile(`\x1b\][^\x07]*\x07|\x1b\[[0-9;]*[a-zA-Z]|[\x1B\x9B][[\]()#;?]*(?:(?:[a-zA-Z\d]*(?:;[a-zA-Z\d]*)*)?[\x07]|(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PRZcf-ntqry=><~])`)
 
 // Manager provides high-level run management operations
 type Manager struct {
@@ -236,7 +230,7 @@ func (m *Manager) streamJobLogs(ctx context.Context, jobID string) error {
 		if event.Data != nil {
 			logs := strings.TrimSpace(event.Data.Logs)
 			if color.NoColor {
-				logs = reAnsi.ReplaceAllString(logs, "")
+				logs = terminal.StripAnsi(logs)
 			}
 			m.ui.Output(logs)
 		}

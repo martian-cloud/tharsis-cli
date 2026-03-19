@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/hashicorp/go-hclog"
-	"gitlab.com/infor-cloud/martian-cloud/phobos/phobos-cli/pkg/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"golang.org/x/oauth2"
 )
 
