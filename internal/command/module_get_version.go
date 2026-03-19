@@ -2,7 +2,7 @@ package command
 
 import (
 	"flag"
-	"strconv"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -111,16 +111,26 @@ func outputModuleVersion(ui terminal.UI, toJSON bool, version *pb.TerraformModul
 			return 1
 		}
 	} else {
-		t := terminal.NewTable("id", "version", "status", "latest", "sha_sum")
-		t.Rich([]string{
-			version.Metadata.Id,
-			version.SemanticVersion,
-			version.Status,
-			strconv.FormatBool(version.Latest),
-			version.ShaSum,
-		}, nil)
+		values := []terminal.NamedValue{
+			{Name: "ID", Value: version.Metadata.Id},
+			{Name: "TRN", Value: version.Metadata.Trn},
+			{Name: "Version", Value: version.SemanticVersion},
+			{Name: "Status", Value: version.Status},
+			{Name: "Latest", Value: version.Latest},
+			{Name: "SHA Sum", Value: version.ShaSum},
+			{Name: "Created By", Value: version.CreatedBy},
+			{Name: "Created At", Value: version.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
+		}
 
-		ui.Table(t)
+		if version.Error != "" {
+			values = append(values, terminal.NamedValue{Name: "Error", Value: version.Error})
+		}
+
+		if len(version.Submodules) > 0 {
+			values = append(values, terminal.NamedValue{Name: "Submodules", Value: strings.Join(version.Submodules, ", ")})
+		}
+
+		ui.NamedValues(values)
 	}
 
 	return 0

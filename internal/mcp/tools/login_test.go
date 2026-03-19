@@ -22,7 +22,7 @@ func TestGetConnectionInfo(t *testing.T) {
 
 	type testCase struct {
 		name        string
-		mockSetup   func(*mocks.CallerClient)
+		mockSetup   func(*mocks.CallerIdentityClient)
 		expectAuth  bool
 		expectTRN   *string
 		profileName string
@@ -32,9 +32,9 @@ func TestGetConnectionInfo(t *testing.T) {
 		{
 			name:        "authenticated user",
 			profileName: "default",
-			mockSetup: func(cc *mocks.CallerClient) {
-				cc.On("GetCaller", mock.Anything, &emptypb.Empty{}).Return(&pb.GetCallerResponse{
-					Caller: &pb.GetCallerResponse_User{
+			mockSetup: func(cc *mocks.CallerIdentityClient) {
+				cc.On("GetCallerIdentity", mock.Anything, &emptypb.Empty{}).Return(&pb.GetCallerIdentityResponse{
+					Caller: &pb.GetCallerIdentityResponse_User{
 						User: &pb.User{
 							Metadata: &pb.ResourceMetadata{Trn: "trn:user:user1"},
 							Username: "user1",
@@ -48,9 +48,9 @@ func TestGetConnectionInfo(t *testing.T) {
 		{
 			name:        "authenticated service account",
 			profileName: "default",
-			mockSetup: func(cc *mocks.CallerClient) {
-				cc.On("GetCaller", mock.Anything, &emptypb.Empty{}).Return(&pb.GetCallerResponse{
-					Caller: &pb.GetCallerResponse_ServiceAccount{
+			mockSetup: func(cc *mocks.CallerIdentityClient) {
+				cc.On("GetCallerIdentity", mock.Anything, &emptypb.Empty{}).Return(&pb.GetCallerIdentityResponse{
+					Caller: &pb.GetCallerIdentityResponse_ServiceAccount{
 						ServiceAccount: &pb.ServiceAccount{
 							Metadata: &pb.ResourceMetadata{Trn: "trn:service_account:sa1"},
 							Name:     "sa1",
@@ -64,8 +64,8 @@ func TestGetConnectionInfo(t *testing.T) {
 		{
 			name:        "not authenticated",
 			profileName: "default",
-			mockSetup: func(cc *mocks.CallerClient) {
-				cc.On("GetCaller", mock.Anything, &emptypb.Empty{}).Return(nil, status.Error(codes.Unauthenticated, "not authenticated"))
+			mockSetup: func(cc *mocks.CallerIdentityClient) {
+				cc.On("GetCallerIdentity", mock.Anything, &emptypb.Empty{}).Return(nil, status.Error(codes.Unauthenticated, "not authenticated"))
 			},
 			expectAuth: false,
 			expectTRN:  nil,
@@ -74,7 +74,7 @@ func TestGetConnectionInfo(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockCaller := mocks.NewCallerClient(t)
+			mockCaller := mocks.NewCallerIdentityClient(t)
 
 			if tc.mockSetup != nil {
 				tc.mockSetup(mockCaller)
@@ -83,7 +83,7 @@ func TestGetConnectionInfo(t *testing.T) {
 			toolCtx := &ToolContext{
 				tharsisURL:  tharsisURL,
 				profileName: tc.profileName,
-				grpcClient:  &client.Client{CallerClient: mockCaller},
+				grpcClient:  &client.Client{CallerIdentityClient: mockCaller},
 			}
 
 			_, handler := getConnectionInfo(toolCtx)

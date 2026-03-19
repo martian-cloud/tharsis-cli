@@ -2,7 +2,6 @@ package command
 
 import (
 	"flag"
-	"fmt"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -97,17 +96,19 @@ func outputRunnerAgent(ui terminal.UI, toJSON bool, runner *pb.Runner) int {
 			return 1
 		}
 	} else {
-		t := terminal.NewTable("id", "name", "type", "disabled", "run_untagged_jobs", "tags")
-		t.Rich([]string{
-			runner.Metadata.Id,
-			runner.Name,
-			runner.Type,
-			fmt.Sprintf("%t", runner.Disabled),
-			fmt.Sprintf("%t", runner.RunUntaggedJobs),
-			strings.Join(runner.Tags, ", "),
-		}, nil)
-
-		ui.Table(t)
+		ui.NamedValues([]terminal.NamedValue{
+			{Name: "ID", Value: runner.Metadata.Id},
+			{Name: "TRN", Value: runner.Metadata.Trn},
+			{Name: "Name", Value: runner.Name},
+			{Name: "Description", Value: runner.Description},
+			{Name: "Type", Value: runner.Type},
+			{Name: "Disabled", Value: runner.Disabled},
+			{Name: "Run Untagged Jobs", Value: runner.RunUntaggedJobs},
+			{Name: "Tags", Value: strings.Join(runner.Tags, ", ")},
+			{Name: "Created By", Value: runner.CreatedBy},
+			{Name: "Created At", Value: runner.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
+			{Name: "Updated At", Value: runner.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
+		})
 	}
 
 	return 0

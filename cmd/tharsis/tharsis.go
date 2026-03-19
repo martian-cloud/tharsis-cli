@@ -251,6 +251,7 @@ func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, 
 	// The map of all commands except documentation.
 	commandMap := map[string]command.Factory{
 		"apply":                                     command.NewApplyCommandFactory(baseCommand),
+		"caller-identity":                           command.NewCallerIdentityCommandFactory(baseCommand),
 		"configure":                                 command.NewConfigureCommandFactory(baseCommand),
 		"configure delete":                          command.NewConfigureDeleteCommandFactory(baseCommand),
 		"configure list":                            command.NewConfigureListCommandFactory(baseCommand),

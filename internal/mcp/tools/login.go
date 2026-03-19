@@ -73,7 +73,7 @@ func getConnectionInfo(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getConnec
 			Authenticated: false,
 		}
 
-		resp, err := tc.grpcClient.CallerClient.GetCaller(ctx, &emptypb.Empty{})
+		resp, err := tc.grpcClient.CallerIdentityClient.GetCallerIdentity(ctx, &emptypb.Empty{})
 		if err != nil {
 			return nil, output, nil
 		}
@@ -81,9 +81,9 @@ func getConnectionInfo(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getConnec
 		output.Authenticated = true
 
 		switch caller := resp.Caller.(type) {
-		case *pb.GetCallerResponse_User:
+		case *pb.GetCallerIdentityResponse_User:
 			output.TRN = &caller.User.Metadata.Trn
-		case *pb.GetCallerResponse_ServiceAccount:
+		case *pb.GetCallerIdentityResponse_ServiceAccount:
 			output.TRN = &caller.ServiceAccount.Metadata.Trn
 		}
 

@@ -3,7 +3,6 @@ package command
 import (
 	"encoding/base64"
 	"flag"
-	"strconv"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -110,17 +109,18 @@ func outputManagedIdentity(ui terminal.UI, toJSON bool, identity *pb.ManagedIden
 			return 1
 		}
 
-		t := terminal.NewTable("id", "name", "type", "group_id", "is_alias", "data")
-		t.Rich([]string{
-			identity.Metadata.Id,
-			identity.Name,
-			identity.Type,
-			identity.GroupId,
-			strconv.FormatBool(identity.AliasSourceId != nil),
-			string(decoded),
-		}, nil)
-
-		ui.Table(t)
+		ui.NamedValues([]terminal.NamedValue{
+			{Name: "ID", Value: identity.Metadata.Id},
+			{Name: "TRN", Value: identity.Metadata.Trn},
+			{Name: "Name", Value: identity.Name},
+			{Name: "Description", Value: identity.Description},
+			{Name: "Type", Value: identity.Type},
+			{Name: "Is Alias", Value: identity.AliasSourceId != nil},
+			{Name: "Data", Value: string(decoded)},
+			{Name: "Created By", Value: identity.CreatedBy},
+			{Name: "Created At", Value: identity.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
+			{Name: "Updated At", Value: identity.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
+		})
 	}
 
 	return 0
