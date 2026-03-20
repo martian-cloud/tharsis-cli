@@ -212,6 +212,12 @@ func (c *configureCommand) Flags() *flag.FlagSet {
 		c.DefaultHTTPEndpoint,
 		"The Tharsis HTTP API endpoint (in URL format).",
 	)
+	f.StringVar(
+		&c.httpEndpoint,
+		"endpoint-url",
+		c.DefaultHTTPEndpoint,
+		"The Tharsis HTTP API endpoint (in URL format). Deprecated.",
+	)
 	f.BoolVar(
 		&c.tlsSkipVerify,
 		"insecure-tls-skip-verify",

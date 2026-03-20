@@ -149,6 +149,8 @@ tharsis configure \
 <details>
 <summary>Options</summary>
 
+- `--endpoint-url` - The Tharsis HTTP API endpoint (in URL format). Deprecated.
+
 - `--http-endpoint` - The Tharsis HTTP API endpoint (in URL format).
 
 - `--insecure-tls-skip-verify` - Allow TLS but disable verification of the gRPC server's certificate chain and hostname. This should ONLY be true for testing as it could allow the CLI to connect to an impersonated server.
