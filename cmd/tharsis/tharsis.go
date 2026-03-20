@@ -404,7 +404,7 @@ func helpFunc(h cli.HelpFunc, globalFlags *flag.FlagSet) cli.HelpFunc {
 
 // predictProfiles returns available profile names for autocompletion.
 func predictProfiles(_ complete.Args) []string {
-	s, err := settings.ReadSettings(nil)
+	s, err := settings.ReadSettings()
 	if err != nil {
 		return nil
 	}

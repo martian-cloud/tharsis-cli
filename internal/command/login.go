@@ -80,7 +80,7 @@ func (c *loginCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.UI.Successf("\nTharsis SSO login was successful using the %s profile!\n", c.CurrentProfileName)
+	c.UI.Successf("Tharsis SSO login was successful using the %q profile!", c.CurrentProfileName)
 	return 0
 }
 

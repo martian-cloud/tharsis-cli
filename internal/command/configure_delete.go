@@ -41,7 +41,7 @@ func (c *configureDeleteCommand) Run(args []string) int {
 
 	profileName := c.arguments[0]
 
-	gotSettings, err := settings.ReadSettings(nil)
+	gotSettings, err := settings.ReadSettings()
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to read settings")
 		return 1
@@ -61,7 +61,7 @@ func (c *configureDeleteCommand) Run(args []string) int {
 
 	delete(gotSettings.Profiles, profileName)
 
-	if err := gotSettings.WriteSettingsFile(nil); err != nil {
+	if err := gotSettings.WriteSettingsFile(); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to write settings file")
 		return 1
 	}
