@@ -508,7 +508,7 @@ func (a *ssoAuthenticator) Authenticate(ctx context.Context) (*oauth2.Token, err
 
 // StoreToken stores an OAuth token in the settings file for the client's Tharsis URL.
 func (a *ssoAuthenticator) StoreToken(token *oauth2.Token) error {
-	currentSettings, err := settings.ReadSettings(nil)
+	currentSettings, err := settings.ReadSettings()
 	if err != nil {
 		return err
 	}
@@ -525,16 +525,15 @@ func (a *ssoAuthenticator) StoreToken(token *oauth2.Token) error {
 	}
 
 	// Find the profile that matches the Tharsis URL
-	foundName, _, err := currentSettings.FindProfileByEndpoint(a.tharsisURL)
+	foundProfile, err := currentSettings.FindProfileByEndpoint(a.tharsisURL)
 	if err != nil {
 		return fmt.Errorf("no profile found for Tharsis URL: %s", a.tharsisURL)
 	}
 
-	foundProfile := currentSettings.Profiles[foundName]
 	foundProfile.SetToken(tokenToStore)
-	currentSettings.Profiles[foundName] = foundProfile
+	currentSettings.Profiles[foundProfile.Name] = *foundProfile
 
-	return currentSettings.WriteSettingsFile(nil)
+	return currentSettings.WriteSettingsFile()
 }
 
 // fetchAuthConfig fetches auth configuration using gRPC.

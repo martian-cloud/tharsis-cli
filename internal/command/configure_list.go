@@ -42,7 +42,7 @@ func (c *configureListCommand) Run(args []string) int {
 	}
 
 	// Attempt to read the existing settings.
-	gotSettings, err := settings.ReadSettings(nil)
+	gotSettings, err := settings.ReadSettings()
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to read pre-existing settings")
 		return 1

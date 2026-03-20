@@ -107,7 +107,7 @@ func (c *configureCommand) Run(args []string) int {
 	c.httpEndpoint = strings.TrimSuffix(c.httpEndpoint, "/")
 
 	// Attempt to read the existing settings.
-	gotSettings, err := settings.ReadSettings(nil)
+	gotSettings, err := settings.ReadSettings()
 	if err != nil {
 		if err == settings.ErrNoSettings {
 			c.UI.Infof("\nNo existing settings file. Generating a new one.")
@@ -117,7 +117,11 @@ func (c *configureCommand) Run(args []string) int {
 			return 1
 		}
 		// It's okay if the file does not exist.  Create a new empty structure.
-		gotSettings = &settings.Settings{}
+		gotSettings, err = settings.NewSettings()
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to initialize settings")
+			return 1
+		}
 	}
 
 	return c.updateOneProfile(gotSettings)
@@ -163,7 +167,7 @@ func (c *configureCommand) updateOneProfile(oldSettings *settings.Settings) int 
 	oldSettings.Profiles[c.profileName] = profile
 
 	// Write the file.
-	if err := oldSettings.WriteSettingsFile(nil); err != nil {
+	if err := oldSettings.WriteSettingsFile(); err != nil {
 		c.UI.ErrorWithSummary(err, "failed to write settings file")
 		return 1
 	}

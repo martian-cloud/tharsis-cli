@@ -224,7 +224,7 @@ func (c *BaseCommand) getCurrentSettings() (*settings.Settings, error) {
 	}
 
 	// Read the current settings.
-	currentSettings, err := settings.ReadSettings(nil)
+	currentSettings, err := settings.ReadSettings()
 	if err != nil {
 		return nil, err
 	}
@@ -322,12 +322,15 @@ func (c *BaseCommand) migrateSettings() error {
 		}
 	}
 
-	newSettings := &settings.Settings{
-		Profiles: newProfiles,
+	newSettings, err := settings.NewSettings()
+	if err != nil {
+		return err
 	}
 
+	newSettings.Profiles = newProfiles
+
 	// Write migrated settings
-	if err := newSettings.WriteSettingsFile(nil); err != nil {
+	if err := newSettings.WriteSettingsFile(); err != nil {
 		return err
 	}
 
