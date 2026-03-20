@@ -10,169 +10,168 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFileStoreReadSettings(t *testing.T) {
+func TestFileStore(t *testing.T) {
 	type testCase struct {
-		name            string
-		settingsJSON    string
-		credentialsJSON string
-		noCreds         bool
-		expectError     bool
-		expectProfiles  int
-		expectTokenSet  bool
+		name string
+		run  func(t *testing.T)
 	}
 
 	testCases := []testCase{
 		{
-			name:            "settings with credentials",
-			settingsJSON:    `{"profiles":{"default":{"endpoint":"https://example.com"}}}`,
-			credentialsJSON: `{"stateTokens":{"default":"my-token"}}`,
-			expectProfiles:  1,
-			expectTokenSet:  true,
+			name: "read settings with credentials",
+			run: func(t *testing.T) {
+				fs := setupFileStore(t,
+					`{"profiles":{"default":{"endpoint":"https://example.com"}}}`,
+					`{"stateTokens":{"default":"my-token"}}`,
+				)
+
+				s, err := fs.readSettings()
+				require.NoError(t, err)
+				assert.Len(t, s.Profiles, 1)
+				assert.Equal(t, "default", s.Profiles["default"].Name)
+				require.NotNil(t, s.Profiles["default"].token)
+				assert.Equal(t, "my-token", *s.Profiles["default"].token)
+			},
 		},
 		{
-			name:           "settings without credentials file",
-			settingsJSON:   `{"profiles":{"default":{"endpoint":"https://example.com"}}}`,
-			noCreds:        true,
-			expectProfiles: 1,
-			expectTokenSet: false,
+			name: "read settings without credentials file",
+			run: func(t *testing.T) {
+				fs := setupFileStore(t,
+					`{"profiles":{"default":{"endpoint":"https://example.com"}}}`,
+					"",
+				)
+
+				s, err := fs.readSettings()
+				require.NoError(t, err)
+				assert.Len(t, s.Profiles, 1)
+				assert.Nil(t, s.Profiles["default"].token)
+			},
 		},
 		{
-			name:        "missing settings file",
-			expectError: true,
+			name: "read settings with missing settings file",
+			run: func(t *testing.T) {
+				fs := setupFileStore(t, "", "")
+
+				_, err := fs.readSettings()
+				assert.ErrorIs(t, err, ErrNoSettings)
+			},
+		},
+		{
+			name: "write settings splits credentials",
+			run: func(t *testing.T) {
+				dir := t.TempDir()
+				fs := &fileStore{
+					settingsPath:    filepath.Join(dir, "settings.json"),
+					credentialsPath: filepath.Join(dir, "credentials.json"),
+				}
+
+				token := "my-token"
+				s := &Settings{
+					Profiles: map[string]Profile{
+						"default": {token: &token, Endpoint: "https://example.com"},
+					},
+				}
+
+				require.NoError(t, fs.writeSettings(s))
+
+				// Settings file should have the endpoint but not the token.
+				data, err := os.ReadFile(fs.settingsPath)
+				require.NoError(t, err)
+
+				var written Settings
+				require.NoError(t, json.Unmarshal(data, &written))
+				assert.Equal(t, "https://example.com", written.Profiles["default"].Endpoint)
+
+				// Credentials file should have the token.
+				credData, err := os.ReadFile(fs.credentialsPath)
+				require.NoError(t, err)
+
+				var c struct {
+					Tokens map[string]string `json:"stateTokens"`
+				}
+				require.NoError(t, json.Unmarshal(credData, &c))
+				assert.Equal(t, "my-token", c.Tokens["default"])
+			},
+		},
+		{
+			name: "write settings creates nested directory",
+			run: func(t *testing.T) {
+				dir := filepath.Join(t.TempDir(), "nested", "dir")
+				fs := &fileStore{
+					settingsPath:    filepath.Join(dir, "settings.json"),
+					credentialsPath: filepath.Join(dir, "credentials.json"),
+				}
+
+				s := &Settings{
+					Profiles: map[string]Profile{
+						"default": {Endpoint: "https://example.com"},
+					},
+				}
+
+				require.NoError(t, fs.writeSettings(s))
+				assert.FileExists(t, fs.settingsPath)
+				assert.FileExists(t, fs.credentialsPath)
+			},
+		},
+		{
+			name: "round trip preserves all fields",
+			run: func(t *testing.T) {
+				dir := t.TempDir()
+				fs := &fileStore{
+					settingsPath:    filepath.Join(dir, "settings.json"),
+					credentialsPath: filepath.Join(dir, "credentials.json"),
+				}
+
+				token := "round-trip-token"
+				original := &Settings{
+					Profiles: map[string]Profile{
+						"prod": {
+							token:         &token,
+							Endpoint:      "https://prod.example.com",
+							TLSSkipVerify: true,
+						},
+					},
+				}
+
+				require.NoError(t, fs.writeSettings(original))
+
+				loaded, err := fs.readSettings()
+				require.NoError(t, err)
+
+				p := loaded.Profiles["prod"]
+				assert.Equal(t, "prod", p.Name)
+				assert.Equal(t, "https://prod.example.com", p.Endpoint)
+				assert.True(t, p.TLSSkipVerify)
+				require.NotNil(t, p.token)
+				assert.Equal(t, "round-trip-token", *p.token)
+			},
 		},
 	}
 
 	for _, test := range testCases {
-		t.Run(test.name, func(t *testing.T) {
-			dir := t.TempDir()
-			settingsPath := filepath.Join(dir, "settings.json")
-			credentialsPath := filepath.Join(dir, "credentials.json")
-
-			if test.settingsJSON != "" {
-				require.NoError(t, os.WriteFile(settingsPath, []byte(test.settingsJSON), 0o600))
-			}
-
-			if test.credentialsJSON != "" {
-				require.NoError(t, os.WriteFile(credentialsPath, []byte(test.credentialsJSON), 0o600))
-			}
-
-			fs := &fileStore{
-				settingsPath:    settingsPath,
-				credentialsPath: credentialsPath,
-			}
-
-			s, err := fs.readSettings()
-
-			if test.expectError {
-				assert.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Len(t, s.Profiles, test.expectProfiles)
-
-			if test.expectTokenSet {
-				p := s.Profiles["default"]
-				require.NotNil(t, p.token)
-				assert.Equal(t, "my-token", *p.token)
-			}
-
-			if test.expectProfiles > 0 {
-				assert.Equal(t, "default", s.Profiles["default"].Name)
-			}
-		})
+		t.Run(test.name, test.run)
 	}
 }
 
-func TestFileStoreWriteSettings(t *testing.T) {
+// setupFileStore creates a fileStore pointing at temp files, optionally
+// writing initial settings and credentials content.
+func setupFileStore(t *testing.T, settingsJSON, credentialsJSON string) *fileStore {
+	t.Helper()
+
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, "settings.json")
 	credentialsPath := filepath.Join(dir, "credentials.json")
 
-	fs := &fileStore{
+	if settingsJSON != "" {
+		require.NoError(t, os.WriteFile(settingsPath, []byte(settingsJSON), 0o600))
+	}
+
+	if credentialsJSON != "" {
+		require.NoError(t, os.WriteFile(credentialsPath, []byte(credentialsJSON), 0o600))
+	}
+
+	return &fileStore{
 		settingsPath:    settingsPath,
 		credentialsPath: credentialsPath,
 	}
-
-	token := "my-token"
-	s := &Settings{
-		Profiles: map[string]Profile{
-			"default": {
-				token:    &token,
-				Endpoint: "https://example.com",
-			},
-		},
-	}
-
-	require.NoError(t, fs.writeSettings(s))
-
-	// Verify settings file.
-	data, err := os.ReadFile(settingsPath)
-	require.NoError(t, err)
-
-	var written Settings
-	require.NoError(t, json.Unmarshal(data, &written))
-	assert.Equal(t, "https://example.com", written.Profiles["default"].Endpoint)
-
-	// Verify credentials file.
-	credData, err := os.ReadFile(credentialsPath)
-	require.NoError(t, err)
-
-	var c struct {
-		Tokens map[string]string `json:"stateTokens"`
-	}
-	require.NoError(t, json.Unmarshal(credData, &c))
-	assert.Equal(t, "my-token", c.Tokens["default"])
-}
-
-func TestFileStoreWriteSettingsCreatesDirectory(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "nested", "dir")
-	settingsPath := filepath.Join(dir, "settings.json")
-	credentialsPath := filepath.Join(dir, "credentials.json")
-
-	fs := &fileStore{
-		settingsPath:    settingsPath,
-		credentialsPath: credentialsPath,
-	}
-
-	s := &Settings{
-		Profiles: map[string]Profile{
-			"default": {Endpoint: "https://example.com"},
-		},
-	}
-
-	require.NoError(t, fs.writeSettings(s))
-	assert.FileExists(t, settingsPath)
-	assert.FileExists(t, credentialsPath)
-}
-
-func TestFileStoreRoundTrip(t *testing.T) {
-	dir := t.TempDir()
-	fs := &fileStore{
-		settingsPath:    filepath.Join(dir, "settings.json"),
-		credentialsPath: filepath.Join(dir, "credentials.json"),
-	}
-
-	token := "round-trip-token"
-	original := &Settings{
-		Profiles: map[string]Profile{
-			"prod": {
-				token:         &token,
-				Endpoint:      "https://prod.example.com",
-				TLSSkipVerify: true,
-			},
-		},
-	}
-
-	require.NoError(t, fs.writeSettings(original))
-
-	loaded, err := fs.readSettings()
-	require.NoError(t, err)
-
-	p := loaded.Profiles["prod"]
-	assert.Equal(t, "prod", p.Name)
-	assert.Equal(t, "https://prod.example.com", p.Endpoint)
-	assert.True(t, p.TLSSkipVerify)
-	require.NotNil(t, p.token)
-	assert.Equal(t, "round-trip-token", *p.token)
 }

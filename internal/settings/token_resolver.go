@@ -3,7 +3,8 @@ package settings
 import (
 	"context"
 	"fmt"
-	"log"
+	"os"
+	"strings"
 
 	"github.com/qiangxue/go-env"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
@@ -78,7 +79,16 @@ func (tr *tokenResolver) resolve(
 }
 
 func (tr *tokenResolver) loadEnv() error {
-	if err := env.New("THARSIS_", log.Printf).Load(tr); err != nil {
+	// Only log env var loading when debug logging is enabled to avoid
+	// leaking credential metadata in normal CLI output.
+	var logFunc env.LogFunc
+	if strings.EqualFold(os.Getenv("THARSIS_CLI_LOG"), "debug") {
+		logFunc = func(format string, args ...any) {
+			fmt.Fprintf(os.Stderr, "[DEBUG] tharsis: "+format+"\n", args...)
+		}
+	}
+
+	if err := env.New("THARSIS_", logFunc).Load(tr); err != nil {
 		return fmt.Errorf("failed to load env variables: %w", err)
 	}
 
