@@ -113,7 +113,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 
 	if c.managedIdentityID != nil {
 		assignInput := &pb.AssignManagedIdentityToWorkspaceRequest{
-			ManagedIdentityId: toTRN(trn.ResourceTypeManagedIdentity, *c.managedIdentityID),
+			ManagedIdentityId: trn.ToTRN(trn.ResourceTypeManagedIdentity, *c.managedIdentityID),
 			WorkspaceId:       createdWorkspace.Metadata.Id,
 		}
 

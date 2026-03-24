@@ -51,7 +51,7 @@ func (c *workspaceDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteWorkspaceRequest{
-		Id:      toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id:      trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		Version: c.version,
 		Force:   &c.force,
 	}

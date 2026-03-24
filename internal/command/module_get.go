@@ -49,7 +49,7 @@ func (c *moduleGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetTerraformModuleByIDRequest{
-		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Id: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 	}
 
 	module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, input)

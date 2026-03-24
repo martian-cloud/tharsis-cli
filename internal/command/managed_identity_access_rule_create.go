@@ -153,7 +153,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"allowed-user",
 		"Allowed user ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedUsers = append(c.allowedUsers, toTRN(trn.ResourceTypeUser, s))
+			c.allowedUsers = append(c.allowedUsers, trn.ToTRN(trn.ResourceTypeUser, s))
 			return nil
 		},
 	)
@@ -161,7 +161,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"allowed-service-account",
 		"Allowed service account ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedServiceAccounts = append(c.allowedServiceAccounts, toTRN(trn.ResourceTypeServiceAccount, s))
+			c.allowedServiceAccounts = append(c.allowedServiceAccounts, trn.ToTRN(trn.ResourceTypeServiceAccount, s))
 			return nil
 		},
 	)
@@ -169,7 +169,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
 		"allowed-team",
 		"Allowed team ID. (This flag may be repeated)",
 		func(s string) error {
-			c.allowedTeams = append(c.allowedTeams, toTRN(trn.ResourceTypeTeam, s))
+			c.allowedTeams = append(c.allowedTeams, trn.ToTRN(trn.ResourceTypeTeam, s))
 			return nil
 		},
 	)

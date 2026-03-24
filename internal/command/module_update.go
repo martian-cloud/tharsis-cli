@@ -52,7 +52,7 @@ func (c *moduleUpdateCommand) Run(args []string) int {
 	}
 
 	input := &pb.UpdateTerraformModuleRequest{
-		Id:            toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Id:            trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 		RepositoryUrl: c.repositoryURL,
 		Private:       c.private,
 		Version:       c.version,

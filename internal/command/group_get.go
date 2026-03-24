@@ -49,7 +49,7 @@ func (c *groupGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetGroupByIDRequest{
-		Id: toTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
 	}
 
 	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, input)

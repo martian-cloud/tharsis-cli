@@ -50,7 +50,7 @@ func (c *workspaceGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetWorkspaceByIDRequest{
-		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	}
 
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, input)

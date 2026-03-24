@@ -5,7 +5,6 @@ package command
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -20,7 +19,6 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 const (
@@ -360,22 +358,6 @@ func (c *BaseCommand) migrateSettings() error {
 	c.Logger.Info("migrated settings from old Tharsis format to new format")
 	c.UI.Output("Settings migration complete.")
 	return nil
-}
-
-// toTRN converts a namespace path to a TRN to maintain backwards compatibility or
-// returns as is if it's already a TRN or a GID lookalike.
-// This is deprecated. Remove after users are on the latest CLI.
-func toTRN(rt trn.ResourceType, p string) string {
-	if trn.IsTRN(p) {
-		return p
-	}
-
-	// Check if it's a valid GID (base64-encoded "CODE_UUID")
-	if decoded, err := base64.RawURLEncoding.DecodeString(p); err == nil && strings.Contains(string(decoded), "_") {
-		return p
-	}
-
-	return trn.NewResourceTRN(rt, p)
 }
 
 // extractParentPath returns the parent and child from a given path.

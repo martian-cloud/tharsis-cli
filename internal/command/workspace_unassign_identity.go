@@ -42,8 +42,8 @@ func (c *workspaceUnassignManagedIdentityCommand) Run(args []string) int {
 	}
 
 	input := &pb.RemoveManagedIdentityFromWorkspaceRequest{
-		WorkspaceId:       toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
-		ManagedIdentityId: toTRN(trn.ResourceTypeManagedIdentity, c.arguments[1]),
+		WorkspaceId:       trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		ManagedIdentityId: trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[1]),
 	}
 
 	if _, err := c.grpcClient.ManagedIdentitiesClient.RemoveManagedIdentityFromWorkspace(c.Context, input); err != nil {

@@ -54,7 +54,7 @@ func (c *groupMigrateCommand) Run(args []string) int {
 	}
 
 	input := &pb.MigrateGroupRequest{
-		GroupId:     toTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		GroupId:     trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
 		NewParentId: c.newParentID,
 	}
 

@@ -77,7 +77,7 @@ func (c *destroyCommand) Run(args []string) int {
 
 	// Create non-speculative destroy run
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
-		WorkspaceID:      toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		WorkspaceID:      trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		DirectoryPath:    c.directoryPath,
 		ModuleSource:     c.moduleSource,
 		ModuleVersion:    c.moduleVersion,

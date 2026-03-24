@@ -2,6 +2,7 @@
 package trn
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 )
@@ -69,6 +70,11 @@ func IsTRN(identifier string) bool {
 func ToTRN(resourceType ResourceType, identifier string) string {
 	// If it's already a TRN, return as-is
 	if IsTRN(identifier) {
+		return identifier
+	}
+
+	// Check if it's a valid GID (base64-encoded "CODE_UUID")
+	if decoded, err := base64.RawURLEncoding.DecodeString(identifier); err == nil && strings.Contains(string(decoded), "_") {
 		return identifier
 	}
 

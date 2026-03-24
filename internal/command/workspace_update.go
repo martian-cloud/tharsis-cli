@@ -59,7 +59,7 @@ func (c *workspaceUpdateCommand) Run(args []string) int {
 	}
 
 	input := &pb.UpdateWorkspaceRequest{
-		Id:                 toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id:                 trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		Description:        c.description,
 		TerraformVersion:   c.terraformVersion,
 		MaxJobDuration:     c.maxJobDuration,

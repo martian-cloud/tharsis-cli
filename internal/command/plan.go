@@ -74,7 +74,7 @@ func (c *planCommand) Run(args []string) int {
 	}
 
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
-		WorkspaceID:      toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		WorkspaceID:      trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		DirectoryPath:    c.directoryPath,
 		ModuleSource:     c.moduleSource,
 		ModuleVersion:    c.moduleVersion,
