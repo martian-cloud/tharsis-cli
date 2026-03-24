@@ -46,7 +46,7 @@ func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetManagedIdentitiesForWorkspaceRequest{
-		WorkspaceId: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		WorkspaceId: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	}
 
 	result, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentitiesForWorkspace(c.Context, input)

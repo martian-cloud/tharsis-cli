@@ -48,7 +48,7 @@ func (c *workspaceListMembershipsCommand) Run(args []string) int {
 
 	// Ensure it's a workspace.
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: toTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")

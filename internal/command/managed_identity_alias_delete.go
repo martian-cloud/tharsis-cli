@@ -49,7 +49,7 @@ func (c *managedIdentityAliasDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteManagedIdentityAliasRequest{
-		Id:    toTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
+		Id:    trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
 		Force: &c.force,
 	}
 

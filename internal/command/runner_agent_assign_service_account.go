@@ -42,8 +42,8 @@ func (c *runnerAgentAssignServiceAccountCommand) Run(args []string) int {
 	}
 
 	input := &pb.AssignServiceAccountToRunnerRequest{
-		ServiceAccountId: toTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
-		RunnerId:         toTRN(trn.ResourceTypeRunner, c.arguments[1]),
+		ServiceAccountId: trn.ToTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
+		RunnerId:         trn.ToTRN(trn.ResourceTypeRunner, c.arguments[1]),
 	}
 
 	if _, err := c.grpcClient.RunnersClient.AssignServiceAccountToRunner(c.Context, input); err != nil {

@@ -57,7 +57,7 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 		return code
 	}
 
-	managedIdentityID := toTRN(trn.ResourceTypeManagedIdentity, c.arguments[0])
+	managedIdentityID := trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0])
 
 	var encodedData *string
 	if c.updateIdentityData {

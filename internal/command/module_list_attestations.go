@@ -65,7 +65,7 @@ func (c *moduleListAttestationsCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetTerraformModuleAttestationsRequest{
-		ModuleId: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		ModuleId: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 		Sort:     sortByEnum,
 		PaginationOptions: &pb.PaginationOptions{
 			First: ptr.Int32(int32(c.limit)),

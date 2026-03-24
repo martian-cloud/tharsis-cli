@@ -50,7 +50,7 @@ func (c *managedIdentityGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetManagedIdentityByIDRequest{
-		Id: toTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
+		Id: trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
 	}
 
 	identity, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityByID(c.Context, input)

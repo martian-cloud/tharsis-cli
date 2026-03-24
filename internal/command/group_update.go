@@ -51,7 +51,7 @@ func (c *groupUpdateCommand) Run(args []string) int {
 	}
 
 	input := &pb.UpdateGroupRequest{
-		Id:          toTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		Id:          trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
 		Description: c.description,
 		Version:     c.version,
 	}

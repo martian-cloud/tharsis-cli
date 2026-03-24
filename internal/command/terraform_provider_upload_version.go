@@ -171,7 +171,7 @@ func (c *terraformProviderUploadVersionCommand) getProvider() (provider *pb.Terr
 	defer func() { c.finalizeStep(step, err) }()
 
 	provider, err = c.grpcClient.TerraformProvidersClient.GetTerraformProviderByID(c.Context, &pb.GetTerraformProviderByIDRequest{
-		Id: toTRN(trn.ResourceTypeTerraformProvider, c.arguments[0]),
+		Id: trn.ToTRN(trn.ResourceTypeTerraformProvider, c.arguments[0]),
 	})
 	if err != nil {
 		return nil, err

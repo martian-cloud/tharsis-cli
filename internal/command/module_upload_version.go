@@ -112,7 +112,7 @@ func (c *moduleUploadVersionCommand) getModule() (module *pb.TerraformModule, er
 	defer func() { c.finalizeStep(step, err) }()
 
 	module, err = c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{
-		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Id: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 	})
 	if err != nil {
 		return nil, err

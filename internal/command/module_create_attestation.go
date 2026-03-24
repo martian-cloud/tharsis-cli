@@ -52,7 +52,7 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateTerraformModuleAttestationRequest{
-		ModuleId:        toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		ModuleId:        trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 		Description:     c.description,
 		AttestationData: c.data,
 	}

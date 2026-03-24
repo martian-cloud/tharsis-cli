@@ -51,7 +51,7 @@ func (c *groupDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteGroupRequest{
-		Id:      toTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		Id:      trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
 		Force:   &c.force,
 		Version: c.version,
 	}

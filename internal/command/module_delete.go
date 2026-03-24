@@ -45,7 +45,7 @@ func (c *moduleDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteTerraformModuleRequest{
-		Id: toTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Id: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 	}
 
 	if _, err := c.grpcClient.TerraformModulesClient.DeleteTerraformModule(c.Context, input); err != nil {

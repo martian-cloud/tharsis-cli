@@ -47,7 +47,7 @@ func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateOIDCTokenRequest{
-		ServiceAccountId: toTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
+		ServiceAccountId: trn.ToTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
 		Token:            c.token,
 	}
 
