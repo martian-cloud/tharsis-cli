@@ -572,7 +572,7 @@ Filter to only groups containing this substring in their path.
 #### sort-by
 
 Sort by this field.\
-**Values:** `FULL_PATH_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`, `FULL_PATH_ASC`
+**Values:** `FULL_PATH_ASC`, `FULL_PATH_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
 
 #### sort-order <span style={{color:'orange'}}>!</span>
 
@@ -2332,7 +2332,7 @@ Maximum number of result elements to return.\
 #### sort-by
 
 Sort by this field.\
-**Values:** `TYPE_ASC`, `TYPE_DESC`, `CREATED_AT_ASC`, `CREATED_AT_DESC`
+**Values:** `CREATED_AT_ASC`, `CREATED_AT_DESC`, `TYPE_ASC`, `TYPE_DESC`
 
 #### sort-order <span style={{color:'orange'}}>!</span>
 
@@ -2524,7 +2524,7 @@ tharsis workspace assign-managed-identity \
   
 The workspace create command creates a new workspace. It
 allows setting a workspace's description (optional),
-maximum job duration and managed identity. Shows final
+maximum job duration and managed identities. Shows final
 output as JSON, if specified. Idempotent when used with
 -if-not-exists option.
   
@@ -2561,7 +2561,7 @@ Show final output as JSON.\
 
 Labels for the new workspace (key=value).
 
-#### managed-identity
+#### managed-identity <span style={{color:'green'}}>...</span>
 
 The ID of a managed identity to assign.
 
