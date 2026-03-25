@@ -18,7 +18,7 @@ type workspaceCreateCommand struct {
 	description        *string
 	terraformVersion   *string
 	maxJobDuration     *int32
-	managedIdentityID  *string
+	managedIdentityIDs []string
 	labels             map[string]string
 	preventDestroyPlan *bool
 	toJSON             *bool
@@ -107,9 +107,9 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.managedIdentityID != nil {
+	for _, id := range c.managedIdentityIDs {
 		assignInput := &pb.AssignManagedIdentityToWorkspaceRequest{
-			ManagedIdentityId: trn.ToTRN(trn.ResourceTypeManagedIdentity, *c.managedIdentityID),
+			ManagedIdentityId: id,
 			WorkspaceId:       createdWorkspace.Metadata.Id,
 		}
 
@@ -134,7 +134,7 @@ func (*workspaceCreateCommand) Description() string {
 	return `
    The workspace create command creates a new workspace. It
    allows setting a workspace's description (optional),
-   maximum job duration and managed identity. Shows final
+   maximum job duration and managed identities. Shows final
    output as JSON, if specified. Idempotent when used with
    -if-not-exists option.
 `
@@ -188,10 +188,13 @@ func (c *workspaceCreateCommand) Flags() *flag.Set {
 		"label",
 		"Labels for the new workspace (key=value).",
 	)
-	f.StringVar(
-		&c.managedIdentityID,
+	f.StringSliceVar(
+		&c.managedIdentityIDs,
 		"managed-identity",
 		"The ID of a managed identity to assign.",
+		flag.TransformString(func(s string) string {
+			return trn.ToTRN(trn.ResourceTypeManagedIdentity, s)
+		}),
 	)
 	f.BoolVar(
 		&c.toJSON,
