@@ -2,21 +2,19 @@ package command
 
 import (
 	"errors"
-	"flag"
-	"strconv"
 
-	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupMigrateCommand struct {
 	*BaseCommand
 
-	toTopLevel  *bool
 	newParentID *string
-	toJSON      bool
+	toTopLevel  *bool
+	toJSON      *bool
 }
 
 // NewGroupMigrateCommandFactory returns a groupMigrateCommand struct.
@@ -30,7 +28,7 @@ func NewGroupMigrateCommandFactory(baseCommand *BaseCommand) func() (Command, er
 
 func (c *groupMigrateCommand) validate() error {
 	if c.newParentID != nil && c.toTopLevel != nil {
-		return errors.New("must supply only one of --new-parent-path and --to-top-level")
+		return errors.New("must supply only one of -new-parent-id and -to-top-level")
 	}
 
 	const message = "group-id is required"
@@ -64,7 +62,7 @@ func (c *groupMigrateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputGroup(c.UI, c.toJSON, group)
+	return outputGroup(c.UI, *c.toJSON, group)
 }
 
 func (*groupMigrateCommand) Synopsis() string {
@@ -74,7 +72,7 @@ func (*groupMigrateCommand) Synopsis() string {
 func (*groupMigrateCommand) Description() string {
 	return `
    The group migrate command migrates a group to another parent group or to top-level.
-   Omit --new-parent-id to migrate to top-level.
+   Omit -new-parent-id to migrate to top-level.
 `
 }
 
@@ -85,47 +83,38 @@ func (*groupMigrateCommand) Usage() string {
 func (*groupMigrateCommand) Example() string {
 	return `
 tharsis group migrate \
-  --new-parent-id trn:group:<parent_group_path> \
+  -new-parent-id trn:group:<parent_group_path> \
   trn:group:<group_path>
 `
 }
 
-func (c *groupMigrateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *groupMigrateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.newParentID,
 		"new-parent-id",
 		"New parent group ID. Omit to migrate to top-level.",
-		func(s string) error {
-			c.newParentID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.newParentID,
 		"new-parent-path",
-		"New parent path for the group. Deprecated",
-		func(s string) error {
-			c.newParentID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, s))
-			return nil
-		},
+		"New parent path for the group.",
+		flag.Deprecated("use -new-parent-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+		}),
 	)
-	f.BoolFunc(
+	f.BoolVar(
+		&c.toTopLevel,
 		"to-top-level",
-		"Migrate group to top level. Deprecated.",
-		func(s string) error {
-			b, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-
-			c.toTopLevel = &b
-			return nil
-		},
+		"Migrate group to top level.",
+		flag.Deprecated("omit -new-parent-id instead"),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

@@ -1,11 +1,9 @@
 package command
 
 import (
-	"flag"
-	"strconv"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -16,7 +14,7 @@ type moduleUpdateCommand struct {
 	repositoryURL *string
 	private       *bool
 	version       *int64
-	toJSON        bool
+	toJSON        *bool
 }
 
 var _ Command = (*moduleUpdateCommand)(nil)
@@ -64,7 +62,7 @@ func (c *moduleUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModule(c.UI, c.toJSON, updatedModule)
+	return outputModule(c.UI, *c.toJSON, updatedModule)
 }
 
 func (*moduleUpdateCommand) Synopsis() string {
@@ -86,52 +84,34 @@ func (*moduleUpdateCommand) Description() string {
 func (*moduleUpdateCommand) Example() string {
 	return `
 tharsis module update \
-  --repository-url https://github.com/example/terraform-aws-vpc-v2 \
-  --private true \
+  -repository-url https://github.com/example/terraform-aws-vpc-v2 \
+  -private true \
   trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 
-func (c *moduleUpdateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *moduleUpdateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.repositoryURL,
 		"repository-url",
 		"The repository URL for the module.",
-		func(s string) error {
-			c.repositoryURL = &s
-			return nil
-		},
 	)
-	f.BoolFunc(
+	f.BoolVar(
+		&c.private,
 		"private",
 		"Whether the module is private.",
-		func(s string) error {
-			v, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			c.private = &v
-			return nil
-		},
 	)
-	f.Func(
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be updated. "+
-			"In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Metadata version of the resource to be updated. In most cases, this is not required.",
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

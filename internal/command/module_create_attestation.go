@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
-
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -13,9 +13,9 @@ import (
 type moduleCreateAttestationCommand struct {
 	*BaseCommand
 
-	description string
-	data        string
-	toJSON      bool
+	description *string
+	data        *string
+	toJSON      *bool
 }
 
 var _ Command = (*moduleCreateAttestationCommand)(nil)
@@ -27,7 +27,6 @@ func (c *moduleCreateAttestationCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.data, validation.Required),
 	)
 }
 
@@ -53,8 +52,8 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 
 	input := &pb.CreateTerraformModuleAttestationRequest{
 		ModuleId:        trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
-		Description:     c.description,
-		AttestationData: c.data,
+		Description:     ptr.ToString(c.description),
+		AttestationData: *c.data,
 	}
 
 	createdAttestation, err := c.grpcClient.TerraformModulesClient.CreateTerraformModuleAttestation(c.Context, input)
@@ -63,7 +62,7 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModuleAttestation(c.UI, c.toJSON, createdAttestation)
+	return outputModuleAttestation(c.UI, *c.toJSON, createdAttestation)
 }
 
 func (*moduleCreateAttestationCommand) Synopsis() string {
@@ -83,31 +82,30 @@ func (*moduleCreateAttestationCommand) Description() string {
 func (*moduleCreateAttestationCommand) Example() string {
 	return `
 tharsis module create-attestation \
-  --description "Attestation for v1.0.0" \
-  --data aGVsbG8sIHdvcmxk \
+  -description "Attestation for v1.0.0" \
+  -data aGVsbG8sIHdvcmxk \
   trn:terraform_module:<module_path>
 `
 }
 
-func (c *moduleCreateAttestationCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *moduleCreateAttestationCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.description,
 		"description",
-		"",
 		"Description for the attestation.",
 	)
 	f.StringVar(
 		&c.data,
 		"data",
-		"",
 		"The attestation data (must be a Base64-encoded string).",
+		flag.Required(),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

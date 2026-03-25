@@ -1,9 +1,8 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 )
 
@@ -91,6 +90,6 @@ tharsis configure delete prod-example
 `
 }
 
-func (c *configureDeleteCommand) Flags() *flag.FlagSet {
+func (c *configureDeleteCommand) Flags() *flag.Set {
 	return nil
 }

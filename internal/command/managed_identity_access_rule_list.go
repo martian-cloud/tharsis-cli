@@ -1,11 +1,11 @@
 package command
 
 import (
-	"flag"
 	"fmt"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -13,8 +13,8 @@ import (
 type managedIdentityAccessRuleListCommand struct {
 	*BaseCommand
 
-	managedIdentityID string
-	toJSON            bool
+	managedIdentityID *string
+	toJSON            *bool
 }
 
 // NewManagedIdentityAccessRuleListCommandFactory returns a managedIdentityAccessRuleListCommand struct.
@@ -29,7 +29,7 @@ func NewManagedIdentityAccessRuleListCommandFactory(baseCommand *BaseCommand) fu
 func (c *managedIdentityAccessRuleListCommand) validate() error {
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments, validation.Empty),
-		validation.Field(&c.managedIdentityID, validation.Required),
+		validation.Field(&c.managedIdentityID, validation.Required, validation.NotNil),
 	)
 }
 
@@ -45,7 +45,7 @@ func (c *managedIdentityAccessRuleListCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetManagedIdentityAccessRulesRequest{
-		ManagedIdentityId: c.managedIdentityID,
+		ManagedIdentityId: *c.managedIdentityID,
 	}
 
 	result, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityAccessRules(c.Context, input)
@@ -54,7 +54,7 @@ func (c *managedIdentityAccessRuleListCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(result); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
@@ -95,31 +95,31 @@ func (*managedIdentityAccessRuleListCommand) Usage() string {
 func (*managedIdentityAccessRuleListCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule list \
-  --managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name>
+  -managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name>
 `
 }
 
-func (c *managedIdentityAccessRuleListCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *managedIdentityAccessRuleListCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.managedIdentityID,
 		"managed-identity-id",
-		"",
 		"ID of the managed identity to get access rules for.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.managedIdentityID,
 		"managed-identity-path",
-		"Resource path of the managed identity to get access rules for. Deprecated.",
-		func(s string) error {
-			c.managedIdentityID = trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
-			return nil
-		},
+		"Resource path of the managed identity to get access rules for.",
+		flag.Deprecated("use -managed-identity-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
+		}),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

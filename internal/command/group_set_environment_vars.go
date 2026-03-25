@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
@@ -31,7 +30,6 @@ func (c *groupSetEnvironmentVarsCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.envVarFiles, validation.Required),
 	)
 }
 
@@ -102,20 +100,18 @@ func (*groupSetEnvironmentVarsCommand) Usage() string {
 func (*groupSetEnvironmentVarsCommand) Example() string {
 	return `
 tharsis group set-environment-vars \
-  --env-var-file vars.env \
+  -env-var-file vars.env \
   trn:group:<group_path>
 `
 }
 
-func (c *groupSetEnvironmentVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *groupSetEnvironmentVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringSliceVar(
+		&c.envVarFiles,
 		"env-var-file",
-		"Path to an environment variables file (can be specified multiple times).",
-		func(s string) error {
-			c.envVarFiles = append(c.envVarFiles, s)
-			return nil
-		},
+		"Path to an environment variables file.",
+		flag.Required(),
 	)
 
 	return f

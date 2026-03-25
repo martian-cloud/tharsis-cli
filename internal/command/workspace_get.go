@@ -1,11 +1,11 @@
 package command
 
 import (
-	"flag"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -14,7 +14,7 @@ import (
 type workspaceGetCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*workspaceGetCommand)(nil)
@@ -59,7 +59,7 @@ func (c *workspaceGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputWorkspace(c.UI, c.toJSON, workspace)
+	return outputWorkspace(c.UI, *c.toJSON, workspace)
 }
 
 func (*workspaceGetCommand) Synopsis() string {
@@ -83,13 +83,13 @@ tharsis workspace get trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceGetCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceGetCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

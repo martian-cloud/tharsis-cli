@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -12,7 +11,7 @@ import (
 type workspaceGetAssignedManagedIdentitiesCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 // NewWorkspaceGetAssignedManagedIdentitiesCommandFactory returns a workspaceGetAssignedManagedIdentitiesCommand struct.
@@ -55,11 +54,12 @@ func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(result.ManagedIdentities); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to output JSON")
 			return 1
 		}
+
 		return 0
 	}
 
@@ -97,13 +97,13 @@ tharsis workspace get-assigned-managed-identities trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceGetAssignedManagedIdentitiesCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceGetAssignedManagedIdentitiesCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 // moduleUpdateAttestationCommand is the top-level structure for the module update attestation command.
@@ -12,7 +11,7 @@ type moduleUpdateAttestationCommand struct {
 	*BaseCommand
 
 	description *string
-	toJSON      bool
+	toJSON      *bool
 }
 
 var _ Command = (*moduleUpdateAttestationCommand)(nil)
@@ -58,7 +57,7 @@ func (c *moduleUpdateAttestationCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModuleAttestation(c.UI, c.toJSON, updatedAttestation)
+	return outputModuleAttestation(c.UI, *c.toJSON, updatedAttestation)
 }
 
 func (*moduleUpdateAttestationCommand) Synopsis() string {
@@ -78,26 +77,23 @@ func (*moduleUpdateAttestationCommand) Description() string {
 func (*moduleUpdateAttestationCommand) Example() string {
 	return `
 tharsis module update-attestation \
-  --description "Updated description" \
+  -description "Updated description" \
   trn:terraform_module_attestation:<group_path>/<module_name>/<system>/<sha_sum>
 `
 }
 
-func (c *moduleUpdateAttestationCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *moduleUpdateAttestationCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.description,
 		"description",
 		"Description for the attestation.",
-		func(s string) error {
-			c.description = &s
-			return nil
-		},
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

@@ -2,7 +2,6 @@ package command
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
@@ -37,7 +37,7 @@ type terraformProviderUploadVersionCommand struct {
 	*BaseCommand
 
 	sg        terminal.StepGroup
-	directory string
+	directory *string
 }
 
 func (c *terraformProviderUploadVersionCommand) validate() error {
@@ -71,14 +71,14 @@ func (c *terraformProviderUploadVersionCommand) Run(args []string) int {
 		return code
 	}
 
-	dirStat, err := os.Stat(c.directory)
+	dirStat, err := os.Stat(*c.directory)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to stat directory path")
 		return 1
 	}
 
 	if !dirStat.IsDir() {
-		c.UI.Errorf("path is not a directory: %s", c.directory)
+		c.UI.Errorf("path is not a directory: %s", *c.directory)
 		return 1
 	}
 
@@ -186,7 +186,7 @@ func (c *terraformProviderUploadVersionCommand) readManifest() (manifest *terraf
 	step := c.sg.Add("Read terraform-registry-manifest.json")
 	defer func() { c.finalizeStep(step, err) }()
 
-	data, err := os.ReadFile(filepath.Join(c.directory, "terraform-registry-manifest.json"))
+	data, err := os.ReadFile(filepath.Join(*c.directory, "terraform-registry-manifest.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (c *terraformProviderUploadVersionCommand) readVersionMetadata() (metadata 
 	step := c.sg.Add("Read metadata.json")
 	defer func() { c.finalizeStep(step, err) }()
 
-	data, err := os.ReadFile(filepath.Join(c.directory, "dist", "metadata.json"))
+	data, err := os.ReadFile(filepath.Join(*c.directory, "dist", "metadata.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (c *terraformProviderUploadVersionCommand) readArtifacts() (artifacts []art
 	step := c.sg.Add("Read artifacts.json")
 	defer func() { c.finalizeStep(step, err) }()
 
-	data, err := os.ReadFile(filepath.Join(c.directory, "dist", "artifacts.json"))
+	data, err := os.ReadFile(filepath.Join(*c.directory, "dist", "artifacts.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +247,7 @@ func (c *terraformProviderUploadVersionCommand) uploadReadme(restClient tfe.REST
 	step := c.sg.Add("Upload README")
 	defer func() { c.finalizeStep(step, err) }()
 
-	matches, err := filepath.Glob(filepath.Join(c.directory, "README*"))
+	matches, err := filepath.Glob(filepath.Join(*c.directory, "README*"))
 	if err != nil {
 		return err
 	}
@@ -269,7 +269,7 @@ func (c *terraformProviderUploadVersionCommand) uploadChecksums(restClient tfe.R
 
 	checksumMap = map[string]string{}
 
-	data, err := os.ReadFile(filepath.Join(c.directory, artifactPath))
+	data, err := os.ReadFile(filepath.Join(*c.directory, artifactPath))
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (c *terraformProviderUploadVersionCommand) uploadChecksums(restClient tfe.R
 
 	if err = restClient.UploadProviderChecksums(c.Context, &tfe.UploadProviderChecksumsInput{
 		ProviderVersionID: providerVersionID,
-		ChecksumsPath:     filepath.Join(c.directory, artifactPath),
+		ChecksumsPath:     filepath.Join(*c.directory, artifactPath),
 	}); err != nil {
 		return nil, err
 	}
@@ -297,7 +297,7 @@ func (c *terraformProviderUploadVersionCommand) uploadSignature(restClient tfe.R
 
 	return restClient.UploadProviderChecksumSignature(c.Context, &tfe.UploadProviderChecksumSignatureInput{
 		ProviderVersionID: providerVersionID,
-		SignaturePath:     filepath.Join(c.directory, artifactPath),
+		SignaturePath:     filepath.Join(*c.directory, artifactPath),
 	})
 }
 
@@ -323,7 +323,7 @@ func (c *terraformProviderUploadVersionCommand) uploadPlatformArchive(restClient
 
 	return restClient.UploadProviderPlatformBinary(c.Context, &tfe.UploadProviderPlatformBinaryInput{
 		PlatformID: platform.Metadata.Id,
-		BinaryPath: filepath.Join(c.directory, artifact.Path),
+		BinaryPath: filepath.Join(*c.directory, artifact.Path),
 	})
 }
 
@@ -356,18 +356,19 @@ func (*terraformProviderUploadVersionCommand) Usage() string {
 func (*terraformProviderUploadVersionCommand) Example() string {
 	return `
 tharsis terraform-provider upload-version \
-  --directory ./my-provider \
+  -directory ./my-provider \
   trn:terraform_provider:<group_path>/<name>
 `
 }
 
-func (c *terraformProviderUploadVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *terraformProviderUploadVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.directory,
 		"directory",
-		".",
 		"The path of the terraform provider's directory.",
+		flag.Default("."),
 	)
+
 	return f
 }

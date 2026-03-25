@@ -1,16 +1,15 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 // versionCommand returns the remote API backend version this CLI connects to.
 type versionCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*versionCommand)(nil)
@@ -46,7 +45,7 @@ func (c *versionCommand) Run(args []string) int {
 		CLI: c.Version,
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(version); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
@@ -74,17 +73,17 @@ func (c *versionCommand) Description() string {
 
 func (c *versionCommand) Example() string {
 	return `
-tharsis version --json
+tharsis version -json
 `
 }
 
-func (c *versionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *versionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

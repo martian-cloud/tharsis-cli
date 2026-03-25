@@ -1,12 +1,12 @@
 package command
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -14,9 +14,9 @@ import (
 type groupGetTerraformVarCommand struct {
 	*BaseCommand
 
-	key           string
-	showSensitive bool
-	toJSON        bool
+	key           *string
+	showSensitive *bool
+	toJSON        *bool
 }
 
 // NewGroupGetTerraformVarCommandFactory returns a groupGetTerraformVarCommand struct.
@@ -35,7 +35,6 @@ func (c *groupGetTerraformVarCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.key, validation.Required),
 	)
 }
 
@@ -50,7 +49,7 @@ func (c *groupGetTerraformVarCommand) Run(args []string) int {
 		return code
 	}
 
-	// Get group to retrieve full path
+	// Get group to retrieve full path.
 	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0])})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
@@ -58,7 +57,7 @@ func (c *groupGetTerraformVarCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetNamespaceVariableByIDRequest{
-		Id: trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), c.key),
+		Id: trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), *c.key),
 	}
 
 	variable, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, input)
@@ -67,8 +66,8 @@ func (c *groupGetTerraformVarCommand) Run(args []string) int {
 		return 1
 	}
 
-	// If showing sensitive value, fetch the variable version
-	if c.showSensitive && variable.Sensitive {
+	// If showing sensitive value, fetch the variable version.
+	if *c.showSensitive && variable.Sensitive {
 		versionInput := &pb.GetNamespaceVariableVersionByIDRequest{
 			Id:                    variable.LatestVersionId,
 			IncludeSensitiveValue: true,
@@ -84,7 +83,7 @@ func (c *groupGetTerraformVarCommand) Run(args []string) int {
 		variable.Value = version.Value
 	}
 
-	return outputNamespaceVariable(c.UI, c.toJSON, c.showSensitive, variable)
+	return outputNamespaceVariable(c.UI, *c.toJSON, *c.showSensitive, variable)
 }
 
 func (*groupGetTerraformVarCommand) Synopsis() string {
@@ -104,30 +103,30 @@ func (*groupGetTerraformVarCommand) Usage() string {
 func (*groupGetTerraformVarCommand) Example() string {
 	return `
 tharsis group get-terraform-var \
-  --key region \
+  -key region \
   trn:group:<group_path>
 `
 }
 
-func (c *groupGetTerraformVarCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupGetTerraformVarCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.key,
 		"key",
-		"",
 		"Variable key.",
+		flag.Required(),
 	)
 	f.BoolVar(
 		&c.showSensitive,
 		"show-sensitive",
-		false,
 		"Show the actual value of sensitive variables (requires appropriate permissions).",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

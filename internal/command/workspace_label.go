@@ -1,12 +1,12 @@
 package command
 
 import (
-	"flag"
 	"fmt"
 	"maps"
 	"strings"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -14,8 +14,8 @@ type workspaceLabelCommand struct {
 	*BaseCommand
 
 	labels    map[string]*string // nil value means remove
-	overwrite bool
-	toJSON    bool
+	overwrite *bool
+	toJSON    *bool
 }
 
 // NewWorkspaceLabelCommandFactory returns a workspaceLabelCommand struct.
@@ -33,20 +33,22 @@ func (c *workspaceLabelCommand) validate() error {
 		return fmt.Errorf("workspace-id and at least one label operation are required")
 	}
 
-	// Validate label operations
+	// Validate label operations.
 	for _, arg := range c.arguments[1:] {
 		if key, ok := strings.CutSuffix(arg, "-"); ok {
 			if key == "" {
 				return fmt.Errorf("invalid label format: key cannot be empty")
 			}
-			if c.overwrite {
-				return fmt.Errorf("label removal syntax (key-) cannot be used with --overwrite flag")
+
+			if *c.overwrite {
+				return fmt.Errorf("label removal syntax (key-) cannot be used with -overwrite flag")
 			}
 		} else if strings.Contains(arg, "=") {
 			parts := strings.SplitN(arg, "=", 2)
 			if parts[0] == "" {
 				return fmt.Errorf("invalid label format: key cannot be empty")
 			}
+
 			if parts[1] == "" {
 				return fmt.Errorf("invalid label format: value cannot be empty for key %s", parts[0])
 			}
@@ -77,7 +79,7 @@ func (c *workspaceLabelCommand) Run(args []string) int {
 		return 1
 	}
 
-	// Parse label operations from remaining arguments
+	// Parse label operations from remaining arguments.
 	for _, arg := range c.arguments[1:] {
 		if key, ok := strings.CutSuffix(arg, "-"); ok {
 			c.labels[key] = nil
@@ -100,12 +102,12 @@ func (c *workspaceLabelCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputWorkspace(c.UI, c.toJSON, updatedWorkspace)
+	return outputWorkspace(c.UI, *c.toJSON, updatedWorkspace)
 }
 
 func (c *workspaceLabelCommand) applyLabelOperations(existingLabels map[string]string) map[string]string {
 	var workingLabels map[string]string
-	if c.overwrite {
+	if *c.overwrite {
 		workingLabels = make(map[string]string)
 	} else {
 		workingLabels = make(map[string]string, len(existingLabels))
@@ -134,7 +136,7 @@ func (*workspaceLabelCommand) Description() string {
 
    Label operations:
      key=value  Add or update a label
-     key-       Remove a label (not allowed with --overwrite)
+     key-       Remove a label (not allowed with -overwrite)
 `
 }
 
@@ -145,26 +147,26 @@ func (*workspaceLabelCommand) Usage() string {
 func (*workspaceLabelCommand) Example() string {
 	return `
 tharsis workspace label \
-  --overwrite \
+  -overwrite \
   trn:workspace:<workspace_path> \
   env=prod \
   tier=frontend
 `
 }
 
-func (c *workspaceLabelCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceLabelCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.overwrite,
 		"overwrite",
-		false,
 		"Replace all existing labels with the specified labels.",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

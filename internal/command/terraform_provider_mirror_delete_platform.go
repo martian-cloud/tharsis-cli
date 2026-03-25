@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type terraformProviderMirrorDeletePlatformCommand struct {
@@ -75,6 +74,6 @@ tharsis terraform-provider-mirror delete-platform <platform-mirror-id>
 `
 }
 
-func (c *terraformProviderMirrorDeletePlatformCommand) Flags() *flag.FlagSet {
+func (c *terraformProviderMirrorDeletePlatformCommand) Flags() *flag.Set {
 	return nil
 }

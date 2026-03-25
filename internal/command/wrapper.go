@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	"github.com/mitchellh/cli"
 	"github.com/posener/complete"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 )
 
@@ -13,7 +12,7 @@ type Command interface {
 	Usage() string
 	Description() string
 	Example() string
-	Flags() *flag.FlagSet
+	Flags() *flag.Set
 	Run(args []string) int
 	Synopsis() string
 }
@@ -65,14 +64,19 @@ func (c Wrapper) AutocompleteArgs() complete.Predictor {
 
 // AutocompleteFlags returns flag completions derived from the command's Flags().
 func (c Wrapper) AutocompleteFlags() complete.Flags {
-	flags := c.command.Flags()
-	if flags == nil {
+	fs := c.command.Flags()
+	if fs == nil {
 		return nil
 	}
 
 	result := make(complete.Flags)
-	flags.VisitAll(func(f *flag.Flag) {
-		result["-"+f.Name] = complete.PredictAnything
-	})
+	for name, values := range fs.Predictors() {
+		if len(values) > 0 {
+			result["-"+name] = complete.PredictSet(values...)
+		} else {
+			result["-"+name] = complete.PredictAnything
+		}
+	}
+
 	return result
 }

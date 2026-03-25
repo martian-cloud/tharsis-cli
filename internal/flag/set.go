@@ -1,0 +1,529 @@
+package flag
+
+import (
+	stdflag "flag"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// Option configures a flag at registration time.
+type Option func(*Flag)
+
+// Required marks a flag as required. [Set.Parse] returns an error if it is
+// not set. Panics if combined with [Default].
+func Required() Option {
+	return func(f *Flag) { f.required = true }
+}
+
+// Default sets a fallback value for a flag. Applied at registration time and
+// overwritten if the flag is explicitly set. Panics if combined with [Required]
+// or if the value type does not match the flag type.
+func Default(value any) Option {
+	return func(f *Flag) { f.defaultVal = value }
+}
+
+// Deprecated marks a flag as deprecated with a message shown when it is used.
+// A deprecated flag cannot be required since it has a replacement; panics if
+// combined with [Required].
+func Deprecated(message string) Option {
+	return func(f *Flag) { f.deprecated = message }
+}
+
+// TransformString applies a function to the raw string value before storing it.
+// Only applies to string and string slice flags.
+func TransformString(fn func(string) string) Option {
+	return func(f *Flag) { f.transform = fn }
+}
+
+// PredictValues provides shell completion candidates for a flag.
+func PredictValues(values ...string) Option {
+	return func(f *Flag) { f.predictors = values }
+}
+
+// Aliases registers short or alternate names for a flag (e.g. Aliases("n")
+// lets -n work as an alias for --name).
+func Aliases(names ...string) Option {
+	return func(f *Flag) { f.aliases = names }
+}
+
+// EnvVar sets an environment variable that provides a fallback value for the
+// flag. The env var is read at registration time; an explicit flag value
+// always wins.
+func EnvVar(key string) Option {
+	return func(f *Flag) { f.envVar = key }
+}
+
+// ValidValues restricts a flag to one of the given values.
+func ValidValues(values ...string) Option {
+	return func(f *Flag) {
+		f.validValues = values
+		f.validate = func(s string) error {
+			for _, v := range values {
+				if strings.EqualFold(s, v) {
+					return nil
+				}
+			}
+
+			return fmt.Errorf("invalid value %q for flag %s, must be one of: %s",
+				s, f.Name, strings.Join(values, ", "))
+		}
+	}
+}
+
+// ValidRange restricts a numeric flag to the given inclusive range.
+func ValidRange(minVal, maxVal int) Option {
+	return func(f *Flag) {
+		f.validate = func(s string) error {
+			v, err := strconv.ParseInt(s, 0, 64)
+			if err != nil {
+				return err
+			}
+
+			if int(v) < minVal || int(v) > maxVal {
+				return fmt.Errorf("value %d for flag %s must be between %d and %d",
+					v, f.Name, minVal, maxVal)
+			}
+
+			return nil
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Set
+// ---------------------------------------------------------------------------
+
+// Set wraps [stdflag.Set] with required flags, defaults, validation,
+// and shell completion support.
+type Set struct {
+	stdfs *stdflag.FlagSet
+	flags map[string]*Flag
+}
+
+// NewSet creates a new Set. Error handling is set to
+// [stdflag.ContinueOnError] so callers can inspect parse errors.
+func NewSet(name string) *Set {
+	return &Set{
+		stdfs: stdflag.NewFlagSet(name, stdflag.ContinueOnError),
+		flags: make(map[string]*Flag),
+	}
+}
+
+// Name returns the name of the flag set.
+func (fs *Set) Name() string {
+	return fs.stdfs.Name()
+}
+
+// ---------------------------------------------------------------------------
+// Delegated methods
+// ---------------------------------------------------------------------------
+
+// VisitAll calls fn for each flag in the set, including unset flags.
+func (fs *Set) VisitAll(fn func(*Flag)) {
+	fs.stdfs.VisitAll(func(sf *stdflag.Flag) {
+		f := fs.flags[sf.Name]
+		if sf.Name == f.Name {
+			fn(f)
+		}
+	})
+}
+
+// SetOutput sets the output writer for error messages and usage.
+func (fs *Set) SetOutput(output io.Writer) {
+	fs.stdfs.SetOutput(output)
+}
+
+// NFlag returns the number of flags that have been set.
+func (fs *Set) NFlag() int {
+	return fs.stdfs.NFlag()
+}
+
+// Args returns the non-flag arguments remaining after parsing.
+func (fs *Set) Args() []string {
+	return fs.stdfs.Args()
+}
+
+// Lookup returns the Flag for the named flag, or nil if not found.
+func (fs *Set) Lookup(name string) *Flag {
+	return fs.flags[name]
+}
+
+// Predictors returns a map of flag names to their shell completion candidates.
+func (fs *Set) Predictors() map[string][]string {
+	m := make(map[string][]string)
+	for name, f := range fs.flags {
+		if name != f.Name || len(f.predictors) == 0 {
+			continue
+		}
+
+		m[name] = f.predictors
+
+		for _, alias := range f.aliases {
+			m[alias] = f.predictors
+		}
+	}
+
+	return m
+}
+
+// ---------------------------------------------------------------------------
+// Scalar flag registration (**T pointers, nullable)
+// ---------------------------------------------------------------------------
+
+// StringVar defines a string flag. Optional by default (nil if not set).
+func (fs *Set) StringVar(p **string, name string, usage string, args ...any) {
+	f := fs.register(name, usage, args)
+
+	setter := func(s string) error {
+		if err := f.validate(s); err != nil {
+			return err
+		}
+
+		s = f.transform(s)
+
+		*p = &s
+
+		return nil
+	}
+
+	fs.stdfs.Func(name, f.Usage, setter)
+	fs.registerAliases(f, setter)
+
+	setDefault(fs, f, p)
+	setEnvDefault(f, p)
+}
+
+// IntVar defines an int flag. Optional by default (nil if not set).
+func (fs *Set) IntVar(p **int, name string, usage string, args ...any) {
+	f := fs.register(name, usage, args)
+
+	setter := func(s string) error {
+		if err := f.validate(s); err != nil {
+			return err
+		}
+
+		v, err := strconv.ParseInt(s, 0, 0)
+		if err != nil {
+			return err
+		}
+
+		intVal := int(v)
+		*p = &intVal
+
+		return nil
+	}
+
+	fs.stdfs.Func(name, f.Usage, setter)
+	fs.registerAliases(f, setter)
+
+	setDefault(fs, f, p)
+	setEnvDefault(f, p)
+}
+
+// Int32Var defines an int32 flag. Optional by default (nil if not set).
+func (fs *Set) Int32Var(p **int32, name string, usage string, args ...any) {
+	f := fs.register(name, usage, args)
+
+	setter := func(s string) error {
+		if err := f.validate(s); err != nil {
+			return err
+		}
+
+		v, err := strconv.ParseInt(s, 0, 32)
+		if err != nil {
+			return err
+		}
+
+		v32 := int32(v)
+		*p = &v32
+
+		return nil
+	}
+
+	fs.stdfs.Func(name, f.Usage, setter)
+	fs.registerAliases(f, setter)
+
+	setDefault(fs, f, p)
+	setEnvDefault(f, p)
+}
+
+// Int64Var defines an int64 flag. Optional by default (nil if not set).
+func (fs *Set) Int64Var(p **int64, name string, usage string, args ...any) {
+	f := fs.register(name, usage, args)
+
+	setter := func(s string) error {
+		if err := f.validate(s); err != nil {
+			return err
+		}
+
+		v, err := strconv.ParseInt(s, 0, 64)
+		if err != nil {
+			return err
+		}
+
+		*p = &v
+
+		return nil
+	}
+
+	fs.stdfs.Func(name, f.Usage, setter)
+	fs.registerAliases(f, setter)
+
+	setDefault(fs, f, p)
+	setEnvDefault(f, p)
+}
+
+// BoolVar defines a bool flag. Optional by default (nil if not set).
+// Automatically predicts "true" and "false" for shell completion.
+func (fs *Set) BoolVar(p **bool, name string, usage string, args ...any) {
+	f := fs.register(name, usage, args)
+	f.predictors = []string{"true", "false"}
+
+	setter := func(s string) error {
+
+		v, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+
+		*p = &v
+
+		return nil
+	}
+
+	fs.stdfs.BoolFunc(name, f.Usage, setter)
+	for _, alias := range f.aliases {
+		fs.stdfs.BoolFunc(alias, f.Usage, setter)
+		fs.flags[alias] = f
+	}
+
+	setDefault(fs, f, p)
+	setEnvDefault(f, p)
+}
+
+// ---------------------------------------------------------------------------
+// Repeatable flag registration
+// ---------------------------------------------------------------------------
+
+// StringSliceVar defines a repeatable string flag that appends to a slice.
+func (fs *Set) StringSliceVar(p *[]string, name string, usage string, args ...any) {
+	f := fs.register(name, usage, args)
+	f.repeatable = true
+
+	setter := func(s string) error {
+		if err := f.validate(s); err != nil {
+			return err
+		}
+
+		s = f.transform(s)
+
+		*p = append(*p, s)
+
+		return nil
+	}
+
+	fs.stdfs.Func(name, f.Usage, setter)
+	fs.registerAliases(f, setter)
+}
+
+// MapVar defines a repeatable flag that parses key=value pairs into a map.
+func (fs *Set) MapVar(p *map[string]string, name string, usage string, args ...any) {
+	f := fs.register(name, usage, args)
+	f.repeatable = true
+
+	if *p == nil {
+		*p = make(map[string]string)
+	}
+
+	setter := func(s string) error {
+		if err := f.validate(s); err != nil {
+			return err
+		}
+
+		parts := strings.SplitN(s, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid format: %s (expected key=value)", s)
+		}
+
+		if parts[0] == "" {
+			return fmt.Errorf("key cannot be empty")
+		}
+
+		(*p)[parts[0]] = parts[1]
+
+		return nil
+	}
+
+	fs.stdfs.Func(name, f.Usage, setter)
+	fs.registerAliases(f, setter)
+}
+
+// ---------------------------------------------------------------------------
+// Parsing
+// ---------------------------------------------------------------------------
+
+// Parse parses the command-line flags and checks that all required flags were set.
+func (fs *Set) Parse(arguments []string) error {
+	if err := fs.stdfs.Parse(arguments); err != nil {
+		return err
+	}
+
+	seen := make(map[string]bool)
+	fs.stdfs.Visit(func(sf *stdflag.Flag) { seen[sf.Name] = true })
+
+	var missing []string
+	for name, f := range fs.flags {
+		if name == f.Name && f.required && !f.wasSet(seen) {
+			missing = append(missing, name)
+		}
+	}
+
+	if len(missing) == 1 {
+		return fmt.Errorf("flag %s is required", missing[0])
+	}
+
+	if len(missing) > 1 {
+		return fmt.Errorf("flags %s are required", strings.Join(missing, ", "))
+	}
+
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+// register creates a Flag, applies options, stores it, and returns it.
+func (fs *Set) register(name string, usage string, args []any) *Flag {
+	opts, formatArgs := extractOptions(args)
+
+	if len(formatArgs) > 0 {
+		usage = fmt.Sprintf(usage, formatArgs...)
+	}
+
+	f := &Flag{
+		Name:      name,
+		Usage:     usage,
+		transform: func(s string) string { return s },
+		validate:  func(string) error { return nil },
+	}
+	for _, opt := range opts {
+		opt(f)
+	}
+
+	// Specifying a default means the flag isn't required or vice-versa.
+	if f.required && f.defaultVal != nil {
+		panic(fmt.Sprintf("flag %s: cannot be both required and have a default", name))
+	}
+
+	// Deprecated flags should always be optional since they're being replaced by another.
+	if f.required && f.IsDeprecated() {
+		panic(fmt.Sprintf("flag %s: cannot be both required and deprecated", name))
+	}
+
+	fs.flags[name] = f
+
+	return f
+}
+
+// extractOptions separates FlagOptions from format args in a variadic slice.
+// Format args must come before FlagOptions. Panics if a non-FlagOption value
+// appears after a FlagOption.
+func extractOptions(args []any) ([]Option, []any) {
+	var opts []Option
+	var formatArgs []any
+
+	foundOption := false
+
+	for _, arg := range args {
+		if opt, ok := arg.(Option); ok {
+			opts = append(opts, opt)
+			foundOption = true
+		} else if foundOption {
+			panic(fmt.Sprintf("flags: format argument %v must come before FlagOptions", arg))
+		} else {
+			formatArgs = append(formatArgs, arg)
+		}
+	}
+
+	return opts, formatArgs
+}
+
+// setDefault applies the default value for the named flag to the pointer.
+// Called by each XxxVar after registration. Panics on type mismatch.
+func setDefault[T any](fs *Set, f *Flag, p **T) {
+	if f.defaultVal == nil {
+		return
+	}
+
+	v, ok := f.defaultVal.(T)
+	if !ok {
+		panic(fmt.Sprintf("flag %s: default value has type %T, expected %T", f.Name, f.defaultVal, *new(T)))
+	}
+
+	*p = &v
+
+	if sf := fs.stdfs.Lookup(f.Name); sf != nil {
+		sf.DefValue = fmt.Sprintf("%v", v)
+	}
+}
+
+// setEnvDefault reads the flag's env var (if configured) and applies it as a
+// fallback. It runs after setDefault so that env vars take precedence over
+// coded defaults but explicit flags still win (handled at parse time).
+func setEnvDefault[T any](f *Flag, p **T) {
+	if f.envVar == "" {
+		return
+	}
+
+	v, ok := os.LookupEnv(f.envVar)
+	if !ok || v == "" {
+		return
+	}
+
+	// Parse the env value into the target type via the stdlib flag Func
+	// registered for this flag. We reuse the same parsing by going through
+	// a temporary flag set — but it's simpler to just parse here directly.
+	var result any
+	var err error
+
+	switch any(*new(T)).(type) {
+	case string:
+		result = v
+	case int:
+		var n int64
+		n, err = strconv.ParseInt(v, 0, 0)
+		result = int(n)
+	case int32:
+		var n int64
+		n, err = strconv.ParseInt(v, 0, 32)
+		result = int32(n)
+	case int64:
+		result, err = strconv.ParseInt(v, 0, 64)
+	case bool:
+		result, err = strconv.ParseBool(v)
+	}
+
+	if err != nil {
+		return
+	}
+
+	typed, ok := result.(T)
+	if !ok {
+		return
+	}
+
+	*p = &typed
+}
+
+// registerAliases registers alternate names for a flag that delegate to the
+// same setter function.
+func (fs *Set) registerAliases(f *Flag, setter func(string) error) {
+	for _, alias := range f.aliases {
+		fs.stdfs.Func(alias, f.Usage, setter)
+		fs.flags[alias] = f
+	}
+}

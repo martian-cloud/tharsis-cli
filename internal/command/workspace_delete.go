@@ -1,11 +1,9 @@
 package command
 
 import (
-	"flag"
-	"strconv"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -14,7 +12,7 @@ type workspaceDeleteCommand struct {
 	*BaseCommand
 
 	version *int64
-	force   bool
+	force   *bool
 }
 
 var _ Command = (*workspaceDeleteCommand)(nil)
@@ -45,7 +43,7 @@ func (c *workspaceDeleteCommand) Run(args []string) int {
 		WithCommandName("workspace delete"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to delete this workspace?"),
+		WithForcePrompt(c.force, "Are you sure you want to delete this workspace?"),
 	); code != 0 {
 		return code
 	}
@@ -53,7 +51,7 @@ func (c *workspaceDeleteCommand) Run(args []string) int {
 	input := &pb.DeleteWorkspaceRequest{
 		Id:      trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 		Version: c.version,
-		Force:   &c.force,
+		Force:   c.force,
 	}
 
 	if _, err := c.grpcClient.WorkspacesClient.DeleteWorkspace(c.Context, input); err != nil {
@@ -85,29 +83,20 @@ func (*workspaceDeleteCommand) Description() string {
 
 func (*workspaceDeleteCommand) Example() string {
 	return `
-tharsis workspace delete --force trn:workspace:<workspace_path>
+tharsis workspace delete -force trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceDeleteCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *workspaceDeleteCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be deleted. "+
-			"In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Metadata version of the resource to be deleted. In most cases, this is not required.",
 	)
 	f.BoolVar(
 		&c.force,
 		"force",
-		false,
 		"Force the workspace to delete even if resources are deployed.",
 	)
 

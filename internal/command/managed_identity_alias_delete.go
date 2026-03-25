@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -12,7 +11,7 @@ import (
 type managedIdentityAliasDeleteCommand struct {
 	*BaseCommand
 
-	force bool
+	force *bool
 }
 
 var _ Command = (*managedIdentityAliasDeleteCommand)(nil)
@@ -43,14 +42,14 @@ func (c *managedIdentityAliasDeleteCommand) Run(args []string) int {
 		WithCommandName("managed-identity-alias delete"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to delete this managed identity alias?"),
+		WithForcePrompt(c.force, "Are you sure you want to delete this managed identity alias?"),
 	); code != 0 {
 		return code
 	}
 
 	input := &pb.DeleteManagedIdentityAliasRequest{
 		Id:    trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
-		Force: &c.force,
+		Force: c.force,
 	}
 
 	if _, err := c.grpcClient.ManagedIdentitiesClient.DeleteManagedIdentityAlias(c.Context, input); err != nil {
@@ -83,12 +82,11 @@ tharsis managed-identity-alias delete trn:managed_identity:<group_path>/<managed
 `
 }
 
-func (c *managedIdentityAliasDeleteCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *managedIdentityAliasDeleteCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.force,
 		"force",
-		false,
 		"Force delete the managed identity alias.",
 	)
 

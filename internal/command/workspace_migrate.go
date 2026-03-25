@@ -1,17 +1,16 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type workspaceMigrateCommand struct {
 	*BaseCommand
 
-	newGroupID string
-	toJSON     bool
+	newGroupID *string
+	toJSON     *bool
 }
 
 // NewWorkspaceMigrateCommandFactory returns a workspaceMigrateCommand struct.
@@ -30,7 +29,6 @@ func (c *workspaceMigrateCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.newGroupID, validation.Required),
 	)
 }
 
@@ -47,7 +45,7 @@ func (c *workspaceMigrateCommand) Run(args []string) int {
 
 	input := &pb.MigrateWorkspaceRequest{
 		WorkspaceId: c.arguments[0],
-		NewGroupId:  c.newGroupID,
+		NewGroupId:  *c.newGroupID,
 	}
 
 	workspace, err := c.grpcClient.WorkspacesClient.MigrateWorkspace(c.Context, input)
@@ -56,7 +54,7 @@ func (c *workspaceMigrateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputWorkspace(c.UI, c.toJSON, workspace)
+	return outputWorkspace(c.UI, *c.toJSON, workspace)
 }
 
 func (*workspaceMigrateCommand) Synopsis() string {
@@ -76,24 +74,24 @@ func (*workspaceMigrateCommand) Usage() string {
 func (*workspaceMigrateCommand) Example() string {
 	return `
 tharsis workspace migrate \
-  --new-group-id trn:group:<group_path> \
+  -new-group-id trn:group:<group_path> \
   trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceMigrateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceMigrateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.newGroupID,
 		"new-group-id",
-		"",
 		"New parent group ID.",
+		flag.Required(),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

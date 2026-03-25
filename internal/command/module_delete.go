@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -77,6 +76,6 @@ tharsis module delete trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 
-func (*moduleDeleteCommand) Flags() *flag.FlagSet {
+func (*moduleDeleteCommand) Flags() *flag.Set {
 	return nil
 }

@@ -2,11 +2,11 @@ package command
 
 import (
 	"errors"
-	"flag"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -17,7 +17,7 @@ type groupGetMembershipCommand struct {
 	serviceAccountID *string
 	teamID           *string
 	userID           *string
-	toJSON           bool
+	toJSON           *bool
 }
 
 // NewGroupGetMembershipCommandFactory returns a groupGetMembershipCommand struct.
@@ -133,7 +133,7 @@ func (c *groupGetMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputMembership(c.UI, c.toJSON, foundMembership)
+	return outputMembership(c.UI, *c.toJSON, foundMembership)
 }
 
 func (*groupGetMembershipCommand) Synopsis() string {
@@ -153,58 +153,51 @@ func (*groupGetMembershipCommand) Usage() string {
 func (*groupGetMembershipCommand) Example() string {
 	return `
 tharsis group get-membership \
-  --user-id trn:user:<username> \
+  -user-id trn:user:<username> \
   trn:group:<group_path>
 `
 }
 
-func (c *groupGetMembershipCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupGetMembershipCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
-	f.Func(
+	f.StringVar(
+		&c.serviceAccountID,
 		"service-account-id",
 		"Service account ID to find the group membership for.",
-		func(s string) error {
-			c.serviceAccountID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.userID,
 		"user-id",
 		"User ID to find the group membership for.",
-		func(s string) error {
-			c.userID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.teamID,
 		"team-id",
-		"Team ID to find the group membership for. Deprecated",
-		func(s string) error {
-			c.teamID = &s
-			return nil
-		},
+		"Team ID to find the group membership for.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.userID,
 		"username",
-		"Username to find the group membership for. Deprecated",
-		func(s string) error {
-			c.userID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeUser, s))
-			return nil
-		},
+		"Username to find the group membership for.",
+		flag.Deprecated("use -user-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeUser, s)
+		}),
 	)
-	f.Func(
+	f.StringVar(
+		&c.teamID,
 		"team-name",
-		"Team name to find the group membership for. Deprecated",
-		func(s string) error {
-			c.teamID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeTeam, s))
-			return nil
-		},
+		"Team name to find the group membership for.",
+		flag.Deprecated("use -team-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeTeam, s)
+		}),
 	)
 
 	return f

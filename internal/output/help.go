@@ -3,7 +3,6 @@ package output
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"regexp"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/fatih/color"
 	"github.com/kr/text"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 var (
@@ -25,143 +25,260 @@ type CommandHelpInfo struct {
 	ProductName string
 	Usage       string
 	Description string
-	Flags       *flag.FlagSet
-	FlagsTitle  string // Title for flags section (default: "Command options:")
+	Flags       *flag.Set
 	Example     string
 }
 
+// helpBuilder assembles and colorizes command help text.
+type helpBuilder struct {
+	info      CommandHelpInfo
+	bold      *color.Color
+	highlight *color.Color
+	warn      *color.Color
+	danger    *color.Color
+}
+
 // CommandHelp builds and formats help text for a command with syntax highlighting.
-// It assembles usage, description, flags, and example sections, then applies color
-// highlighting to headers, flags, and command references.
 func CommandHelp(info CommandHelpInfo) string {
+	h := &helpBuilder{
+		info:      info,
+		bold:      color.New(color.Bold),
+		highlight: color.New(color.FgHiGreen),
+		warn:      color.New(color.FgYellow),
+		danger:    color.New(color.FgRed),
+	}
+
 	var buf bytes.Buffer
-	bold := color.New(color.Bold)
-	highlightColor := color.New(color.FgHiGreen)
+	h.writeUsage(&buf)
+	h.writeDescription(&buf)
+	h.writeFlags(&buf)
+	h.writeExample(&buf)
 
-	// Build help sections
-	buf.WriteString("\n" + strings.TrimSpace(info.Usage) + "\n")
+	return h.colorize(buf.String())
+}
 
-	if desc := strings.TrimSpace(info.Description); desc != "" {
-		buf.WriteString("\n" + highlightCode(desc, info.ProductName) + "\n")
+func (h *helpBuilder) writeUsage(buf *bytes.Buffer) {
+	buf.WriteString("\n" + strings.TrimSpace(h.info.Usage) + "\n")
+}
+
+func (h *helpBuilder) writeDescription(buf *bytes.Buffer) {
+	if desc := strings.TrimSpace(h.info.Description); desc != "" {
+		buf.WriteString("\n" + highlightCode(desc, h.info.ProductName) + "\n")
+	}
+}
+
+func (h *helpBuilder) writeFlags(buf *bytes.Buffer) {
+	if h.info.Flags == nil {
+		return
 	}
 
-	if info.Flags != nil {
-		flagsTitle := info.FlagsTitle
-		if flagsTitle == "" {
-			flagsTitle = "Command options:"
+	title := h.info.Flags.Name() + ":"
+
+	buf.WriteString("\n" + h.bold.Sprint(title) + "\n")
+
+	var optBuf bytes.Buffer
+	w := tabwriter.NewWriter(&optBuf, 0, 80, 0, ' ', 0)
+
+	h.info.Flags.VisitAll(func(f *flag.Flag) {
+		names := h.flagNames(f)
+		usage := h.indentUsage(f.Usage)
+		meta := h.flagMeta(f)
+
+		fmt.Fprintf(w, "  %s\n%s\n", names, usage)
+		for _, line := range meta {
+			fmt.Fprintf(w, "      %s\n", line)
 		}
-		buf.WriteString("\n" + bold.Sprint(flagsTitle) + "\n")
-		var optionsBuf bytes.Buffer
-		writer := tabwriter.NewWriter(&optionsBuf, 0, 80, 0, ' ', 0)
-		info.Flags.VisitAll(func(f *flag.Flag) {
-			var defValue string
-			if f.DefValue != "" {
-				defValue = fmt.Sprintf("(default %s)", bold.Sprint(f.DefValue))
-			}
-			wrapped := text.Wrap(f.Usage, 70)
-			lines := strings.Split(wrapped, "\n")
-			for i, line := range lines {
-				lines[i] = strings.Repeat(" ", 6) + line
-			}
-			fmt.Fprintf(writer, "  %s %s\n\t%s\n", highlightColor.Sprintf("-%s", f.Name), defValue, strings.Join(lines, "\n"))
-		})
-		writer.Flush()
-		buf.WriteString(optionsBuf.String())
+		fmt.Fprintln(w)
+	})
+
+	w.Flush()
+	buf.WriteString(optBuf.String())
+}
+
+// flagNames formats the primary name and aliases: -name*, -n
+// Required flags get a red * suffix via Flag.Marker().
+func (h *helpBuilder) flagNames(f *flag.Flag) string {
+	var b strings.Builder
+	b.WriteString(h.highlight.Sprintf("-%s", f.Name))
+
+	for _, a := range f.Aliases() {
+		b.WriteString(", ")
+		b.WriteString(h.highlight.Sprintf("-%s", a))
 	}
 
-	if example := strings.TrimSuffix(strings.TrimPrefix(info.Example, "\n"), "\n"); example != "" {
-		buf.WriteString("\n" + bold.Sprint("Example:") + "\n" + highlightCode(example, info.ProductName) + "\n\n")
+	termColors := map[string]*color.Color{
+		"red":    h.danger,
+		"orange": h.warn,
+		"green":  h.highlight,
 	}
 
-	// Apply syntax highlighting line by line
-	v := strings.TrimSpace(buf.String())
-	buf.Reset()
+	for _, m := range f.Markers() {
+		b.WriteByte(' ')
+		if c, ok := termColors[m.Color()]; ok {
+			b.WriteString(c.Sprint(m))
+		} else {
+			b.WriteString(m.String())
+		}
+	}
+
+	return b.String()
+}
+
+// flagMeta builds metadata lines shown below the usage text.
+func (h *helpBuilder) flagMeta(f *flag.Flag) []string {
+	var lines []string
+
+	if vals := f.ValidValues(); len(vals) > 0 {
+		lines = append(lines, fmt.Sprintf("%s %s", h.bold.Sprint("Values:"), strings.Join(vals, ", ")))
+	}
+
+	if f.DefValue() != "" {
+		lines = append(lines, fmt.Sprintf("%s %s", h.bold.Sprint("Default:"), f.DefValue()))
+	}
+
+	if f.IsDeprecated() {
+		msg := h.bold.Sprint("Deprecated")
+		if f.DeprecationMessage() != "" {
+			msg += ": " + f.DeprecationMessage()
+		}
+		lines = append(lines, msg)
+	}
+
+	if env := f.EnvVar(); env != "" {
+		lines = append(lines, fmt.Sprintf("Env: %s", h.bold.Sprint(env)))
+	}
+
+	return lines
+}
+
+func (h *helpBuilder) indentUsage(usage string) string {
+	var b strings.Builder
+	first := true
+	for line := range strings.SplitSeq(text.Wrap(usage, 70), "\n") {
+		if !first {
+			b.WriteByte('\n')
+		}
+		b.WriteString(strings.Repeat(" ", 6))
+		b.WriteString(line)
+		first = false
+	}
+
+	return b.String()
+}
+
+func (h *helpBuilder) writeExample(buf *bytes.Buffer) {
+	example := strings.TrimSuffix(strings.TrimPrefix(h.info.Example, "\n"), "\n")
+	if example == "" {
+		return
+	}
+
+	buf.WriteString("\n" + h.bold.Sprint("Example:") + "\n" + highlightCode(example, h.info.ProductName) + "\n\n")
+}
+
+// colorize applies line-level syntax highlighting to the assembled help text.
+func (h *helpBuilder) colorize(raw string) string {
+	v := strings.TrimSpace(raw)
+	var buf bytes.Buffer
 
 	seenHeader := false
-	productPrefix := info.ProductName + " "
-	for _, line := range strings.Split(v, "\n") {
-		// Highlight product name at start of usage line
-		if info.ProductName != "" && strings.HasPrefix(line, productPrefix) {
-			buf.WriteString(highlightColor.Sprint(info.ProductName))
-			buf.WriteString(line[len(info.ProductName):])
-			buf.WriteString("\n")
-			continue
-		}
+	productPrefix := h.info.ProductName + " "
 
-		// Highlight "Usage:" prefix
-		if strings.HasPrefix(line, "Usage: ") {
-			buf.WriteString(highlightColor.Sprint("Usage: "))
+	for line := range strings.SplitSeq(v, "\n") {
+		switch {
+		case h.info.ProductName != "" && strings.HasPrefix(line, productPrefix):
+			buf.WriteString(h.highlight.Sprint(h.info.ProductName))
+			buf.WriteString(line[len(h.info.ProductName):])
+
+		case strings.HasPrefix(line, "Usage: "):
+			buf.WriteString(h.highlight.Sprint("Usage: "))
 			buf.WriteString(line[7:])
-			buf.WriteString("\n")
-			continue
-		}
 
-		// Bold section headers like "Commands:" or "Options:"
-		if reHelpHeader.MatchString(line) {
+		case reHelpHeader.MatchString(line):
 			seenHeader = true
-			buf.WriteString(bold.Sprint(line))
-			buf.WriteString("\n")
-			continue
-		}
+			buf.WriteString(h.bold.Sprint(line))
 
-		// Highlight quoted command references like "product run"
-		if info.ProductName != "" {
-			reHelpCmd := regexp.MustCompile(`"` + regexp.QuoteMeta(info.ProductName) + ` (\w\s?)+"`)
-			if matches := reHelpCmd.FindAllStringIndex(line, -1); len(matches) > 0 {
-				idx := 0
-				for _, match := range matches {
-					buf.WriteString(line[idx : match[0]+1])
-					buf.WriteString(highlightColor.Sprint(line[match[0]+1 : match[1]-1]))
-					idx = match[1] - 1
+		default:
+			if h.info.ProductName != "" {
+				if s, ok := h.colorizeCmdRefs(line); ok {
+					buf.WriteString(s)
+					break
 				}
-				buf.WriteString(line[idx:])
-				buf.WriteString("\n")
-				continue
 			}
-		}
 
-		// Highlight flags (only before first header to avoid coloring subcommand descriptions)
-		if !seenHeader {
-			if matches := reHelpFlag.FindAllStringSubmatchIndex(line, -1); len(matches) > 0 {
-				idx := 0
-				for _, match := range matches {
-					start, end := match[4], match[5]
-					buf.WriteString(line[idx:start])
-					buf.WriteString(highlightColor.Sprint(line[start:end]))
-					idx = end
+			if !seenHeader {
+				if s, ok := h.colorizeFlags(line); ok {
+					buf.WriteString(s)
+					break
 				}
-				buf.WriteString(line[idx:])
-				buf.WriteString("\n")
-				continue
 			}
+
+			buf.WriteString(line)
 		}
 
-		buf.WriteString(line)
-		buf.WriteString("\n")
+		buf.WriteByte('\n')
 	}
 
 	return strings.TrimSuffix(buf.String(), "\n")
 }
 
+// colorizeCmdRefs highlights quoted command references like "product run".
+func (h *helpBuilder) colorizeCmdRefs(line string) (string, bool) {
+	re := regexp.MustCompile(`"` + regexp.QuoteMeta(h.info.ProductName) + ` (\w\s?)+"`)
+	matches := re.FindAllStringIndex(line, -1)
+	if len(matches) == 0 {
+		return "", false
+	}
+
+	var buf strings.Builder
+	idx := 0
+	for _, m := range matches {
+		buf.WriteString(line[idx : m[0]+1])
+		buf.WriteString(h.highlight.Sprint(line[m[0]+1 : m[1]-1]))
+		idx = m[1] - 1
+	}
+
+	buf.WriteString(line[idx:])
+
+	return buf.String(), true
+}
+
+// colorizeFlags highlights -flag tokens in lines before the first header.
+func (h *helpBuilder) colorizeFlags(line string) (string, bool) {
+	matches := reHelpFlag.FindAllStringSubmatchIndex(line, -1)
+	if len(matches) == 0 {
+		return "", false
+	}
+
+	var buf strings.Builder
+	idx := 0
+	for _, m := range matches {
+		start, end := m[4], m[5]
+		buf.WriteString(line[idx:start])
+		buf.WriteString(h.highlight.Sprint(line[start:end]))
+		idx = end
+	}
+
+	buf.WriteString(line[idx:])
+
+	return buf.String(), true
+}
+
 // highlightCode applies syntax highlighting to code blocks and shell commands.
 func highlightCode(s, productName string) string {
-	// Check for explicit code blocks
 	if reCodeBlock.MatchString(s) {
 		return reCodeBlock.ReplaceAllStringFunc(s, func(match string) string {
 			parts := reCodeBlock.FindStringSubmatch(match)
 			if len(parts) < 4 || parts[2] == "" {
-				return parts[3] // return code without markers if no language
+				return parts[3]
 			}
+
 			return highlight(parts[3], parts[2])
 		})
 	}
 
-	// Auto-detect shell commands in examples
 	s = strings.TrimSpace(s)
-	if productName != "" {
-		if strings.HasPrefix(s, productName+" ") || strings.HasPrefix(s, "./"+productName+" ") {
-			return highlight(s, "bash")
-		}
+	if productName != "" && (strings.HasPrefix(s, productName+" ") || strings.HasPrefix(s, "./"+productName+" ")) {
+		return highlight(s, "bash")
 	}
 
 	return s
@@ -176,5 +293,6 @@ func highlight(code, lang string) string {
 	if err := quick.Highlight(&buf, strings.TrimSpace(code), lang, "terminal16m", "monokai"); err != nil {
 		return code
 	}
+
 	return strings.TrimSpace(buf.String())
 }

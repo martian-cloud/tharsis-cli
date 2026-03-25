@@ -1,7 +1,6 @@
 package command
 
 import (
-	"flag"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +12,7 @@ import (
 	tfaddr "github.com/hashicorp/terraform-registry-address"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/provider"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
@@ -32,8 +32,8 @@ type terraformProviderMirrorSyncCommand struct {
 	*BaseCommand
 
 	sg        terminal.StepGroup
-	groupID   string
-	version   string
+	groupID   *string
+	version   *string
 	platforms []string
 }
 
@@ -44,7 +44,7 @@ func (c *terraformProviderMirrorSyncCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.groupID, validation.Required),
+		validation.Field(&c.groupID, validation.Required, validation.NotNil),
 	)
 }
 
@@ -140,13 +140,13 @@ func (c *terraformProviderMirrorSyncCommand) connectToRegistry() (conn *registry
 }
 
 func (c *terraformProviderMirrorSyncCommand) resolveVersion(registry *registryConnection) (err error) {
-	if c.version != "" {
+	if c.version != nil {
 		// Normalize partial versions (e.g., 6.31 -> 6.31.0).
-		parsed, err := versions.ParseVersion(c.version)
+		parsed, err := versions.ParseVersion(*c.version)
 		if err != nil {
 			return err
 		}
-		c.version = parsed.String()
+		*c.version = parsed.String()
 
 		return nil
 	}
@@ -159,8 +159,8 @@ func (c *terraformProviderMirrorSyncCommand) resolveVersion(registry *registryCo
 		return err
 	}
 
-	c.version = version
-	step.Update("Find latest version (%s)", c.version)
+	c.version = &version
+	step.Update("Find latest version (%s)", *c.version)
 
 	return nil
 }
@@ -170,7 +170,7 @@ func (c *terraformProviderMirrorSyncCommand) getOrCreateVersionMirror(registry *
 	defer func() { c.finalizeStep(step, err) }()
 
 	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{
-		Id: c.groupID,
+		Id: *c.groupID,
 	})
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func (c *terraformProviderMirrorSyncCommand) getOrCreateVersionMirror(registry *
 		registry.provider.Hostname,
 		registry.provider.Namespace,
 		registry.provider.Type,
-		c.version,
+		*c.version,
 	)
 
 	versionMirror, err = c.grpcClient.TerraformProviderMirrorsClient.GetTerraformProviderVersionMirrorByID(c.Context, &pb.GetTerraformProviderVersionMirrorByIDRequest{
@@ -203,7 +203,7 @@ func (c *terraformProviderMirrorSyncCommand) getOrCreateVersionMirror(registry *
 		Type:              registry.provider.Type,
 		RegistryNamespace: registry.provider.Namespace,
 		RegistryHostname:  registry.provider.Hostname,
-		SemanticVersion:   c.version,
+		SemanticVersion:   *c.version,
 		RegistryToken:     registry.token,
 	})
 
@@ -265,7 +265,7 @@ func (c *terraformProviderMirrorSyncCommand) uploadPlatform(tfeClient tfe.RESTCl
 	}
 	os, arch := parts[0], parts[1]
 
-	packageInfo, err := registry.client.GetPackageInfo(c.Context, registry.provider, c.version, os, arch, registry.requestOpts...)
+	packageInfo, err := registry.client.GetPackageInfo(c.Context, registry.provider, *c.version, os, arch, registry.requestOpts...)
 	if err != nil {
 		return err
 	}
@@ -445,45 +445,39 @@ func (*terraformProviderMirrorSyncCommand) Usage() string {
 func (*terraformProviderMirrorSyncCommand) Example() string {
 	return `
 tharsis terraform-provider-mirror sync \
-  --group-id my-group \
-  --version 1.0.0 \
-  --platform linux_amd64 \
+  -group-id my-group \
+  -version 1.0.0 \
+  -platform linux_amd64 \
   hashicorp/aws
 `
 }
 
-func (c *terraformProviderMirrorSyncCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *terraformProviderMirrorSyncCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.groupID,
 		"group-id",
-		"",
 		"The ID of the root group to create the mirror in.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.groupID,
 		"group-path",
-		"Full path to the root group where this Terraform provider version will be mirrored. Deprecated.",
-		func(s string) error {
-			c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, s)
-			return nil
-		},
+		"Full path to the root group where this Terraform provider version will be mirrored.",
+		flag.Deprecated("use -group-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+		}),
 	)
 	f.StringVar(
 		&c.version,
 		"version",
-		"",
 		"The provider version to sync. If not specified, uses the latest version.",
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.platforms,
 		"platform",
-		"Platform to sync (format: os_arch). Can be specified multiple times. If not specified, syncs all platforms.",
-		func(s string) error {
-			if len(strings.Split(s, "_")) != 2 {
-				return fmt.Errorf("invalid platform format, must be os_arch")
-			}
-			c.platforms = append(c.platforms, s)
-			return nil
-		},
+		"Platform to sync (format: os_arch). If not specified, syncs all platforms.",
 	)
+
 	return f
 }

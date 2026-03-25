@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
-
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -13,7 +12,7 @@ import (
 type workspaceListMembershipsCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 // NewWorkspaceListMembershipsCommandFactory returns a workspaceListMembershipsCommand struct.
@@ -51,7 +50,7 @@ func (c *workspaceListMembershipsCommand) Run(args []string) int {
 		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	})
 	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to get group")
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
@@ -65,7 +64,7 @@ func (c *workspaceListMembershipsCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(result); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
@@ -110,13 +109,13 @@ tharsis workspace list-memberships trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceListMembershipsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceListMembershipsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

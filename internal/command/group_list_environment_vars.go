@@ -1,19 +1,19 @@
 package command
 
 import (
-	"flag"
 	"time"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type groupListEnvironmentVarsCommand struct {
 	*BaseCommand
 
-	showSensitive bool
-	toJSON        bool
+	showSensitive *bool
+	toJSON        *bool
 }
 
 // NewGroupListEnvironmentVarsCommandFactory returns a groupListEnvironmentVarsCommand struct.
@@ -62,11 +62,11 @@ func (c *groupListEnvironmentVarsCommand) Run(args []string) int {
 		return 1
 	}
 
-	// Filter to only environment variables
+	// Filter to only environment variables.
 	var environmentVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
 		if v.Category == pb.VariableCategory_environment.String() {
-			if v.Sensitive && !c.showSensitive {
+			if v.Sensitive && !*c.showSensitive {
 				v.Value = ptr.String("[SENSITIVE]")
 			}
 
@@ -74,8 +74,8 @@ func (c *groupListEnvironmentVarsCommand) Run(args []string) int {
 		}
 	}
 
-	// Fetch sensitive values if requested
-	if c.showSensitive {
+	// Fetch sensitive values if requested.
+	if *c.showSensitive {
 		for _, v := range environmentVars {
 			if v.Sensitive && v.LatestVersionId != "" {
 				versionInput := &pb.GetNamespaceVariableVersionByIDRequest{
@@ -90,13 +90,13 @@ func (c *groupListEnvironmentVarsCommand) Run(args []string) int {
 				}
 
 				v.Value = version.Value
-				// Rate limit to avoid overwhelming the API
+				// Rate limit to avoid overwhelming the API.
 				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, c.toJSON, environmentVars)
+	return outputNamespaceVariables(c.UI, *c.toJSON, environmentVars)
 }
 
 func (*groupListEnvironmentVarsCommand) Synopsis() string {
@@ -116,23 +116,23 @@ func (*groupListEnvironmentVarsCommand) Usage() string {
 
 func (*groupListEnvironmentVarsCommand) Example() string {
 	return `
-tharsis group list-environment-vars --show-sensitive trn:group:<group_path>
+tharsis group list-environment-vars -show-sensitive trn:group:<group_path>
 `
 }
 
-func (c *groupListEnvironmentVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupListEnvironmentVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.showSensitive,
 		"show-sensitive",
-		false,
 		"Show the actual values of sensitive variables (requires appropriate permissions).",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

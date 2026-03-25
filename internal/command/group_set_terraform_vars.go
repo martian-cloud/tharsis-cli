@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
@@ -31,7 +30,6 @@ func (c *groupSetTerraformVarsCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.tfVarFiles, validation.Required),
 	)
 }
 
@@ -102,20 +100,18 @@ func (*groupSetTerraformVarsCommand) Usage() string {
 func (*groupSetTerraformVarsCommand) Example() string {
 	return `
 tharsis group set-terraform-vars \
-  --tf-var-file terraform.tfvars \
+  -tf-var-file terraform.tfvars \
   trn:group:<group_path>
 `
 }
 
-func (c *groupSetTerraformVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *groupSetTerraformVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringSliceVar(
+		&c.tfVarFiles,
 		"tf-var-file",
-		"Path to a .tfvars file (can be specified multiple times).",
-		func(s string) error {
-			c.tfVarFiles = append(c.tfVarFiles, s)
-			return nil
-		},
+		"Path to a .tfvars file.",
+		flag.Required(),
 	)
 
 	return f
