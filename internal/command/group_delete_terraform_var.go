@@ -1,131 +1,115 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// groupDeleteTerraformVarCommand is the top-level structure for the group delete-terraform-var command.
 type groupDeleteTerraformVarCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	key     string
+	version *int64
 }
 
 // NewGroupDeleteTerraformVarCommandFactory returns a groupDeleteTerraformVarCommand struct.
-func NewGroupDeleteTerraformVarCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupDeleteTerraformVarCommand{
-			meta: meta,
+func NewGroupDeleteTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupDeleteTerraformVarCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (gdv groupDeleteTerraformVarCommand) Run(args []string) int {
-	gdv.meta.Logger.Debugf("Starting the 'group delete-terraform-var' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		gdv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := gdv.meta.GetSDKClient()
-	if err != nil {
-		gdv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return gdv.doGroupDeleteTerraformVar(ctx, client, args)
+func (c *groupDeleteTerraformVarCommand) validate() error {
+	const message = "group-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.key, validation.Required),
+	)
 }
 
-func (gdv groupDeleteTerraformVarCommand) doGroupDeleteTerraformVar(ctx context.Context, client *tharsis.Client, opts []string) int {
-	gdv.meta.Logger.Debugf("will do group delete-terraform-var, %d opts", len(opts))
+func (c *groupDeleteTerraformVarCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group delete-terraform-var"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := gdv.buildGroupDeleteTerraformVarDefs()
-
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(gdv.meta.BinaryName+" group delete-terraform-var", defs, opts)
+	// Get group to retrieve full path
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0])})
 	if err != nil {
-		gdv.meta.Logger.Error(output.FormatError("failed to parse group delete-terraform-var options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		gdv.meta.Logger.Error(output.FormatError("missing group delete-terraform-var group path", nil), gdv.HelpGroupDeleteTerraformVar())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group delete-terraform-var arguments: %s", cmdArgs)
-		gdv.meta.Logger.Error(output.FormatError(msg, nil), gdv.HelpGroupDeleteTerraformVar())
+		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
 	}
 
-	namespacePath := cmdArgs[0]
-	key := getOption("key", "", cmdOpts)[0]
+	deleteInput := &pb.DeleteNamespaceVariableRequest{
+		Id:      trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), c.key),
+		Version: c.version,
+	}
 
-	if key == "" {
-		gdv.meta.Logger.Error(output.FormatError("missing required --key option", nil), gdv.HelpGroupDeleteTerraformVar())
+	if _, err = c.grpcClient.NamespaceVariablesClient.DeleteNamespaceVariable(c.Context, deleteInput); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to delete terraform variable")
 		return 1
 	}
 
-	actualPath := trn.ToPath(namespacePath)
-	if !isNamespacePathValid(gdv.meta, actualPath) {
-		return 1
-	}
-
-	if _, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{
-		Path: &actualPath, // Use extracted path, not original namespacePath
-	}); err != nil {
-		gdv.meta.Logger.Error(output.FormatError("failed to get group", err))
-		return 1
-	}
-
-	input := &sdktypes.DeleteNamespaceVariableInput{
-		ID: trn.NewResourceTRN(trn.ResourceTypeVariable, actualPath, string(sdktypes.TerraformVariableCategory), key), // Use extracted path
-	}
-
-	gdv.meta.Logger.Debugf("group delete-terraform-var input: %#v", input)
-
-	err = client.Variable.DeleteVariable(ctx, input)
-	if err != nil {
-		gdv.meta.Logger.Error(output.FormatError("failed to delete group variable", err))
-		return 1
-	}
-
-	gdv.meta.UI.Output(fmt.Sprintf("Terraform variable '%s' deleted successfully from group %s", key, namespacePath))
+	c.UI.Successf("Terraform variable deleted successfully!")
 	return 0
 }
 
-func (gdv groupDeleteTerraformVarCommand) buildGroupDeleteTerraformVarDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"key": {
-			Arguments: []string{"Variable_Key"},
-			Synopsis:  "The key/name of the terraform variable to delete.",
-			Required:  true,
+func (*groupDeleteTerraformVarCommand) Synopsis() string {
+	return "Delete a terraform variable from a group."
+}
+
+func (*groupDeleteTerraformVarCommand) Description() string {
+	return `
+   The group delete-terraform-var command deletes a terraform variable from a group.
+`
+}
+
+func (*groupDeleteTerraformVarCommand) Usage() string {
+	return "tharsis [global options] group delete-terraform-var [options] <group-id>"
+}
+
+func (*groupDeleteTerraformVarCommand) Example() string {
+	return `
+tharsis group delete-terraform-var \
+  --key region \
+  trn:group:<group_path>
+`
+}
+
+func (c *groupDeleteTerraformVarCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.key,
+		"key",
+		"",
+		"Variable key.",
+	)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be deleted. In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
 		},
-	}
-}
+	)
 
-func (gdv groupDeleteTerraformVarCommand) Synopsis() string {
-	return "Delete a single terraform variable from a group."
-}
-
-func (gdv groupDeleteTerraformVarCommand) Help() string {
-	return gdv.HelpGroupDeleteTerraformVar()
-}
-
-// HelpGroupDeleteTerraformVar produces the help string for the 'group delete-terraform-var' command.
-func (gdv groupDeleteTerraformVarCommand) HelpGroupDeleteTerraformVar() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group delete-terraform-var [options] <group>
-
-   The group delete-terraform-var command deletes a single terraform
-   variable from a group.
-
-%s
-
-`, gdv.meta.BinaryName, buildHelpText(gdv.buildGroupDeleteTerraformVarDefs()))
+	return f
 }

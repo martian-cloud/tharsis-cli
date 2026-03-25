@@ -1,189 +1,189 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // moduleCreateCommand is the top-level structure for the module create command.
 type moduleCreateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	groupID       string
+	repositoryURL string
+	private       bool
+	toJSON        bool
+	ifNotExists   bool
+}
+
+var _ Command = (*moduleCreateCommand)(nil)
+
+func (c *moduleCreateCommand) validate() error {
+	const message = "module-name/system is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewModuleCreateCommandFactory returns a moduleCreateCommand struct.
-func NewModuleCreateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleCreateCommand{
-			meta: meta,
+func NewModuleCreateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleCreateCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (mcc moduleCreateCommand) Run(args []string) int {
-	mcc.meta.Logger.Debugf("Starting the 'module create' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		mcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *moduleCreateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("module create"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := mcc.meta.GetSDKClient()
-	if err != nil {
-		mcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+	moduleArg := c.arguments[0]
+
+	// Parse module-name/system
+	parts := strings.Split(moduleArg, "/")
+	var name, system string
+	switch len(parts) {
+	case 1:
+		c.UI.Errorf("argument must be in format: module-name/system or group-path/module-name/system")
 		return 1
+	case 2:
+		if c.groupID == "" {
+			c.UI.Errorf("group-id is required when supplying just the module-name/system in the argument")
+			return 1
+		}
+		name = parts[0]
+		system = parts[1]
+	default:
+		if c.groupID != "" {
+			c.UI.Errorf("group-id should not be supplied when supplying just the module path in the argument")
+			return 1
+		}
+
+		// Handle deprecated syntax by extracting name, system, and group path.
+		system = parts[len(parts)-1]
+		name = parts[len(parts)-2]
+		groupPath := strings.Join(parts[:len(parts)-2], "/")
+		c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, groupPath)
 	}
 
-	ctx := context.Background()
+	if c.ifNotExists {
+		c.Logger.Debug("getting parent group", "value", c.groupID)
 
-	return mcc.doModuleCreate(ctx, client, args)
-}
+		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.groupID})
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get group")
+			return 1
+		}
 
-func (mcc moduleCreateCommand) doModuleCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	mcc.meta.Logger.Debugf("will do module create, %d opts", len(opts))
+		checkID := trn.NewResourceTRN(trn.ResourceTypeTerraformModule, group.FullPath, name, system)
+		c.Logger.Debug("checking if module exists", "value", checkID)
 
-	defs := buildSharedModuleDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(mcc.meta.BinaryName+" module create", defs, opts)
-	if err != nil {
-		mcc.meta.Logger.Error(output.FormatError("failed to parse module create options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		mcc.meta.Logger.Error(output.FormatError("missing module create path", nil), mcc.HelpModuleCreate())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module create arguments: %s", cmdArgs)
-		mcc.meta.Logger.Error(output.FormatError(msg, nil), mcc.HelpModuleCreate())
-		return 1
-	}
-
-	modulePath := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
-	private, err := getBoolOptionValue("private", "true", cmdOpts)
-	if err != nil {
-		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	ifNotExists, err := getBoolOptionValue("if-not-exists", "false", cmdOpts)
-	if err != nil {
-		mcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(modulePath)
-	if !isResourcePathValid(mcc.meta, actualPath) {
-		return 1
-	}
-
-	if ifNotExists {
-		module, gErr := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{
-			Path: &modulePath,
-		})
-		if gErr != nil && !tharsis.IsNotFoundError(gErr) {
-			mcc.meta.Logger.Error(output.FormatError("failed to get module", gErr))
+		module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{Id: checkID})
+		if err != nil && status.Code(err) != codes.NotFound {
+			c.UI.ErrorWithSummary(err, "failed to check module")
 			return 1
 		}
 
 		if module != nil {
-			return outputModule(mcc.meta, toJSON, module)
+			c.Logger.Debug("module already exists, returning existing module")
+			return outputModule(c.UI, c.toJSON, module)
 		}
 	}
 
-	// Create module
-	pathParts := strings.Split(modulePath, "/")
-	if len(pathParts) < 3 {
-		mcc.meta.Logger.Error(output.FormatError("resource path is not valid", nil))
-		return 1
+	input := &pb.CreateTerraformModuleRequest{
+		Name:          name,
+		System:        system,
+		GroupId:       c.groupID,
+		RepositoryUrl: c.repositoryURL,
+		Private:       c.private,
 	}
 
-	input := &sdktypes.CreateTerraformModuleInput{
-		GroupPath:     strings.Join(pathParts[:len(pathParts)-2], "/"),
-		Name:          pathParts[len(pathParts)-2],
-		System:        pathParts[len(pathParts)-1],
-		Private:       private,
-		RepositoryURL: repositoryURL,
-	}
-	mcc.meta.Logger.Debugf("module create input: %#v", input)
-
-	module, err := client.TerraformModule.CreateModule(ctx, input)
+	createdModule, err := c.grpcClient.TerraformModulesClient.CreateTerraformModule(c.Context, input)
 	if err != nil {
-		mcc.meta.UI.Error(output.FormatError("failed to create module", err))
+		c.UI.ErrorWithSummary(err, "failed to create a module")
 		return 1
 	}
 
-	return outputModule(mcc.meta, toJSON, module)
+	return outputModule(c.UI, c.toJSON, createdModule)
 }
 
-// outputModule is the final output for most module operations.
-func outputModule(meta *Metadata, toJSON bool, module *sdktypes.TerraformModule) int {
-	if toJSON {
-		buf, err := objectToJSON(module)
-		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
-			return 1
-		}
-		meta.UI.Output(string(buf))
-	} else {
-		tableInput := [][]string{
-			{"id", "name", "resource path", "private", "repository url"},
-			{module.Metadata.ID, module.Name, module.ResourcePath, fmt.Sprintf("%t", module.Private), module.RepositoryURL},
-		}
-		meta.UI.Output(tableformatter.FormatTable(tableInput))
-	}
-
-	return 0
+func (*moduleCreateCommand) Synopsis() string {
+	return "Create a new Terraform module."
 }
 
-// buildSharedModuleDefs returns defs used by module create command.
-func buildSharedModuleDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"private": {
-			Arguments: []string{"Private"},
-			Synopsis:  "Set private to false to allow all groups to view and use the module (default=true).",
-		},
-		"repository-url": {
-			Arguments: []string{"Repository_URL"},
-			Synopsis:  "The repository URL for this module.",
-		},
-		"if-not-exists": {
-			Arguments: []string{},
-			Synopsis:  "Create a module if it does not already exist.",
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
+func (*moduleCreateCommand) Usage() string {
+	return "tharsis [global options] module create [options] <module-name/system>"
 }
 
-func (mcc moduleCreateCommand) Synopsis() string {
-	return "Create a new module."
+func (*moduleCreateCommand) Description() string {
+	return `
+   The module create command creates a new Terraform module. It
+   requires a group ID and repository URL. The argument should be
+   in the format: module-name/system (e.g., vpc/aws). Shows final
+   output as JSON, if specified. Idempotent when used with
+   --if-not-exists option.
+`
 }
 
-func (mcc moduleCreateCommand) Help() string {
-	return mcc.HelpModuleCreate()
+func (*moduleCreateCommand) Example() string {
+	return `
+tharsis module create \
+  --group-id trn:group:<group_path> \
+  --repository-url https://github.com/example/terraform-aws-vpc \
+  --private \
+  vpc/aws
+`
 }
 
-// HelpModuleCreate produces the help string for the 'module create' command.
-func (mcc moduleCreateCommand) HelpModuleCreate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module create [options] <module-path>
+func (c *moduleCreateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.groupID,
+		"group-id",
+		"",
+		"Parent group ID.",
+	)
+	f.StringVar(
+		&c.repositoryURL,
+		"repository-url",
+		"",
+		"The repository URL for the module.",
+	)
+	f.BoolVar(
+		&c.private,
+		"private",
+		false,
+		"Whether the module is private.",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+	f.BoolVar(
+		&c.ifNotExists,
+		"if-not-exists",
+		false,
+		"Create a module if it does not already exist.",
+	)
 
-   The module create command creates a new module.
-   Idempotent when used with --if-not-exists option.
-
-%s
-
-`, mcc.meta.BinaryName, buildHelpText(buildSharedModuleDefs()))
+	return f
 }

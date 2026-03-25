@@ -1,115 +1,127 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"encoding/base64"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// managedIdentityGetCommand is the top-level structure for the managed-identity get command.
+// managedIdentityGetCommand is the top-level structure for the managed identity get command.
 type managedIdentityGetCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	toJSON bool
+}
+
+var _ Command = (*managedIdentityGetCommand)(nil)
+
+func (c *managedIdentityGetCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewManagedIdentityGetCommandFactory returns a managedIdentityGetCommand struct.
-func NewManagedIdentityGetCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return managedIdentityGetCommand{
-			meta: meta,
+func NewManagedIdentityGetCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &managedIdentityGetCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (m managedIdentityGetCommand) Run(args []string) int {
-	m.meta.Logger.Debugf("Starting the 'managed-identity get' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *managedIdentityGetCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("managed-identity get"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := m.meta.GetSDKClient()
+	input := &pb.GetManagedIdentityByIDRequest{
+		Id: trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
+	}
+
+	identity, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityByID(c.Context, input)
 	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to get managed identity")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return m.doManagedIdentityGet(ctx, client, args)
+	return outputManagedIdentity(c.UI, c.toJSON, identity)
 }
 
-func (m managedIdentityGetCommand) doManagedIdentityGet(ctx context.Context, client *tharsis.Client, opts []string) int {
-	m.meta.Logger.Debugf("will do managed-identity get, %d opts", len(opts))
-
-	defs := buildJSONOptionDefs(optparser.OptionDefinitions{})
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(m.meta.BinaryName+" managed-identity get", defs, opts)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse managed-identity get argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		m.meta.Logger.Error(output.FormatError("missing managed-identity get path", nil), m.HelpManagedIdentityGet())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive managed-identity get arguments: %s", cmdArgs)
-		m.meta.Logger.Error(output.FormatError(msg, nil), m.HelpManagedIdentityGet())
-		return 1
-	}
-
-	managedIdentityPath := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	actualPath := trn.ToPath(managedIdentityPath)
-	if !isResourcePathValid(m.meta, actualPath) {
-		return 1
-	}
-
-	// Prepare the inputs - convert path to TRN and use ID field
-	trnID := trn.ToTRN(managedIdentityPath, trn.ResourceTypeManagedIdentity)
-	input := &sdktypes.GetManagedIdentityInput{ID: &trnID}
-	m.meta.Logger.Debugf("managed-identity get input: %#v", input)
-
-	// Get the managed identity.
-	foundManagedIdentity, err := client.ManagedIdentity.GetManagedIdentity(ctx, input)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to get managed identity", err))
-		return 1
-	}
-
-	if err = outputManagedIdentity(m.meta, toJSON, foundManagedIdentity); err != nil {
-		m.meta.UI.Error(err.Error())
-		return 1
-	}
-
-	return 0
-}
-
-func (m managedIdentityGetCommand) Synopsis() string {
+func (*managedIdentityGetCommand) Synopsis() string {
 	return "Get a single managed identity."
 }
 
-func (m managedIdentityGetCommand) Help() string {
-	return m.HelpManagedIdentityGet()
+func (*managedIdentityGetCommand) Usage() string {
+	return "tharsis [global options] managed-identity get [options] <id>"
 }
 
-// HelpManagedIdentityGet prints the help string for the 'managed-identity get' command.
-func (m managedIdentityGetCommand) HelpManagedIdentityGet() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] managed-identity get [options] <managed-identity-path>
+func (*managedIdentityGetCommand) Description() string {
+	return `
+   The managed-identity get command prints information about one
+   managed identity.
+`
+}
 
-   The managed-identity get command prints information about one managed identity.
+func (*managedIdentityGetCommand) Example() string {
+	return `
+tharsis managed-identity get trn:managed_identity:<group_path>/<managed_identity_name>
+`
+}
 
-%s
+func (c *managedIdentityGetCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
 
-`, m.meta.BinaryName, buildHelpText(buildJSONOptionDefs(optparser.OptionDefinitions{})))
+	return f
+}
+
+func outputManagedIdentity(ui terminal.UI, toJSON bool, identity *pb.ManagedIdentity) int {
+	if toJSON {
+		if err := ui.JSON(identity); err != nil {
+			ui.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+	} else {
+		// Decode base64 data
+		decoded, err := base64.StdEncoding.DecodeString(identity.Data)
+		if err != nil {
+			ui.ErrorWithSummary(err, "failed to decode identity data")
+			return 1
+		}
+
+		ui.NamedValues([]terminal.NamedValue{
+			{Name: "ID", Value: identity.Metadata.Id},
+			{Name: "TRN", Value: identity.Metadata.Trn},
+			{Name: "Name", Value: identity.Name},
+			{Name: "Description", Value: identity.Description},
+			{Name: "Type", Value: identity.Type},
+			{Name: "Is Alias", Value: identity.AliasSourceId != nil},
+			{Name: "Data", Value: string(decoded)},
+			{Name: "Created By", Value: identity.CreatedBy},
+			{Name: "Created At", Value: identity.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
+			{Name: "Updated At", Value: identity.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
+		})
+	}
+
+	return 0
 }

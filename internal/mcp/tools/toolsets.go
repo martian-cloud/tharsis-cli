@@ -98,6 +98,8 @@ func BuildToolsetGroup(readOnly bool, tc *ToolContext) (*tools.ToolsetGroup, err
 		AddReadTools(
 			tools.NewServerTool(listRuns(tc)),
 			tools.NewServerTool(getRun(tc)),
+			tools.NewServerTool(getPlan(tc)),
+			tools.NewServerTool(getApply(tc)),
 		).
 		AddWriteTools(
 			tools.NewServerTool(createRun(tc)),
@@ -116,6 +118,7 @@ func BuildToolsetGroup(readOnly bool, tc *ToolContext) (*tools.ToolsetGroup, err
 	// Job tools
 	jobs := tools.NewToolset(ToolsetMetadataJobs).
 		AddReadTools(
+			tools.NewServerTool(getLatestJob(tc)),
 			tools.NewServerTool(getJobLogs(tc)),
 		)
 

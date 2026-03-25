@@ -1,131 +1,138 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 // moduleUpdateCommand is the top-level structure for the module update command.
 type moduleUpdateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	repositoryURL *string
+	private       *bool
+	version       *int64
+	toJSON        bool
+}
+
+var _ Command = (*moduleUpdateCommand)(nil)
+
+func (c *moduleUpdateCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewModuleUpdateCommandFactory returns a moduleUpdateCommand struct.
-func NewModuleUpdateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleUpdateCommand{
-			meta: meta,
+func NewModuleUpdateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleUpdateCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (muc moduleUpdateCommand) Run(args []string) int {
-	muc.meta.Logger.Debugf("Starting the 'module update' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		muc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *moduleUpdateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("module update"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := muc.meta.GetSDKClient()
+	input := &pb.UpdateTerraformModuleRequest{
+		Id:            trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		RepositoryUrl: c.repositoryURL,
+		Private:       c.private,
+		Version:       c.version,
+	}
+
+	updatedModule, err := c.grpcClient.TerraformModulesClient.UpdateTerraformModule(c.Context, input)
 	if err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to update a module")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return muc.doModuleUpdate(ctx, client, args)
+	return outputModule(c.UI, c.toJSON, updatedModule)
 }
 
-func (muc moduleUpdateCommand) doModuleUpdate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	muc.meta.Logger.Debugf("will do module update, %d opts", len(opts))
-
-	defs := buildSharedModuleDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(muc.meta.BinaryName+" module update", defs, opts)
-	if err != nil {
-		muc.meta.Logger.Error(output.FormatError("failed to parse module update options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		muc.meta.Logger.Error(output.FormatError("missing module update path", nil), muc.HelpModuleUpdate())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module update arguments: %s", cmdArgs)
-		muc.meta.Logger.Error(output.FormatError(msg, nil), muc.HelpModuleUpdate())
-		return 1
-	}
-
-	modulePath := cmdArgs[0]
-	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	private, err := getBoolOptionValue("private", "true", cmdOpts)
-	if err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	actualPath := trn.ToPath(modulePath)
-	if !isResourcePathValid(muc.meta, actualPath) {
-		return 1
-	}
-
-	// Get the module so, we can find it's ID.
-	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &actualPath}) // Use extracted path
-	if err != nil {
-		muc.meta.Logger.Error(output.FormatError("failed to get module", err))
-		return 1
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.UpdateTerraformModuleInput{
-		ID:      module.Metadata.ID,
-		Private: &private,
-	}
-
-	if repositoryURL != "" {
-		input.RepositoryURL = &repositoryURL
-	}
-
-	muc.meta.Logger.Debugf("module update input: %#v", input)
-
-	// Update the module.
-	updatedModule, err := client.TerraformModule.UpdateModule(ctx, input)
-	if err != nil {
-		muc.meta.Logger.Error(output.FormatError("failed to update module", err))
-		return 1
-	}
-
-	return outputModule(muc.meta, toJSON, updatedModule)
+func (*moduleUpdateCommand) Synopsis() string {
+	return "Update a Terraform module."
 }
 
-func (muc moduleUpdateCommand) Synopsis() string {
-	return "Update a module."
+func (*moduleUpdateCommand) Usage() string {
+	return "tharsis [global options] module update [options] <id>"
 }
 
-func (muc moduleUpdateCommand) Help() string {
-	return muc.HelpModuleUpdate()
+func (*moduleUpdateCommand) Description() string {
+	return `
+   The module update command updates a Terraform module.
+   Currently, it supports updating the repository URL and
+   private flag. Shows final output as JSON, if specified.
+`
 }
 
-// HelpModuleUpdate produces the help string for the 'module update' command.
-func (muc moduleUpdateCommand) HelpModuleUpdate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module update [options] <module-path>
+func (*moduleUpdateCommand) Example() string {
+	return `
+tharsis module update \
+  --repository-url https://github.com/example/terraform-aws-vpc-v2 \
+  --private true \
+  trn:terraform_module:<group_path>/<module_name>/<system>
+`
+}
 
-   The module update command updates a module. Shows final
-   output as JSON, if specified.
+func (c *moduleUpdateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"repository-url",
+		"The repository URL for the module.",
+		func(s string) error {
+			c.repositoryURL = &s
+			return nil
+		},
+	)
+	f.BoolFunc(
+		"private",
+		"Whether the module is private.",
+		func(s string) error {
+			v, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+			c.private = &v
+			return nil
+		},
+	)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be updated. "+
+			"In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
 
-%s
-
-`, muc.meta.BinaryName, buildHelpText(buildSharedModuleDefs()))
+	return f
 }

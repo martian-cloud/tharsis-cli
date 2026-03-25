@@ -1,318 +1,171 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
+	"maps"
+	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// workspaceLabelCommand is the top-level structure for the workspace label command.
 type workspaceLabelCommand struct {
-	meta *Metadata
-}
+	*BaseCommand
 
-// labelOperation represents a single label operation (add/update or remove).
-type labelOperation struct {
-	key       string
-	value     string
-	isRemoval bool
+	labels    map[string]*string // nil value means remove
+	overwrite bool
+	toJSON    bool
 }
 
 // NewWorkspaceLabelCommandFactory returns a workspaceLabelCommand struct.
-func NewWorkspaceLabelCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceLabelCommand{
-			meta: meta,
+func NewWorkspaceLabelCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceLabelCommand{
+			BaseCommand: baseCommand,
+			labels:      make(map[string]*string),
 		}, nil
 	}
 }
 
-// Run executes the workspace label command.
-func (wlc workspaceLabelCommand) Run(args []string) int {
-	wlc.meta.Logger.Debugf("Starting the 'workspace label' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wlc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *workspaceLabelCommand) validate() error {
+	if len(c.arguments) < 2 {
+		return fmt.Errorf("workspace-id and at least one label operation are required")
 	}
 
-	client, err := wlc.meta.GetSDKClient()
+	// Validate label operations
+	for _, arg := range c.arguments[1:] {
+		if key, ok := strings.CutSuffix(arg, "-"); ok {
+			if key == "" {
+				return fmt.Errorf("invalid label format: key cannot be empty")
+			}
+			if c.overwrite {
+				return fmt.Errorf("label removal syntax (key-) cannot be used with --overwrite flag")
+			}
+		} else if strings.Contains(arg, "=") {
+			parts := strings.SplitN(arg, "=", 2)
+			if parts[0] == "" {
+				return fmt.Errorf("invalid label format: key cannot be empty")
+			}
+			if parts[1] == "" {
+				return fmt.Errorf("invalid label format: value cannot be empty for key %s", parts[0])
+			}
+		} else {
+			return fmt.Errorf("invalid label format: %s (expected key=value or key-)", arg)
+		}
+	}
+
+	return nil
+}
+
+func (c *workspaceLabelCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace label"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
+
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+	})
 	if err != nil {
-		wlc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
-	ctx := context.Background()
+	// Parse label operations from remaining arguments
+	for _, arg := range c.arguments[1:] {
+		if key, ok := strings.CutSuffix(arg, "-"); ok {
+			c.labels[key] = nil
+		} else {
+			parts := strings.SplitN(arg, "=", 2)
+			c.labels[parts[0]] = &parts[1]
+		}
+	}
 
-	return wlc.doWorkspaceLabel(ctx, client, args)
+	newLabels := c.applyLabelOperations(workspace.Labels)
+
+	input := &pb.UpdateWorkspaceRequest{
+		Id:     workspace.Metadata.Id,
+		Labels: newLabels,
+	}
+
+	updatedWorkspace, err := c.grpcClient.WorkspacesClient.UpdateWorkspace(c.Context, input)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to update workspace")
+		return 1
+	}
+
+	return outputWorkspace(c.UI, c.toJSON, updatedWorkspace)
 }
 
-// Synopsis returns a brief description of the workspace label command.
-func (wlc workspaceLabelCommand) Synopsis() string {
+func (c *workspaceLabelCommand) applyLabelOperations(existingLabels map[string]string) map[string]string {
+	var workingLabels map[string]string
+	if c.overwrite {
+		workingLabels = make(map[string]string)
+	} else {
+		workingLabels = make(map[string]string, len(existingLabels))
+		maps.Copy(workingLabels, existingLabels)
+	}
+
+	for key, value := range c.labels {
+		if value == nil {
+			delete(workingLabels, key)
+		} else {
+			workingLabels[key] = *value
+		}
+	}
+
+	return workingLabels
+}
+
+func (*workspaceLabelCommand) Synopsis() string {
 	return "Manage labels on a workspace."
 }
 
-// Help returns detailed help text for the workspace label command.
-func (wlc workspaceLabelCommand) Help() string {
-	return wlc.HelpWorkspaceLabel()
-}
-
-// HelpWorkspaceLabel prints the help string for the 'workspace label' command.
-func (wlc workspaceLabelCommand) HelpWorkspaceLabel() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace label [options] <workspace_path> [label_operations...]
-
+func (*workspaceLabelCommand) Description() string {
+	return `
    The workspace label command manages labels on a workspace.
    It supports adding, updating, removing, and overwriting labels.
 
    Label operations:
      key=value  Add or update a label
      key-       Remove a label (not allowed with --overwrite)
-
-   Examples:
-     # Add or update labels
-     %s workspace label group/workspace env=prod tier=frontend
-
-     # Remove a label
-     %s workspace label group/workspace tier-
-
-     # Mixed operations
-     %s workspace label group/workspace env=dev tier- region=us-east-1
-
-     # Replace all labels
-     %s workspace label --overwrite group/workspace env=prod
-
-     # Remove all labels
-     %s workspace label --overwrite group/workspace
-
-%s
-
-`, wlc.meta.BinaryName, wlc.meta.BinaryName, wlc.meta.BinaryName, wlc.meta.BinaryName, wlc.meta.BinaryName, wlc.meta.BinaryName, buildHelpText(wlc.buildWorkspaceLabelDefs()))
+`
 }
 
-// buildWorkspaceLabelDefs returns the option definitions for the workspace label command.
-func (wlc workspaceLabelCommand) buildWorkspaceLabelDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"overwrite": {
-			Arguments: []string{},
-			Synopsis:  "Replace all existing labels with the specified labels.",
-		},
-	}
-	return buildJSONOptionDefs(defs)
+func (*workspaceLabelCommand) Usage() string {
+	return "tharsis [global options] workspace label [options] <workspace-id> <label-operation>..."
 }
 
-// parseLabelOperations parses label operation arguments into structured operations.
-func parseLabelOperations(args []string, overwrite bool) ([]labelOperation, error) {
-	operations := []labelOperation{}
-
-	for _, arg := range args {
-		// Check if this is a removal operation (ends with -)
-		if len(arg) > 0 && arg[len(arg)-1] == '-' {
-			// Extract the key (everything except the trailing -)
-			key := arg[:len(arg)-1]
-			if key == "" {
-				return nil, fmt.Errorf("invalid label removal format: key cannot be empty")
-			}
-
-			// Validate that removal operations are not used with --overwrite
-			if overwrite {
-				return nil, fmt.Errorf("label removal syntax (key-) cannot be used with --overwrite flag")
-			}
-
-			operations = append(operations, labelOperation{
-				key:       key,
-				isRemoval: true,
-			})
-		} else if len(arg) > 0 && contains(arg, '=') {
-			// This is an add/update operation (contains =)
-			parts := splitOnFirst(arg, '=')
-			if len(parts) != 2 {
-				return nil, fmt.Errorf("invalid label format: %s (expected key=value)", arg)
-			}
-
-			key := parts[0]
-			value := parts[1]
-
-			if key == "" {
-				return nil, fmt.Errorf("invalid label format: key cannot be empty in %s", arg)
-			}
-			if value == "" {
-				return nil, fmt.Errorf("invalid label format: value cannot be empty in %s", arg)
-			}
-
-			operations = append(operations, labelOperation{
-				key:       key,
-				value:     value,
-				isRemoval: false,
-			})
-		} else {
-			// Invalid format - doesn't contain = or end with -
-			return nil, fmt.Errorf("invalid label format: %s (expected key=value or key-)", arg)
-		}
-	}
-
-	return operations, nil
+func (*workspaceLabelCommand) Example() string {
+	return `
+tharsis workspace label \
+  --overwrite \
+  trn:workspace:<workspace_path> \
+  env=prod \
+  tier=frontend
+`
 }
 
-// contains checks if a string contains a specific character.
-func contains(s string, c rune) bool {
-	for _, ch := range s {
-		if ch == c {
-			return true
-		}
-	}
-	return false
-}
+func (c *workspaceLabelCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.overwrite,
+		"overwrite",
+		false,
+		"Replace all existing labels with the specified labels.",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-// splitOnFirst splits a string on the first occurrence of a character.
-func splitOnFirst(s string, c rune) []string {
-	for i, ch := range s {
-		if ch == c {
-			return []string{s[:i], s[i+1:]}
-		}
-	}
-	return []string{s}
-}
-
-// applyLabelOperations applies label operations to existing labels and returns the final label set.
-func applyLabelOperations(existingLabels map[string]string, operations []labelOperation, overwrite bool) ([]sdktypes.WorkspaceLabelInput, error) {
-	// Initialize working map
-	var workingLabels map[string]string
-	if overwrite {
-		// Start with empty map when overwriting
-		workingLabels = make(map[string]string)
-	} else {
-		// Copy existing labels when not overwriting
-		workingLabels = make(map[string]string, len(existingLabels))
-		for k, v := range existingLabels {
-			workingLabels[k] = v
-		}
-	}
-
-	// Apply each operation
-	for _, op := range operations {
-		if op.isRemoval {
-			// Remove the label key
-			delete(workingLabels, op.key)
-		} else {
-			// Add or update the label
-			workingLabels[op.key] = op.value
-		}
-	}
-
-	// Convert map to slice of WorkspaceLabelInput
-	result := make([]sdktypes.WorkspaceLabelInput, 0, len(workingLabels))
-	for key, value := range workingLabels {
-		result = append(result, sdktypes.WorkspaceLabelInput{
-			Key:   key,
-			Value: value,
-		})
-	}
-
-	return result, nil
-}
-
-// doWorkspaceLabel contains the main logic for the workspace label command.
-func (wlc workspaceLabelCommand) doWorkspaceLabel(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wlc.meta.Logger.Debugf("will do workspace label, %d opts", len(opts))
-
-	// Parse command options and arguments
-	defs := wlc.buildWorkspaceLabelDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wlc.meta.BinaryName+" workspace label", defs, opts)
-	if err != nil {
-		wlc.meta.Logger.Error(output.FormatError("failed to parse workspace label options", err))
-		return 1
-	}
-
-	// Validate exactly one workspace path argument provided
-	if len(cmdArgs) < 1 {
-		wlc.meta.Logger.Error(output.FormatError("missing workspace path", nil), wlc.HelpWorkspaceLabel())
-		return 1
-	}
-
-	// Extract workspace path from first argument
-	workspacePath := cmdArgs[0]
-
-	// Extract remaining arguments as label operations
-	labelOperationArgs := cmdArgs[1:]
-
-	// Extract --overwrite flag
-	overwrite, err := getBoolOptionValue("overwrite", "false", cmdOpts)
-	if err != nil {
-		wlc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract --json flag
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		wlc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Validate workspace path
-	// Extract path from TRN if needed
-	actualPath := trn.ToPath(workspacePath)
-	if !isNamespacePathValid(wlc.meta, actualPath) {
-		return 1
-	}
-
-	// Parse label operations
-	operations, err := parseLabelOperations(labelOperationArgs, overwrite)
-	if err != nil {
-		wlc.meta.Logger.Error(output.FormatError("failed to parse label operations", err))
-		return 1
-	}
-
-	// If no operations and not overwrite, display error and help text
-	if len(operations) == 0 && !overwrite {
-		wlc.meta.Logger.Error(output.FormatError("no label operations specified", nil), wlc.HelpWorkspaceLabel())
-		return 1
-	}
-
-	// Fetch current workspace
-	// Convert path to TRN
-	trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
-
-	// Create GetWorkspaceInput with TRN ID
-	getInput := &sdktypes.GetWorkspaceInput{ID: &trnID}
-	wlc.meta.Logger.Debugf("workspace label get input: %#v", getInput)
-
-	// Call client.Workspaces.GetWorkspace() to fetch workspace
-	workspace, err := client.Workspaces.GetWorkspace(ctx, getInput)
-	if err != nil {
-		wlc.meta.Logger.Error(output.FormatError("failed to get workspace", err))
-		return 1
-	}
-
-	// Apply label operations and update workspace
-	// Call applyLabelOperations() with current labels, operations, and overwrite flag
-	newLabels, err := applyLabelOperations(workspace.Labels, operations, overwrite)
-	if err != nil {
-		wlc.meta.Logger.Error(output.FormatError("failed to apply label operations", err))
-		return 1
-	}
-
-	// Create UpdateWorkspaceInput with workspace ID, description, and new labels
-	// Description must be preserved to avoid wiping it during update
-	updateInput := &sdktypes.UpdateWorkspaceInput{
-		ID:          &workspace.Metadata.ID,
-		Description: workspace.Description,
-		Labels:      newLabels,
-	}
-	wlc.meta.Logger.Debugf("workspace label update input: %#v", updateInput)
-
-	// Call client.Workspaces.UpdateWorkspace() to update workspace
-	updatedWorkspace, err := client.Workspaces.UpdateWorkspace(ctx, updateInput)
-	if err != nil {
-		wlc.meta.Logger.Error(output.FormatError("failed to update workspace", err))
-		return 1
-	}
-
-	// Output results
-	return outputWorkspace(wlc.meta, toJSON, updatedWorkspace)
+	return f
 }

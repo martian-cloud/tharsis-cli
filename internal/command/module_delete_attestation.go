@@ -1,99 +1,82 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// moduleDeleteAttestationCommand is the top-level structure for the module delete-attestation command.
+// moduleDeleteAttestationCommand is the top-level structure for the module delete attestation command.
 type moduleDeleteAttestationCommand struct {
-	meta *Metadata
+	*BaseCommand
+}
+
+var _ Command = (*moduleDeleteAttestationCommand)(nil)
+
+func (c *moduleDeleteAttestationCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewModuleDeleteAttestationCommandFactory returns a moduleDeleteAttestationCommand struct.
-func NewModuleDeleteAttestationCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleDeleteAttestationCommand{
-			meta: meta,
+func NewModuleDeleteAttestationCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleDeleteAttestationCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (mdc moduleDeleteAttestationCommand) Run(args []string) int {
-	mdc.meta.Logger.Debugf("Starting the 'module delete-attestation' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		mdc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *moduleDeleteAttestationCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithCommandName("module delete-attestation"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := mdc.meta.GetSDKClient()
-	if err != nil {
-		mdc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+	input := &pb.DeleteTerraformModuleAttestationRequest{
+		Id: c.arguments[0],
+	}
+
+	if _, err := c.grpcClient.TerraformModulesClient.DeleteTerraformModuleAttestation(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to delete module attestation")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return mdc.doModuleDeleteAttestation(ctx, client, args)
-}
-
-func (mdc moduleDeleteAttestationCommand) doModuleDeleteAttestation(ctx context.Context, client *tharsis.Client, opts []string) int {
-	mdc.meta.Logger.Debugf("will do module delete-attestation, %d opts", len(opts))
-
-	// No options to parse.
-	_, cmdArgs, err := optparser.ParseCommandOptions(mdc.meta.BinaryName+" module delete-attestation", optparser.OptionDefinitions{}, opts)
-	if err != nil {
-		mdc.meta.Logger.Error(output.FormatError("failed to parse module delete-attestation options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		mdc.meta.Logger.Error(output.FormatError("missing module delete-attestation ID", nil), mdc.HelpModuleDeleteAttestation())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module delete-attestation arguments: %s", cmdArgs)
-		mdc.meta.Logger.Error(output.FormatError(msg, nil), mdc.HelpModuleDeleteAttestation())
-		return 1
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.DeleteTerraformModuleAttestationInput{ID: cmdArgs[0]}
-	mdc.meta.Logger.Debugf("module delete-attestation input: %#v", input)
-
-	// Delete the module attestation.
-	err = client.TerraformModuleAttestation.DeleteModuleAttestation(ctx, input)
-	if err != nil {
-		mdc.meta.Logger.Error(output.FormatError("failed to delete module attestation", err))
-		return 1
-	}
-
-	// Cannot show the deleted module attestation, but say something.
-	mdc.meta.UI.Output("module attestation delete succeeded.")
+	c.UI.Successf("Module attestation deleted successfully!")
 
 	return 0
 }
 
-func (mdc moduleDeleteAttestationCommand) Synopsis() string {
+func (*moduleDeleteAttestationCommand) Synopsis() string {
 	return "Delete a module attestation."
 }
 
-func (mdc moduleDeleteAttestationCommand) Help() string {
-	return mdc.HelpModuleDeleteAttestation()
+func (*moduleDeleteAttestationCommand) Usage() string {
+	return "tharsis [global options] module delete-attestation [options] <id>"
 }
 
-// HelpModuleDeleteAttestation produces the help string for the 'module delete-attestation' command.
-func (mdc moduleDeleteAttestationCommand) HelpModuleDeleteAttestation() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module delete-attestation <id>
-
+func (*moduleDeleteAttestationCommand) Description() string {
+	return `
    The module delete-attestation command deletes a module attestation.
+`
+}
 
-   Use with caution as deleting a module attestation is irreversible!
+func (*moduleDeleteAttestationCommand) Example() string {
+	return `
+tharsis module delete-attestation trn:terraform_module_attestation:<group_path>/<module_name>/<module_system>/<sha_sum>
+`
+}
 
-`, mdc.meta.BinaryName)
+func (c *moduleDeleteAttestationCommand) Flags() *flag.FlagSet {
+	return nil
 }

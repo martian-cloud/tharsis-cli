@@ -1,114 +1,97 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// managedIdentityDeleteCommand is the top-level structure for the managed-identity delete command.
+// managedIdentityDeleteCommand is the top-level structure for the managed identity delete command.
 type managedIdentityDeleteCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	force bool
+}
+
+var _ Command = (*managedIdentityDeleteCommand)(nil)
+
+func (c *managedIdentityDeleteCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewManagedIdentityDeleteCommandFactory returns a managedIdentityDeleteCommand struct.
-func NewManagedIdentityDeleteCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return managedIdentityDeleteCommand{
-			meta: meta,
+func NewManagedIdentityDeleteCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &managedIdentityDeleteCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (m managedIdentityDeleteCommand) Run(args []string) int {
-	m.meta.Logger.Debugf("Starting the 'managed-identity delete' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *managedIdentityDeleteCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("managed-identity delete"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+		WithForcePrompt("Are you sure you want to delete this managed identity?"),
+	); code != 0 {
+		return code
 	}
 
-	client, err := m.meta.GetSDKClient()
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+	input := &pb.DeleteManagedIdentityRequest{
+		Id:    trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
+		Force: &c.force,
+	}
+
+	if _, err := c.grpcClient.ManagedIdentitiesClient.DeleteManagedIdentity(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to delete a managed identity")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return m.doManagedIdentityDelete(ctx, client, args)
-}
-
-func (m managedIdentityDeleteCommand) doManagedIdentityDelete(ctx context.Context, client *tharsis.Client, opts []string) int {
-	m.meta.Logger.Debugf("will do managed-identity delete, %d opts", len(opts))
-
-	// No options to parse.
-	_, cmdArgs, err := optparser.ParseCommandOptions(m.meta.BinaryName+" managed-identity delete", optparser.OptionDefinitions{}, opts)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse managed-identity delete options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		m.meta.Logger.Error(output.FormatError("missing managed-identity delete path", nil), m.HelpManagedIdentityDelete())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive managed-identity delete arguments: %s", cmdArgs)
-		m.meta.Logger.Error(output.FormatError(msg, nil), m.HelpManagedIdentityDelete())
-		return 1
-	}
-
-	managedIdentityPath := cmdArgs[0]
-	actualPath := trn.ToPath(managedIdentityPath)
-	if !isResourcePathValid(m.meta, actualPath) {
-		return 1
-	}
-
-	trnID := trn.ToTRN(managedIdentityPath, trn.ResourceTypeManagedIdentity)
-	getManagedIdentityInput := &sdktypes.GetManagedIdentityInput{ID: &trnID}
-	managedIdentity, err := client.ManagedIdentity.GetManagedIdentity(ctx, getManagedIdentityInput)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to get managed identity", err))
-		return 1
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.DeleteManagedIdentityInput{ID: managedIdentity.Metadata.ID}
-	m.meta.Logger.Debugf("managed-identity delete input: %#v", input)
-
-	// Delete the managed identity.
-	err = client.ManagedIdentity.DeleteManagedIdentity(ctx, input)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to delete managed identity", err))
-		return 1
-	}
-
-	// Cannot show the deleted managed identity, but say something.
-	m.meta.UI.Output("managed-identity delete succeeded.")
-
+	c.UI.Successf("Managed identity deleted successfully!")
 	return 0
 }
 
-func (m managedIdentityDeleteCommand) Synopsis() string {
+func (*managedIdentityDeleteCommand) Synopsis() string {
 	return "Delete a managed identity."
 }
 
-func (m managedIdentityDeleteCommand) Help() string {
-	return m.HelpManagedIdentityDelete()
+func (*managedIdentityDeleteCommand) Usage() string {
+	return "tharsis [global options] managed-identity delete [options] <id>"
 }
 
-// HelpManagedIdentityDelete produces the help string for the 'managed-identity delete' command.
-func (m managedIdentityDeleteCommand) HelpManagedIdentityDelete() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] managed-identity delete <managed-identity-path>
-
+func (*managedIdentityDeleteCommand) Description() string {
+	return `
    The managed-identity delete command deletes a managed identity.
 
    Use with caution as deleting a managed identity is irreversible!
+`
+}
 
-`, m.meta.BinaryName)
+func (*managedIdentityDeleteCommand) Example() string {
+	return `
+tharsis managed-identity delete --force trn:managed_identity:<group_path>/<managed_identity_name>
+`
+}
+
+func (c *managedIdentityDeleteCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.force,
+		"force",
+		false,
+		"Force delete the managed identity.",
+	)
+
+	return f
 }

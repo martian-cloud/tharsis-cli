@@ -2,220 +2,326 @@ package tools
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
-	"io"
 	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-func TestGetConfigurationVersion(t *testing.T) {
-	cvID := "test-cv-id"
+type configurationVersionMocks struct {
+	configurationVersions *mocks.ConfigurationVersionsClient
+	acl                   *acl.MockChecker
+	tfe                   *tfe.MockRESTClient
+}
 
-	tests := []struct {
+func TestGetConfigurationVersion(t *testing.T) {
+	type testCase struct {
 		name        string
-		cv          *sdktypes.ConfigurationVersion
-		aclError    error
+		input       *getConfigurationVersionInput
+		mockSetup   func(*configurationVersionMocks)
 		expectError bool
-		validate    func(*testing.T, getConfigurationVersionOutput)
-	}{
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful configuration version retrieval",
-			cv: &sdktypes.ConfigurationVersion{
-				Metadata:    sdktypes.ResourceMetadata{ID: cvID},
-				Status:      "uploaded",
-				Speculative: false,
+			name:  "get configuration version successfully",
+			input: &getConfigurationVersionInput{ID: "cv1"},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, &pb.GetConfigurationVersionByIDRequest{Id: "cv1"}).
+					Return(&pb.ConfigurationVersion{
+						Metadata:    &pb.ResourceMetadata{Id: "cv1", Trn: "trn:configuration_version:cv1"},
+						Status:      "uploaded",
+						WorkspaceId: "ws1",
+						Speculative: false,
+					}, nil)
 			},
-			validate: func(t *testing.T, output getConfigurationVersionOutput) {
-				assert.Equal(t, cvID, output.ConfigurationVersion.ID)
-				assert.Equal(t, "uploaded", output.ConfigurationVersion.Status)
-				assert.False(t, output.ConfigurationVersion.Speculative)
+		},
+		{
+			name:  "configuration version not found",
+			input: &getConfigurationVersionInput{ID: "nonexistent"},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, &pb.GetConfigurationVersionByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
 			},
+			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockCV := tharsis.NewConfigurationVersion(t)
-			mockACL := acl.NewMockChecker(t)
-
-			if tt.aclError == nil {
-				mockClient.On("ConfigurationVersions").Return(mockCV)
-				mockCV.On("GetConfigurationVersion", mock.Anything, &sdktypes.GetConfigurationVersionInput{ID: cvID}).Return(tt.cv, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &configurationVersionMocks{
+				configurationVersions: mocks.NewConfigurationVersionsClient(t),
 			}
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					ConfigurationVersionsClient: testMocks.configurationVersions,
 				},
-				acl: mockACL,
 			}
 
-			_, handler := getConfigurationVersion(tc)
-			_, output, err := handler(t.Context(), nil, getConfigurationVersionInput{
-				ID: cvID,
-			})
+			_, handler := getConfigurationVersion(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, output.ConfigurationVersion)
 		})
 	}
 }
 
 func TestCreateConfigurationVersion(t *testing.T) {
-	workspacePath := "group/workspace"
-
-	tests := []struct {
+	type testCase struct {
 		name        string
-		input       createConfigurationVersionInput
-		cv          *sdktypes.ConfigurationVersion
-		aclError    error
+		input       *createConfigurationVersionInput
+		mockSetup   func(*configurationVersionMocks)
 		expectError bool
-		validate    func(*testing.T, createConfigurationVersionOutput)
-	}{
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful configuration version creation",
-			input: createConfigurationVersionInput{
-				WorkspacePath: workspacePath,
-				DirectoryPath: "/tmp/test",
+			name: "create and upload configuration version successfully",
+			input: &createConfigurationVersionInput{
+				WorkspaceID:   "ws1",
+				DirectoryPath: "/path/to/config",
+				Speculative:   false,
 			},
-			cv: &sdktypes.ConfigurationVersion{
-				Metadata: sdktypes.ResourceMetadata{ID: "cv-id"},
-				Status:   "pending",
-			},
-			validate: func(t *testing.T, output createConfigurationVersionOutput) {
-				assert.Equal(t, "cv-id", output.ConfigurationVersion.ID)
-				assert.Equal(t, "pending", output.ConfigurationVersion.Status)
+			mockSetup: func(m *configurationVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, &pb.CreateConfigurationVersionRequest{
+					WorkspaceId: "ws1",
+					Speculative: false,
+				}).Return(&pb.ConfigurationVersion{
+					Metadata:    &pb.ResourceMetadata{Id: "cv1", Trn: "trn:configuration_version:cv1"},
+					Status:      "pending",
+					WorkspaceId: "ws1",
+					Speculative: false,
+				}, nil)
+				m.tfe.On("UploadConfigurationVersion", mock.Anything, mock.Anything).Return(nil)
 			},
 		},
 		{
-			name: "ACL denial",
-			input: createConfigurationVersionInput{
-				WorkspacePath: workspacePath,
-				DirectoryPath: "/tmp/test",
+			name: "upload uses resolved workspace ID from response",
+			input: &createConfigurationVersionInput{
+				WorkspaceID:   "trn:workspace:group/my-workspace",
+				DirectoryPath: "/path/to/config",
 			},
-			aclError:    assert.AnError,
+			mockSetup: func(m *configurationVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:workspace:group/my-workspace", trn.ResourceTypeWorkspace).Return(nil)
+				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, &pb.CreateConfigurationVersionRequest{
+					WorkspaceId: "trn:workspace:group/my-workspace",
+				}).Return(&pb.ConfigurationVersion{
+					Metadata:    &pb.ResourceMetadata{Id: "cv1", Trn: "trn:configuration_version:cv1"},
+					Status:      "pending",
+					WorkspaceId: "resolved-ws-id",
+				}, nil)
+				m.tfe.On("UploadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.UploadConfigurationVersionInput) bool {
+					return input.WorkspaceID == "resolved-ws-id" && input.ConfigVersionID == "cv1"
+				})).Return(nil)
+			},
+		},
+		{
+			name: "authorization failure",
+			input: &createConfigurationVersionInput{
+				WorkspaceID:   "ws1",
+				DirectoryPath: "/path/to/config",
+			},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
+			expectError: true,
+		},
+		{
+			name: "create configuration version fails",
+			input: &createConfigurationVersionInput{
+				WorkspaceID:   "ws1",
+				DirectoryPath: "/path/to/config",
+			},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, mock.Anything).Return(nil, status.Error(codes.Internal, "internal error"))
+			},
+			expectError: true,
+		},
+		{
+			name: "upload fails",
+			input: &createConfigurationVersionInput{
+				WorkspaceID:   "ws1",
+				DirectoryPath: "/path/to/config",
+			},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, mock.Anything).Return(&pb.ConfigurationVersion{
+					Metadata:    &pb.ResourceMetadata{Id: "cv1", Trn: "trn:configuration_version:cv1"},
+					Status:      "pending",
+					WorkspaceId: "ws1",
+				}, nil)
+				m.tfe.On("UploadConfigurationVersion", mock.Anything, mock.Anything).Return(status.Error(codes.Internal, "upload failed"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockCV := tharsis.NewConfigurationVersion(t)
-			mockACL := acl.NewMockChecker(t)
-
-			if tt.aclError == nil {
-				mockClient.On("ConfigurationVersions").Return(mockCV)
-				mockCV.On("CreateConfigurationVersion", mock.Anything, &sdktypes.CreateConfigurationVersionInput{
-					WorkspacePath: tt.input.WorkspacePath,
-					Speculative:   tt.input.Speculative,
-				}).Return(tt.cv, nil)
-				mockCV.On("UploadConfigurationVersion", mock.Anything, &sdktypes.UploadConfigurationVersionInput{
-					WorkspacePath:          tt.input.WorkspacePath,
-					ConfigurationVersionID: tt.cv.Metadata.ID,
-					DirectoryPath:          tt.input.DirectoryPath,
-				}).Return(nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &configurationVersionMocks{
+				configurationVersions: mocks.NewConfigurationVersionsClient(t),
+				acl:                   acl.NewMockChecker(t),
+				tfe:                   tfe.NewMockRESTClient(t),
 			}
-			mockACL.On("Authorize", mock.Anything, mockClient, "trn:workspace:"+workspacePath, trn.ResourceTypeWorkspace).Return(tt.aclError)
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					ConfigurationVersionsClient: testMocks.configurationVersions,
 				},
-				acl: mockACL,
+				acl:       testMocks.acl,
+				tfeClient: testMocks.tfe,
 			}
 
-			_, handler := createConfigurationVersion(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := createConfigurationVersion(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, output.ConfigurationVersion)
 		})
 	}
 }
 
 func TestDownloadConfigurationVersion(t *testing.T) {
-	cvID := "test-cv-id"
+	type testCase struct {
+		name        string
+		input       *downloadConfigurationVersionInput
+		mockSetup   func(*configurationVersionMocks)
+		expectError bool
+	}
 
-	mockClient := tharsis.NewMockClient(t)
-	mockCV := tharsis.NewConfigurationVersion(t)
-
-	mockClient.On("ConfigurationVersions").Return(mockCV)
-	mockCV.On("DownloadConfigurationVersion", mock.Anything, &sdktypes.GetConfigurationVersionInput{ID: cvID}, mock.Anything).
-		Return(nil).
-		Run(func(args mock.Arguments) {
-			writer := args.Get(2).(io.Writer)
-
-			// Create a tar.gz with test content
-			var buf bytes.Buffer
-			gzWriter := gzip.NewWriter(&buf)
-			tarWriter := tar.NewWriter(gzWriter)
-
-			// Add a test file
-			content := []byte("resource \"test\" \"example\" {}")
-			header := &tar.Header{
-				Name: "main.tf",
-				Mode: 0600,
-				Size: int64(len(content)),
-			}
-			tarWriter.WriteHeader(header)
-			tarWriter.Write(content)
-
-			tarWriter.Close()
-			gzWriter.Close()
-
-			writer.Write(buf.Bytes())
-		})
-
-	tc := &ToolContext{
-		tharsisURL:  "https://test.tharsis.io",
-		profileName: "test",
-		clientGetter: func() (tharsis.Client, error) {
-			return mockClient, nil
+	testCases := []testCase{
+		{
+			name:  "download configuration version successfully",
+			input: &downloadConfigurationVersionInput{ID: "cv1"},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, &pb.GetConfigurationVersionByIDRequest{Id: "cv1"}).
+					Return(&pb.ConfigurationVersion{
+						Metadata:    &pb.ResourceMetadata{Id: "cv1"},
+						WorkspaceId: "ws1",
+					}, nil)
+				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.DownloadConfigurationVersionInput) bool {
+					if input.ConfigVersionID != "cv1" {
+						return false
+					}
+					// Write a valid empty tar.gz to the writer
+					gzWriter := gzip.NewWriter(input.Writer)
+					tarWriter := tar.NewWriter(gzWriter)
+					_ = tarWriter.Close()
+					_ = gzWriter.Close()
+					return true
+				})).Return(nil)
+			},
+		},
+		{
+			name:  "download resolves TRN to metadata ID",
+			input: &downloadConfigurationVersionInput{ID: "trn:configuration_version:group/ws/cv1"},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, &pb.GetConfigurationVersionByIDRequest{Id: "trn:configuration_version:group/ws/cv1"}).
+					Return(&pb.ConfigurationVersion{
+						Metadata:    &pb.ResourceMetadata{Id: "resolved-cv-id"},
+						WorkspaceId: "ws1",
+					}, nil)
+				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.DownloadConfigurationVersionInput) bool {
+					if input.ConfigVersionID != "resolved-cv-id" {
+						return false
+					}
+					gzWriter := gzip.NewWriter(input.Writer)
+					tarWriter := tar.NewWriter(gzWriter)
+					_ = tarWriter.Close()
+					_ = gzWriter.Close()
+					return true
+				})).Return(nil)
+			},
+		},
+		{
+			name:  "get configuration version fails",
+			input: &downloadConfigurationVersionInput{ID: "cv1"},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, mock.Anything).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+			},
+			expectError: true,
+		},
+		{
+			name:  "download fails",
+			input: &downloadConfigurationVersionInput{ID: "cv1"},
+			mockSetup: func(m *configurationVersionMocks) {
+				m.configurationVersions.On("GetConfigurationVersionByID", mock.Anything, mock.Anything).
+					Return(&pb.ConfigurationVersion{
+						Metadata:    &pb.ResourceMetadata{Id: "cv1"},
+						WorkspaceId: "ws1",
+					}, nil)
+				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.Anything).
+					Return(status.Error(codes.NotFound, "not found"))
+			},
+			expectError: true,
 		},
 	}
 
-	_, handler := downloadConfigurationVersion(tc)
-	_, output, err := handler(t.Context(), nil, downloadConfigurationVersionInput{
-		ID: cvID,
-	})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &configurationVersionMocks{
+				configurationVersions: mocks.NewConfigurationVersionsClient(t),
+				tfe:                   tfe.NewMockRESTClient(t),
+			}
 
-	assert.NoError(t, err)
-	assert.Equal(t, cvID, output.ConfigurationVersionID)
-	assert.NotEmpty(t, output.OutputPath)
-	assert.DirExists(t, output.OutputPath)
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
 
-	// Verify the test file was extracted
-	testFilePath := filepath.Join(output.OutputPath, "main.tf")
-	assert.FileExists(t, testFilePath)
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					ConfigurationVersionsClient: testMocks.configurationVersions,
+				},
+				tfeClient: testMocks.tfe,
+			}
 
-	content, err := os.ReadFile(testFilePath)
-	assert.NoError(t, err)
-	assert.Equal(t, "resource \"test\" \"example\" {}", string(content))
+			_, handler := downloadConfigurationVersion(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
+
+			if tc.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotEmpty(t, output.OutputPath)
+			require.DirExists(t, output.OutputPath)
+			t.Cleanup(func() {
+				_ = os.RemoveAll(output.OutputPath)
+			})
+		})
+	}
 }

@@ -1,149 +1,122 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// groupSetTerraformVarsCommand is the top-level structure for the group set-terraform-vars command.
 type groupSetTerraformVarsCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	tfVarFiles []string
 }
 
 // NewGroupSetTerraformVarsCommandFactory returns a groupSetTerraformVarsCommand struct.
-func NewGroupSetTerraformVarsCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupSetTerraformVarsCommand{
-			meta: meta,
+func NewGroupSetTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupSetTerraformVarsCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (gsv groupSetTerraformVarsCommand) Run(args []string) int {
-	gsv.meta.Logger.Debugf("Starting the 'group set-terraform-vars' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		gsv.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := gsv.meta.GetSDKClient()
-	if err != nil {
-		gsv.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return gsv.doGroupSetTerraformVars(ctx, client, args)
+func (c *groupSetTerraformVarsCommand) validate() error {
+	const message = "group-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.tfVarFiles, validation.Required),
+	)
 }
 
-func (gsv groupSetTerraformVarsCommand) doGroupSetTerraformVars(ctx context.Context, client *tharsis.Client, opts []string) int {
-	gsv.meta.Logger.Debugf("will do group set-terraform-vars, %d opts", len(opts))
+func (c *groupSetTerraformVarsCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group set-terraform-vars"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := buildTerraformDefs()
-
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(gsv.meta.BinaryName+" group set-terraform-vars", defs, opts)
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0])})
 	if err != nil {
-		gsv.meta.Logger.Error(output.FormatError("failed to parse group set-terraform-vars options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		gsv.meta.Logger.Error(output.FormatError("missing group set-terraform-vars group path", nil), gsv.HelpGroupSetTerraformVars())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group set-terraform-vars arguments: %s", cmdArgs)
-		gsv.meta.Logger.Error(output.FormatError(msg, nil), gsv.HelpGroupSetTerraformVars())
-		return 1
-	}
-
-	namespacePath := cmdArgs[0]
-	tfVarFiles := getOptionSlice("tf-var-file", cmdOpts)
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(namespacePath)
-	if !isNamespacePathValid(gsv.meta, actualPath) {
-		return 1
-	}
-
-	// Ensure namespace is a group.
-	if _, err = client.Group.GetGroup(ctx, &sdktypes.GetGroupInput{
-		Path: &actualPath, // Use extracted path, not original namespacePath
-	}); err != nil {
-		gsv.meta.Logger.Error(output.FormatError("failed to get group", err))
+		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
 	}
 
 	parser := varparser.NewVariableParser(nil, false)
 
-	variables, err := parser.ParseTerraformVariables(&varparser.ParseTerraformVariablesInput{TfVarFilePaths: tfVarFiles})
+	variables, err := parser.ParseTerraformVariables(&varparser.ParseTerraformVariablesInput{TfVarFilePaths: c.tfVarFiles})
 	if err != nil {
-		gsv.meta.Logger.Error(output.FormatError("failed to process terraform variables", err))
+		c.UI.ErrorWithSummary(err, "failed to process terraform variables")
 		return 1
 	}
 
-	// Prepare the inputs.
-	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
-	actualPath = trn.ToPath(namespacePath)
-
-	input := &sdktypes.SetNamespaceVariablesInput{
-		NamespacePath: actualPath,
-		Category:      sdktypes.TerraformVariableCategory,
-		Variables:     convertToSetNamespaceVariablesInput(variables),
+	pbVariables := make([]*pb.SetNamespaceVariablesInputVariable, len(variables))
+	for i, v := range variables {
+		pbVariables[i] = &pb.SetNamespaceVariablesInputVariable{
+			Key:   v.Key,
+			Value: v.Value,
+		}
 	}
 
-	gsv.meta.Logger.Debugf("group set-terraform-vars input: %#v", input)
+	input := &pb.SetNamespaceVariablesRequest{
+		NamespacePath: group.FullPath,
+		Category:      pb.VariableCategory_terraform,
+		Variables:     pbVariables,
+	}
 
-	// Set the group variables.
-	err = client.Variable.SetVariables(ctx, input)
-	if err != nil {
-		gsv.meta.Logger.Error(output.FormatError("failed to set group variables", err))
+	if _, err = c.grpcClient.NamespaceVariablesClient.SetNamespaceVariables(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to set terraform variables")
 		return 1
 	}
 
-	// Format the output.
-	gsv.meta.UI.Output(fmt.Sprintf("Terraform variables created successfully in group %s", namespacePath))
+	c.UI.Successf("Terraform variables set successfully in group!")
 	return 0
 }
 
-func buildTerraformDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"tf-var-file": {
-			Arguments: []string{"Tf_Var_File"},
-			Synopsis:  "The path to a .tfvars variables file.",
-			Required:  true,
-		},
-	}
-}
-
-func (gsv groupSetTerraformVarsCommand) Synopsis() string {
+func (*groupSetTerraformVarsCommand) Synopsis() string {
 	return "Set terraform variables for a group."
 }
 
-func (gsv groupSetTerraformVarsCommand) Help() string {
-	return gsv.HelpGroupSetTerraformVars()
+func (*groupSetTerraformVarsCommand) Description() string {
+	return `
+   The group set-terraform-vars command sets terraform variables for a group.
+   Command will overwrite any existing Terraform variables in the target group!
+   Note: This command does not support sensitive variables.
+`
 }
 
-// HelpGroupSetTerraformVars produces the help string for the 'group set-terraform-vars' command.
-func (gsv groupSetTerraformVarsCommand) HelpGroupSetTerraformVars() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group set-terraform-vars [options] <group>
+func (*groupSetTerraformVarsCommand) Usage() string {
+	return "tharsis [global options] group set-terraform-vars [options] <group-id>"
+}
 
-   The group set-terraform-vars command sets terraform
-   variables for a group. Expects an option with the path
-   to the .tfvars file.
+func (*groupSetTerraformVarsCommand) Example() string {
+	return `
+tharsis group set-terraform-vars \
+  --tf-var-file terraform.tfvars \
+  trn:group:<group_path>
+`
+}
 
-   Command will overwrite any existing Terraform variables
-   in the target group!
+func (c *groupSetTerraformVarsCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"tf-var-file",
+		"Path to a .tfvars file (can be specified multiple times).",
+		func(s string) error {
+			c.tfVarFiles = append(c.tfVarFiles, s)
+			return nil
+		},
+	)
 
-%s
-
-`, gsv.meta.BinaryName, buildHelpText(buildTerraformDefs()))
+	return f
 }

@@ -376,8 +376,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -386,13 +386,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-hclog"
 	uuid "github.com/hashicorp/go-uuid"
-	"github.com/mitchellh/cli"
 	"github.com/pkg/browser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/logger"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
-	"go.uber.org/zap"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"golang.org/x/oauth2"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -407,93 +408,77 @@ const (
 	originHeader = "http://localhost"
 
 	// Path for "well-known" URL.
-	wellKnownURLPath = "/.well-known/terraform.json"
+	wellKnownURLPath = "/.well-known/openid-configuration"
+
+	// tharsisClientID is the client ID for basic auth.
+	tharsisClientID = "tharsis"
 
 	// loginTimeout is the maximum time to wait for OAuth callback.
 	loginTimeout = 2 * time.Minute
 )
 
-// noopUI is a no-op implementation of cli.Ui used as a default to avoid nil checks.
-type noopUI struct{}
+var (
+	// The scopes Tharsis uses for basic auth.
+	basicAuthScopes = []string{"openid", "tharsis"}
+)
 
-func (noopUI) Ask(string) (string, error)       { return "", nil }
-func (noopUI) AskSecret(string) (string, error) { return "", nil }
-func (noopUI) Output(string)                    {}
-func (noopUI) Info(string)                      {}
-func (noopUI) Error(string)                     {}
-func (noopUI) Warn(string)                      {}
+var _ Authenticator = (*ssoAuthenticator)(nil)
 
-// SSOClient handles SSO authentication flow.
-type SSOClient struct {
+// ssoAuthenticator handles SSO authentication flow.
+type ssoAuthenticator struct {
 	tharsisURL string
-	logger     logger.Logger
-	ui         cli.Ui
+	config     *Options
 }
 
-// SSOOption is a functional option for NewSSOClient.
-type SSOOption func(*SSOClient)
-
-// WithLogger sets the logger for SSO login.
-func WithLogger(l logger.Logger) SSOOption {
-	return func(c *SSOClient) {
-		c.logger = l
-	}
-}
-
-// WithUI sets the UI for SSO login output.
-func WithUI(u cli.Ui) SSOOption {
-	return func(c *SSOClient) {
-		c.ui = u
-	}
-}
-
-// NewSSOClient creates a new SSO client.
-func NewSSOClient(tharsisURL string, opts ...SSOOption) (*SSOClient, error) {
-	if _, err := url.Parse(tharsisURL); err != nil {
-		return nil, fmt.Errorf("invalid tharsisURL: %w", err)
-	}
-
-	client := &SSOClient{
-		tharsisURL: tharsisURL,
-		logger:     logger.NewWithZap(zap.NewNop()),
-		ui:         noopUI{},
+// NewSSOAuthenticator creates a new SSO authenticator.
+func NewSSOAuthenticator(tharsisURL string, opts ...Option) (Authenticator, error) {
+	cfg := &Options{
+		logger: hclog.NewNullLogger(),
+		ui:     terminal.NewNoopUI(),
 	}
 
 	for _, opt := range opts {
-		opt(client)
+		opt(cfg)
 	}
 
-	return client, nil
+	if cfg.grpcClient == nil {
+		return nil, errors.New("grpc client is required for sso authenticator")
+	}
+
+	return &ssoAuthenticator{
+		tharsisURL: tharsisURL,
+		config:     cfg,
+	}, nil
 }
 
-// PerformLogin executes the full SSO login flow and returns the token.
-func (c *SSOClient) PerformLogin(ctx context.Context) (*oauth2.Token, error) {
+// Authenticate executes the full SSO login flow and returns the token.
+func (a *ssoAuthenticator) Authenticate(ctx context.Context) (*oauth2.Token, error) {
 	// Fetch OAuth config
-	oauthCfg, err := c.fetchAuthConfig()
+	oauthCfg, err := a.fetchAuthConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch OAuth config: %w", err)
 	}
 
 	// Build request state
-	requestState, err := c.buildRequestState()
+	requestState, err := a.buildRequestState()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build request state: %w", err)
 	}
 
 	// Build proof key challenge
-	proofKey, proofKeyChallenge, err := c.buildProofKeyChallenge()
+	proofKey, proofKeyChallenge, err := a.buildProofKeyChallenge()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build proof key: %w", err)
 	}
 
 	// Open listener
-	netListener, callbackURL, err := c.openNetListener()
+	netListener, callbackURL, err := a.openNetListener()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create callback server: %w", err)
 	}
 
 	// Launch web server
-	webServerChannel, server, err := c.launchWebServer(requestState, netListener)
+	webServerChannel, server, err := a.launchWebServer(requestState, netListener)
 	if err != nil {
 		return nil, fmt.Errorf("failed to launch temporary web server: %w", err)
 	}
@@ -507,13 +492,13 @@ func (c *SSOClient) PerformLogin(ctx context.Context) (*oauth2.Token, error) {
 	)
 
 	// Launch browser
-	err = c.launchBrowser(authCodeURL)
+	err = a.launchBrowser(authCodeURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to launch web browser for OAuth redirect: %w", err)
 	}
 
 	// Capture token
-	token, err := c.captureToken(ctx, oauthCfg, proofKey, webServerChannel, server)
+	token, err := a.captureToken(ctx, oauthCfg, proofKey, webServerChannel, server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to capture token in temporary web server: %w", err)
 	}
@@ -522,86 +507,100 @@ func (c *SSOClient) PerformLogin(ctx context.Context) (*oauth2.Token, error) {
 }
 
 // StoreToken stores an OAuth token in the settings file for the client's Tharsis URL.
-func (c *SSOClient) StoreToken(token *oauth2.Token) error {
-	currentSettings, err := settings.ReadSettings(nil)
+func (a *ssoAuthenticator) StoreToken(token *oauth2.Token) error {
+	currentSettings, err := settings.ReadSettings()
 	if err != nil {
 		return err
 	}
 
-	// Find the profile by matching the Tharsis URL
-	var profileName string
-	for name, candidate := range currentSettings.Profiles {
-		if candidate.TharsisURL == c.tharsisURL {
-			profileName = name
-			break
-		}
-	}
-	if profileName == "" {
-		return fmt.Errorf("no profile found for Tharsis URL: %s", c.tharsisURL)
+	// Prefer id_token for OIDC (external IDP) as it's a signed JWT with user identity claims
+	// that can be validated by the API. Fallback to access_token for BASIC auth mode.
+	tokenToStore, _ := token.Extra("id_token").(string)
+	if tokenToStore == "" {
+		tokenToStore = token.AccessToken
 	}
 
-	foundProfile := currentSettings.Profiles[profileName]
-	foundProfile.Token = &token.AccessToken
-	currentSettings.Profiles[profileName] = foundProfile
+	if tokenToStore == "" {
+		return fmt.Errorf("no token found in response")
+	}
 
-	return currentSettings.WriteSettingsFile(nil)
+	// Find the profile that matches the Tharsis URL
+	foundProfile, err := currentSettings.FindProfileByEndpoint(a.tharsisURL)
+	if err != nil {
+		return fmt.Errorf("no profile found for Tharsis URL: %s", a.tharsisURL)
+	}
+
+	foundProfile.SetToken(tokenToStore)
+	currentSettings.Profiles[foundProfile.Name] = *foundProfile
+
+	return currentSettings.WriteSettingsFile()
 }
 
-// fetchAuthConfig fetches the 'well-known' URL from the tharsisURL to get the auth URL.
-func (c *SSOClient) fetchAuthConfig() (*oauth2.Config, error) {
-	parsedURL, err := url.Parse(c.tharsisURL)
+// fetchAuthConfig fetches auth configuration using gRPC.
+func (a *ssoAuthenticator) fetchAuthConfig(ctx context.Context) (*oauth2.Config, error) {
+	authSettings, err := a.config.grpcClient.AuthSettingsClient.GetAuthSettings(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, err
 	}
 
-	wellKnownURL := url.URL{
-		Scheme: parsedURL.Scheme,
-		Host:   parsedURL.Host,
-		Path:   wellKnownURLPath,
+	var issuerURL, clientID string
+	var scopes []string
+
+	switch authSettings.AuthType {
+	case pb.UserAuthType_BASIC:
+		issuerURL = a.tharsisURL
+		clientID = tharsisClientID
+		scopes = basicAuthScopes
+	case pb.UserAuthType_OIDC:
+		issuerURL = authSettings.OidcAuthSettings.IssuerUrl
+		clientID = authSettings.OidcAuthSettings.ClientId
+	default:
+		return nil, fmt.Errorf("api is using unknown auth type: %s", authSettings.AuthType)
 	}
 
-	c.logger.Debugf("will fetch well-known URL: %s", wellKnownURL.String())
+	wellKnownURL, err := url.JoinPath(issuerURL, wellKnownURLPath)
+	if err != nil {
+		return nil, err
+	}
 
-	resp, err := http.Get(wellKnownURL.String())
+	a.config.logger.Debug("will fetch well-known URL", "url", wellKnownURL)
+
+	resp, err := http.Get(wellKnownURL) // nosemgrep: gosec.G107-1
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("received status code %d from well-known URL", resp.StatusCode)
 	}
 
-	var config struct {
-		LoginDotV1 struct {
-			AuthZ      string   `json:"authz"`
-			Client     string   `json:"client"`
-			Token      string   `json:"token"`
-			GrantTypes []string `json:"grant_types"`
-			Scopes     []string `json:"scopes"`
-		} `json:"login.v1"`
+	var data struct {
+		AuthURL  string   `json:"authorization_endpoint"`
+		TokenURL string   `json:"token_endpoint"`
+		Scopes   []string `json:"scopes_supported"`
 	}
-	if err := json.Unmarshal(body, &config); err != nil {
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, err
 	}
 
+	if authSettings.AuthType == pb.UserAuthType_OIDC {
+		scopes = data.Scopes
+	}
+
 	return &oauth2.Config{
-		ClientID: config.LoginDotV1.Client,
+		ClientID: clientID,
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  config.LoginDotV1.AuthZ,
-			TokenURL: config.LoginDotV1.Token,
+			AuthURL:  data.AuthURL,
+			TokenURL: data.TokenURL,
 		},
-		Scopes: config.LoginDotV1.Scopes,
+		Scopes: scopes,
 	}, nil
 }
 
 // buildRequestState generates the request state UUID.
-func (c *SSOClient) buildRequestState() (string, error) {
+func (a *ssoAuthenticator) buildRequestState() (string, error) {
 	result, err := uuid.GenerateUUID()
 	if err != nil {
 		return "", fmt.Errorf("failed to generate UUID, likely not enough pseudo-random entropy: %s", err)
@@ -610,7 +609,7 @@ func (c *SSOClient) buildRequestState() (string, error) {
 }
 
 // buildProofKeyChallenge generates the proof key and challenge values.
-func (c *SSOClient) buildProofKeyChallenge() (string, string, error) {
+func (a *ssoAuthenticator) buildProofKeyChallenge() (string, string, error) {
 	firstUUID, err := uuid.GenerateUUID()
 	if err != nil {
 		return "", "", err
@@ -622,16 +621,14 @@ func (c *SSOClient) buildProofKeyChallenge() (string, string, error) {
 	}
 
 	key := fmt.Sprintf("%s.%09d", firstUUID, randomInt)
-
 	hasher := sha256.New()
 	hasher.Write([]byte(key))
-	challenge := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
 
-	return key, challenge, nil
+	return key, base64.RawURLEncoding.EncodeToString(hasher.Sum(nil)), nil
 }
 
 // openNetListener builds a net.listener and callback URL.
-func (c *SSOClient) openNetListener() (net.Listener, string, error) {
+func (a *ssoAuthenticator) openNetListener() (net.Listener, string, error) {
 	for port := tempServerMinPort; port < tempServerMaxPort; port++ {
 		listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
 		if err == nil {
@@ -649,35 +646,35 @@ func (c *SSOClient) openNetListener() (net.Listener, string, error) {
 }
 
 // launchWebServer launches the embedded web server and returns the termination channel.
-func (c *SSOClient) launchWebServer(requestState string, netListener net.Listener) (chan string, *http.Server, error) {
-	c.logger.Debug("callback server: creating server")
+func (a *ssoAuthenticator) launchWebServer(requestState string, netListener net.Listener) (chan string, *http.Server, error) {
+	a.config.logger.Debug("callback server: creating server")
 	codeChannel := make(chan string)
 	httpServer := &http.Server{
 		ReadHeaderTimeout: readHeaderTimeout,
 		Handler: http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-			c.logger.Debug("callback server: handler called")
+			a.config.logger.Debug("callback server: handler called")
 
 			// Parse the form.
 			err := req.ParseForm()
 			if err != nil {
-				c.logger.Errorf("callback server: cannot parse form on callback request: %s", err)
+				a.config.logger.Error("callback server: cannot parse form on callback request", "error", err)
 				resp.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
 			// Check that the request state matches.
 			gotState := req.Form.Get("state")
-			c.logger.Debugf("callback server got state: %s", gotState)
+			a.config.logger.Debug("callback server got state", "state", gotState)
 
 			if gotState != requestState {
-				c.logger.Debugf("request with incorrect state: %#v", req)
-				c.logger.Debugf("URL of request with incorrect state: %#v", req.URL)
-				c.logger.Debugf("header of request with incorrect state: %#v", req.Header)
+				a.config.logger.Debug("request with incorrect state", "request", req)
+				a.config.logger.Debug("URL of request with incorrect state", "url", req.URL)
+				a.config.logger.Debug("header of request with incorrect state", "header", req.Header)
 				if gotState == "" {
 					// Ignore spurious requests (such as for favicon.ico) without state.
 					return
 				}
-				c.logger.Error("callback server: incorrect 'state' value")
+				a.config.logger.Error("callback server: incorrect 'state' value")
 				resp.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -685,22 +682,22 @@ func (c *SSOClient) launchWebServer(requestState string, netListener net.Listene
 			// Did the response return a code?
 			gotCode := req.Form.Get("code")
 			if gotCode == "" {
-				c.logger.Error("callback server: no 'code' argument in callback request")
+				a.config.logger.Error("callback server: no 'code' argument in callback request")
 				resp.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
 			// Send the code back to the main execution line.
-			c.logger.Debugf("callback server: got an authorization code: %s", gotCode)
+			a.config.logger.Debug("callback server: got an authorization code", "code", gotCode)
 			codeChannel <- gotCode
 			close(codeChannel)
-			c.logger.Debug("callback server: sent authorization code to channel; closed channel.")
+			a.config.logger.Debug("callback server: sent authorization code to channel; closed channel.")
 
 			// Return an HTTP response.
-			c.logger.Debug("callback server: returning an HTTP response")
+			a.config.logger.Debug("callback server: returning an HTTP response")
 			resp.Header().Add("Content-Type", "text/html")
 			resp.WriteHeader(http.StatusOK)
-			_, _ = resp.Write([]byte(c.buildCallbackResponseBody()))
+			_, _ = resp.Write([]byte(a.buildCallbackResponseBody()))
 		}),
 	}
 
@@ -708,7 +705,7 @@ func (c *SSOClient) launchWebServer(requestState string, netListener net.Listene
 	go func() {
 		err := httpServer.Serve(netListener)
 		if err != nil && err != http.ErrServerClosed {
-			c.logger.Error("failed to start the temporary login server")
+			a.config.logger.Error("failed to start the temporary login server")
 			close(codeChannel)
 		}
 	}()
@@ -717,7 +714,7 @@ func (c *SSOClient) launchWebServer(requestState string, netListener net.Listene
 }
 
 // buildCallbackResponseBody builds the response body to be returned by callback server.
-func (c *SSOClient) buildCallbackResponseBody() string {
+func (a *ssoAuthenticator) buildCallbackResponseBody() string {
 	return `
 	<html>
 	<head>
@@ -738,19 +735,22 @@ func (c *SSOClient) buildCallbackResponseBody() string {
 }
 
 // launchBrowser launches the web browser to the OAuth login page.
-func (c *SSOClient) launchBrowser(authCodeURL string) error {
-	asURL, err := url.Parse(c.tharsisURL)
-	if err != nil {
-		return err
+func (a *ssoAuthenticator) launchBrowser(authCodeURL string) error {
+	if a.config.ui != nil {
+		asURL, err := url.Parse(a.tharsisURL)
+		if err != nil {
+			return err
+		}
+		a.config.ui.Output("\nTharsis must now open a web browser to the login page for host %s\n", asURL.Host)
+		a.config.ui.Output("If a browser does not open automatically, open the following URL:\n%s\n", authCodeURL)
+		a.config.ui.Output("Tharsis will now wait for the host to signal that login was successful.\n\n")
 	}
-	c.ui.Output(fmt.Sprintf("\nTharsis must now open a web browser to the login page for host %s\n", asURL.Host))
-	c.ui.Output(fmt.Sprintf("If a browser does not open automatically, open the following URL:\n%s\n", authCodeURL))
-	c.ui.Output("Tharsis will now wait for the host to signal that login was successful.\n\n")
+
 	return browser.OpenURL(authCodeURL)
 }
 
 // captureToken captures the token and terminates the temporary web server.
-func (c *SSOClient) captureToken(
+func (a *ssoAuthenticator) captureToken(
 	ctx context.Context,
 	oauthCfg *oauth2.Config,
 	proofKey string,
@@ -771,7 +771,7 @@ func (c *SSOClient) captureToken(
 			return nil, err
 		}
 
-		token, err := c.exchangeAuthCodeForToken(oauthCfg, code, proofKey)
+		token, err := a.exchangeAuthCodeForToken(oauthCfg, code, proofKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to obtain an authentication token: %w", err)
 		}
@@ -785,7 +785,7 @@ func (c *SSOClient) captureToken(
 }
 
 // exchangeAuthCodeForToken exchanges the authorization code for an access token.
-func (c *SSOClient) exchangeAuthCodeForToken(oauthCfg *oauth2.Config, code, proofKey string) (*oauth2.Token, error) {
+func (a *ssoAuthenticator) exchangeAuthCodeForToken(oauthCfg *oauth2.Config, code, proofKey string) (*oauth2.Token, error) {
 	// Create HTTP client with custom transport for Origin header
 	// This is needed for some IDPs (like Azure)
 	dialer := &net.Dialer{

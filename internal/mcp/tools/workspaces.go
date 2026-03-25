@@ -7,47 +7,52 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 // workspace represents a Tharsis workspace in MCP responses.
 type workspace struct {
-	ID                 string            `json:"id" jsonschema:"The unique identifier of the workspace"`
-	Path               string            `json:"path" jsonschema:"Full path to the workspace"`
-	Name               string            `json:"name" jsonschema:"Workspace name"`
-	GroupPath          string            `json:"group_path" jsonschema:"Path to the parent group"`
-	Description        string            `json:"description" jsonschema:"Workspace description"`
-	TerraformVersion   string            `json:"terraform_version" jsonschema:"Terraform CLI version"`
-	MaxJobDuration     int32             `json:"max_job_duration" jsonschema:"Maximum number of minutes a Terraform job is allowed to run"`
-	PreventDestroyPlan bool              `json:"prevent_destroy_plan" jsonschema:"Whether destroy plans are prevented"`
-	Labels             map[string]string `json:"labels,omitempty" jsonschema:"Workspace labels"`
-	TRN                string            `json:"trn" jsonschema:"Tharsis Resource Name"`
+	ID                    string            `json:"id" jsonschema:"The unique identifier of the workspace"`
+	Path                  string            `json:"path" jsonschema:"Full path to the workspace"`
+	Name                  string            `json:"name" jsonschema:"Workspace name"`
+	GroupID               string            `json:"group_id" jsonschema:"ID of the parent group"`
+	Description           string            `json:"description" jsonschema:"Workspace description"`
+	Labels                map[string]string `json:"labels,omitempty" jsonschema:"Workspace labels"`
+	Locked                bool              `json:"locked" jsonschema:"Whether the workspace is locked"`
+	DirtyState            bool              `json:"dirty_state" jsonschema:"Whether the workspace has uncommitted changes"`
+	CurrentJobID          string            `json:"current_job_id,omitempty" jsonschema:"ID of the current running job"`
+	CurrentStateVersionID string            `json:"current_state_version_id,omitempty" jsonschema:"ID of the current state version"`
+	CreatedBy             string            `json:"created_by" jsonschema:"Username or service account that created this workspace"`
+	TRN                   string            `json:"trn" jsonschema:"Tharsis Resource Name"`
 }
 
-// toWorkspace converts an SDK workspace to MCP workspace.
-func toWorkspace(ws *sdktypes.Workspace) workspace {
+// toWorkspace converts a proto workspace to MCP workspace.
+func toWorkspace(ws *pb.Workspace) workspace {
 	return workspace{
-		ID:                 ws.Metadata.ID,
-		TRN:                ws.Metadata.TRN,
-		Path:               ws.FullPath,
-		Name:               ws.Name,
-		GroupPath:          ws.GroupPath,
-		Description:        ws.Description,
-		TerraformVersion:   ws.TerraformVersion,
-		MaxJobDuration:     ws.MaxJobDuration,
-		PreventDestroyPlan: ws.PreventDestroyPlan,
-		Labels:             ws.Labels,
+		ID:                    ws.Metadata.Id,
+		TRN:                   ws.Metadata.Trn,
+		Path:                  ws.FullPath,
+		Name:                  ws.Name,
+		GroupID:               ws.GroupId,
+		Description:           ws.Description,
+		Labels:                ws.Labels,
+		Locked:                ws.Locked,
+		DirtyState:            ws.DirtyState,
+		CurrentJobID:          ws.CurrentJobId,
+		CurrentStateVersionID: ws.CurrentStateVersionId,
+		CreatedBy:             ws.CreatedBy,
 	}
 }
 
 // listWorkspacesInput is the input for listing workspaces.
 type listWorkspacesInput struct {
-	GroupPath *string                          `json:"group_path,omitempty" jsonschema:"Filter workspaces to this group path (e.g. group/subgroup)"`
-	Labels    map[string]string                `json:"labels,omitempty" jsonschema:"Filter workspaces by labels (key-value pairs)"`
-	Sort      *sdktypes.WorkspaceSortableField `json:"sort,omitempty" jsonschema:"Sort order: FULL_PATH_ASC, FULL_PATH_DESC, UPDATED_AT_ASC, or UPDATED_AT_DESC"`
-	Limit     *int32                           `json:"limit,omitempty" jsonschema:"Maximum number of workspaces to return (default: 10, max: 50)"`
-	Cursor    *string                          `json:"cursor,omitempty" jsonschema:"Pagination cursor from previous response"`
+	GroupID *string           `json:"group_id,omitempty" jsonschema:"Filter workspaces to this group ID or TRN (e.g. Ul8yZ... or trn:group:group/subgroup)"`
+	Search  *string           `json:"search,omitempty" jsonschema:"Search term to filter by workspace path"`
+	Labels  map[string]string `json:"labels,omitempty" jsonschema:"Filter workspaces by labels (key-value pairs)"`
+	Sort    *string           `json:"sort,omitempty" jsonschema:"Sort order: FULL_PATH_ASC, FULL_PATH_DESC, UPDATED_AT_ASC, or UPDATED_AT_DESC"`
+	Limit   *int32            `json:"limit,omitempty" jsonschema:"Maximum number of workspaces to return (default: 10, max: 50)"`
+	Cursor  *string           `json:"cursor,omitempty" jsonschema:"Pagination cursor from previous response"`
 }
 
 // listWorkspacesOutput is the output for listing workspaces.
@@ -57,7 +62,7 @@ type listWorkspacesOutput struct {
 }
 
 // ListWorkspaces returns an MCP tool for listing workspaces.
-func listWorkspaces(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[listWorkspacesInput, listWorkspacesOutput]) {
+func listWorkspaces(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*listWorkspacesInput, *listWorkspacesOutput]) {
 	tool := mcp.Tool{
 		Name:        "list_workspaces",
 		Description: "List Tharsis workspaces with optional filtering by group. Supports pagination for large result sets.",
@@ -67,47 +72,26 @@ func listWorkspaces(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[listWorkspace
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input listWorkspacesInput) (*mcp.CallToolResult, listWorkspacesOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, listWorkspacesOutput{}, err
-		}
-
-		sdkInput := &sdktypes.GetWorkspacesInput{
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *listWorkspacesInput) (*mcp.CallToolResult, *listWorkspacesOutput, error) {
+		resp, err := tc.grpcClient.WorkspacesClient.GetWorkspaces(ctx, &pb.GetWorkspacesRequest{
+			GroupId:           input.GroupID,
+			Search:            input.Search,
+			LabelFilters:      input.Labels,
+			Sort:              toSortEnum[pb.WorkspaceSortableField](input.Sort, pb.WorkspaceSortableField_value),
 			PaginationOptions: buildPaginationOptions(input.Limit, input.Cursor),
-			Sort:              input.Sort,
-		}
-
-		if input.GroupPath != nil || len(input.Labels) > 0 {
-			sdkInput.Filter = &sdktypes.WorkspaceFilter{
-				GroupPath: input.GroupPath,
-			}
-
-			if len(input.Labels) > 0 {
-				labelFilters := make([]sdktypes.WorkspaceLabelFilter, 0, len(input.Labels))
-				for k, v := range input.Labels {
-					labelFilters = append(labelFilters, sdktypes.WorkspaceLabelFilter{
-						Key:   k,
-						Value: v,
-					})
-				}
-				sdkInput.Filter.Labels = labelFilters
-			}
-		}
-
-		result, err := client.Workspaces().GetWorkspaces(ctx, sdkInput)
+		})
 		if err != nil {
-			return nil, listWorkspacesOutput{}, fmt.Errorf("failed to list workspaces: %w", err)
+			return nil, nil, fmt.Errorf("failed to list workspaces: %w", err)
 		}
 
-		workspaces := make([]workspace, len(result.Workspaces))
-		for i, ws := range result.Workspaces {
-			workspaces[i] = toWorkspace(&ws)
+		workspaces := make([]workspace, len(resp.Workspaces))
+		for i, ws := range resp.Workspaces {
+			workspaces[i] = toWorkspace(ws)
 		}
 
-		return nil, listWorkspacesOutput{
+		return nil, &listWorkspacesOutput{
 			Workspaces: workspaces,
-			PageInfo:   buildPageInfo(result.PageInfo),
+			PageInfo:   buildPageInfo(resp.PageInfo),
 		}, nil
 	}
 
@@ -125,7 +109,7 @@ type getWorkspaceOutput struct {
 }
 
 // GetWorkspace returns an MCP tool for getting a workspace.
-func getWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getWorkspaceInput, getWorkspaceOutput]) {
+func getWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getWorkspaceInput, *getWorkspaceOutput]) {
 	tool := mcp.Tool{
 		Name:        "get_workspace",
 		Description: "Retrieve details about a Tharsis workspace including its configuration and current state.",
@@ -135,19 +119,14 @@ func getWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getWorkspaceInp
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input getWorkspaceInput) (*mcp.CallToolResult, getWorkspaceOutput, error) {
-		client, err := tc.clientGetter()
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *getWorkspaceInput) (*mcp.CallToolResult, *getWorkspaceOutput, error) {
+		resp, err := tc.grpcClient.WorkspacesClient.GetWorkspaceByID(ctx, &pb.GetWorkspaceByIDRequest{Id: input.ID})
 		if err != nil {
-			return nil, getWorkspaceOutput{}, err
+			return nil, nil, fmt.Errorf("failed to get workspace: %w", err)
 		}
 
-		workspace, err := client.Workspaces().GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &input.ID})
-		if err != nil {
-			return nil, getWorkspaceOutput{}, fmt.Errorf("failed to get workspace: %w", err)
-		}
-
-		return nil, getWorkspaceOutput{
-			Workspace: toWorkspace(workspace),
+		return nil, &getWorkspaceOutput{
+			Workspace: toWorkspace(resp),
 		}, nil
 	}
 
@@ -157,7 +136,7 @@ func getWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getWorkspaceInp
 // createWorkspaceInput is the input for creating a workspace.
 type createWorkspaceInput struct {
 	Name               string            `json:"name" jsonschema:"required,Name of the workspace"`
-	GroupPath          string            `json:"group_path" jsonschema:"required,Path to the parent group (e.g. group/subgroup)"`
+	GroupID            string            `json:"group_id" jsonschema:"required,Group ID or TRN (e.g. Ul8yZ... or trn:group:group/subgroup)"`
 	Description        string            `json:"description,omitempty" jsonschema:"Description of the workspace"`
 	TerraformVersion   *string           `json:"terraform_version,omitempty" jsonschema:"Terraform CLI version to use (e.g. 1.5.0). Defaults to latest"`
 	MaxJobDuration     *int32            `json:"max_job_duration,omitempty" jsonschema:"Maximum number of minutes a Terraform job is allowed to run"`
@@ -171,7 +150,7 @@ type createWorkspaceOutput struct {
 }
 
 // CreateWorkspace returns an MCP tool for creating a workspace.
-func createWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[createWorkspaceInput, createWorkspaceOutput]) {
+func createWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createWorkspaceInput, *createWorkspaceOutput]) {
 	tool := mcp.Tool{
 		Name:        "create_workspace",
 		Description: "Create a new Tharsis workspace within a group. Workspaces contain Terraform state and run configurations.",
@@ -182,38 +161,26 @@ func createWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[createWorksp
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input createWorkspaceInput) (*mcp.CallToolResult, createWorkspaceOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, createWorkspaceOutput{}, err
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *createWorkspaceInput) (*mcp.CallToolResult, *createWorkspaceOutput, error) {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.GroupID, trn.ResourceTypeGroup); err != nil {
+			return nil, nil, err
 		}
 
-		if err = tc.acl.Authorize(ctx, client, trn.ToTRN(input.GroupPath, trn.ResourceTypeGroup), trn.ResourceTypeGroup); err != nil {
-			return nil, createWorkspaceOutput{}, err
-		}
-
-		var labels []sdktypes.WorkspaceLabelInput
-		for k, v := range input.Labels {
-			labels = append(labels, sdktypes.WorkspaceLabelInput{Key: k, Value: v})
-		}
-
-		createInput := &sdktypes.CreateWorkspaceInput{
+		resp, err := tc.grpcClient.WorkspacesClient.CreateWorkspace(ctx, &pb.CreateWorkspaceRequest{
 			Name:               input.Name,
-			GroupPath:          input.GroupPath,
+			GroupId:            input.GroupID,
 			Description:        input.Description,
-			TerraformVersion:   input.TerraformVersion,
+			TerraformVersion:   ptr.ToString(input.TerraformVersion),
 			MaxJobDuration:     input.MaxJobDuration,
-			PreventDestroyPlan: input.PreventDestroyPlan,
-			Labels:             labels,
-		}
-
-		workspace, err := client.Workspaces().CreateWorkspace(ctx, createInput)
+			PreventDestroyPlan: ptr.ToBool(input.PreventDestroyPlan),
+			Labels:             input.Labels,
+		})
 		if err != nil {
-			return nil, createWorkspaceOutput{}, fmt.Errorf("failed to create workspace: %w", err)
+			return nil, nil, fmt.Errorf("failed to create workspace: %w", err)
 		}
 
-		return nil, createWorkspaceOutput{
-			Workspace: toWorkspace(workspace),
+		return nil, &createWorkspaceOutput{
+			Workspace: toWorkspace(resp),
 		}, nil
 	}
 
@@ -223,7 +190,7 @@ func createWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[createWorksp
 // updateWorkspaceInput is the input for updating a workspace.
 type updateWorkspaceInput struct {
 	ID                 string            `json:"id" jsonschema:"required,Workspace ID or TRN (e.g. Ul8yZ... or trn:workspace:group/subgroup/workspace-name)"`
-	Description        string            `json:"description,omitempty" jsonschema:"New description for the workspace"`
+	Description        *string           `json:"description,omitempty" jsonschema:"New description for the workspace"`
 	TerraformVersion   *string           `json:"terraform_version,omitempty" jsonschema:"New Terraform CLI version"`
 	MaxJobDuration     *int32            `json:"max_job_duration,omitempty" jsonschema:"Maximum number of minutes a Terraform job is allowed to run"`
 	PreventDestroyPlan *bool             `json:"prevent_destroy_plan,omitempty" jsonschema:"Update prevent destroy plan setting"`
@@ -236,7 +203,7 @@ type updateWorkspaceOutput struct {
 }
 
 // UpdateWorkspace returns an MCP tool for updating a workspace.
-func updateWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[updateWorkspaceInput, updateWorkspaceOutput]) {
+func updateWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*updateWorkspaceInput, *updateWorkspaceOutput]) {
 	tool := mcp.Tool{
 		Name:        "update_workspace",
 		Description: "Update an existing Tharsis workspace's configuration including description, Terraform version, and job settings.",
@@ -247,37 +214,25 @@ func updateWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[updateWorksp
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input updateWorkspaceInput) (*mcp.CallToolResult, updateWorkspaceOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, updateWorkspaceOutput{}, err
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *updateWorkspaceInput) (*mcp.CallToolResult, *updateWorkspaceOutput, error) {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeWorkspace); err != nil {
+			return nil, nil, err
 		}
 
-		if err = tc.acl.Authorize(ctx, client, input.ID, trn.ResourceTypeWorkspace); err != nil {
-			return nil, updateWorkspaceOutput{}, err
-		}
-
-		var labels []sdktypes.WorkspaceLabelInput
-		for k, v := range input.Labels {
-			labels = append(labels, sdktypes.WorkspaceLabelInput{Key: k, Value: v})
-		}
-
-		updateInput := &sdktypes.UpdateWorkspaceInput{
-			ID:                 &input.ID,
+		resp, err := tc.grpcClient.WorkspacesClient.UpdateWorkspace(ctx, &pb.UpdateWorkspaceRequest{
+			Id:                 input.ID,
 			Description:        input.Description,
 			TerraformVersion:   input.TerraformVersion,
 			MaxJobDuration:     input.MaxJobDuration,
 			PreventDestroyPlan: input.PreventDestroyPlan,
-			Labels:             labels,
-		}
-
-		workspace, err := client.Workspaces().UpdateWorkspace(ctx, updateInput)
+			Labels:             input.Labels,
+		})
 		if err != nil {
-			return nil, updateWorkspaceOutput{}, fmt.Errorf("failed to update workspace: %w", err)
+			return nil, nil, fmt.Errorf("failed to update workspace: %w", err)
 		}
 
-		return nil, updateWorkspaceOutput{
-			Workspace: toWorkspace(workspace),
+		return nil, &updateWorkspaceOutput{
+			Workspace: toWorkspace(resp),
 		}, nil
 	}
 
@@ -298,7 +253,7 @@ type deleteWorkspaceOutput struct {
 }
 
 // DeleteWorkspace returns an MCP tool for deleting a workspace.
-func deleteWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[deleteWorkspaceInput, deleteWorkspaceOutput]) {
+func deleteWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteWorkspaceInput, *deleteWorkspaceOutput]) {
 	tool := mcp.Tool{
 		Name:        "delete_workspace",
 		Description: "Delete a Tharsis workspace. Use with caution as this operation is irreversible.",
@@ -308,25 +263,18 @@ func deleteWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[deleteWorksp
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input deleteWorkspaceInput) (*mcp.CallToolResult, deleteWorkspaceOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, deleteWorkspaceOutput{}, err
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *deleteWorkspaceInput) (*mcp.CallToolResult, *deleteWorkspaceOutput, error) {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeWorkspace); err != nil {
+			return nil, nil, err
 		}
 
-		if err = tc.acl.Authorize(ctx, client, input.ID, trn.ResourceTypeWorkspace); err != nil {
-			return nil, deleteWorkspaceOutput{}, err
+		if _, err := tc.grpcClient.WorkspacesClient.DeleteWorkspace(ctx, &pb.DeleteWorkspaceRequest{
+			Id: input.ID,
+		}); err != nil {
+			return nil, nil, fmt.Errorf("failed to delete workspace: %w", err)
 		}
 
-		deleteInput := &sdktypes.DeleteWorkspaceInput{
-			ID: &input.ID,
-		}
-
-		if err := client.Workspaces().DeleteWorkspace(ctx, deleteInput); err != nil {
-			return nil, deleteWorkspaceOutput{}, fmt.Errorf("failed to delete workspace: %w", err)
-		}
-
-		return nil, deleteWorkspaceOutput{
+		return nil, &deleteWorkspaceOutput{
 			Message: fmt.Sprintf("Workspace %s deleted successfully", input.ID),
 			Success: true,
 		}, nil
@@ -346,7 +294,7 @@ type getWorkspaceOutputsOutput struct {
 }
 
 // GetWorkspaceOutputs returns an MCP tool for getting workspace outputs.
-func getWorkspaceOutputs(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getWorkspaceOutputsInput, getWorkspaceOutputsOutput]) {
+func getWorkspaceOutputs(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getWorkspaceOutputsInput, *getWorkspaceOutputsOutput]) {
 	tool := mcp.Tool{
 		Name:        "get_workspace_outputs",
 		Description: "Retrieve non-sensitive Terraform state outputs from a workspace. Sensitive outputs are filtered out for security.",
@@ -356,42 +304,49 @@ func getWorkspaceOutputs(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getWorks
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input getWorkspaceOutputsInput) (*mcp.CallToolResult, getWorkspaceOutputsOutput, error) {
-		client, err := tc.clientGetter()
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *getWorkspaceOutputsInput) (*mcp.CallToolResult, *getWorkspaceOutputsOutput, error) {
+		workspace, err := tc.grpcClient.WorkspacesClient.GetWorkspaceByID(ctx, &pb.GetWorkspaceByIDRequest{Id: input.ID})
 		if err != nil {
-			return nil, getWorkspaceOutputsOutput{}, err
+			return nil, nil, fmt.Errorf("failed to get workspace: %w", err)
 		}
 
-		workspace, err := client.Workspaces().GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &input.ID})
-		if err != nil {
-			return nil, getWorkspaceOutputsOutput{}, fmt.Errorf("failed to get workspace: %w", err)
+		if workspace.CurrentStateVersionId == "" {
+			return nil, &getWorkspaceOutputsOutput{Outputs: map[string]string{}}, nil
 		}
 
-		if workspace.CurrentStateVersion == nil {
-			return nil, getWorkspaceOutputsOutput{Outputs: map[string]string{}}, nil
-		}
-
-		stateVersion, err := client.StateVersions().GetStateVersion(ctx, &sdktypes.GetStateVersionInput{ID: workspace.CurrentStateVersion.Metadata.ID})
+		resp, err := tc.grpcClient.StateVersionsClient.GetStateVersionOutputs(ctx, &pb.GetStateVersionOutputsRequest{
+			StateVersionId: workspace.CurrentStateVersionId,
+		})
 		if err != nil {
-			return nil, getWorkspaceOutputsOutput{}, fmt.Errorf("failed to get state version: %w", err)
+			return nil, nil, fmt.Errorf("failed to get state version outputs: %w", err)
 		}
 
 		outputs := make(map[string]string)
-		for _, output := range stateVersion.Outputs {
+		for _, output := range resp.StateVersionOutputs {
 			// Skip sensitive outputs
 			if output.Sensitive {
 				continue
 			}
 
-			valueBytes, err := ctyjson.Marshal(output.Value, output.Type)
+			outputType, err := ctyjson.UnmarshalType(output.Type)
 			if err != nil {
-				return nil, getWorkspaceOutputsOutput{}, fmt.Errorf("failed to marshal output %s: %w", output.Name, err)
+				return nil, nil, fmt.Errorf("failed to unmarshal type for output %s: %w", output.Name, err)
+			}
+
+			outputValue, err := ctyjson.Unmarshal(output.Value, outputType)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to unmarshal value for output %s: %w", output.Name, err)
+			}
+
+			valueBytes, err := ctyjson.Marshal(outputValue, outputType)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to marshal output %s: %w", output.Name, err)
 			}
 
 			outputs[output.Name] = string(valueBytes)
 		}
 
-		return nil, getWorkspaceOutputsOutput{Outputs: outputs}, nil
+		return nil, &getWorkspaceOutputsOutput{Outputs: outputs}, nil
 	}
 
 	return tool, handler
