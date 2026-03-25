@@ -1,338 +1,402 @@
 package tools
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/aws/smithy-go/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+type terraformModuleVersionMocks struct {
+	terraformModules *mocks.TerraformModulesClient
+	acl              *acl.MockChecker
+	tfe              *tfe.MockRESTClient
+}
 
 func TestListTerraformModuleVersions(t *testing.T) {
 	type testCase struct {
-		name     string
-		input    listTerraformModuleVersionsInput
-		versions []sdktypes.TerraformModuleVersion
-		pageInfo sdktypes.PageInfo
-		validate func(*testing.T, listTerraformModuleVersionsOutput)
+		name          string
+		input         *listTerraformModuleVersionsInput
+		mockSetup     func(*terraformModuleVersionMocks)
+		expectError   bool
+		expectResults int
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "list versions without filter",
-			input: listTerraformModuleVersionsInput{
-				ModuleID: "module-id",
-			},
-			versions: []sdktypes.TerraformModuleVersion{
-				{
-					Metadata: sdktypes.ResourceMetadata{ID: "version-1", TRN: "trn:terraform_module_version:group/vpc/aws/1.0.0"},
-					ModuleID: "module-id",
-					Version:  "1.0.0",
-					SHASum:   "abc123",
-					Status:   "uploaded",
-					Latest:   false,
-				},
-				{
-					Metadata: sdktypes.ResourceMetadata{ID: "version-2", TRN: "trn:terraform_module_version:group/vpc/aws/1.1.0"},
-					ModuleID: "module-id",
-					Version:  "1.1.0",
-					SHASum:   "def456",
-					Status:   "uploaded",
-					Latest:   true,
-				},
-			},
-			pageInfo: sdktypes.PageInfo{
-				HasNextPage: false,
-			},
-			validate: func(t *testing.T, output listTerraformModuleVersionsOutput) {
-				assert.Len(t, output.ModuleVersions, 2)
-				assert.Equal(t, "version-1", output.ModuleVersions[0].ID)
-				assert.Equal(t, "1.0.0", output.ModuleVersions[0].Version)
-				assert.Equal(t, "1.1.0", output.ModuleVersions[1].Version)
-				assert.True(t, output.ModuleVersions[1].Latest)
-				assert.False(t, output.PageInfo.HasNextPage)
-			},
-		},
-		{
-			name: "list versions with sort",
-			input: func() listTerraformModuleVersionsInput {
-				sort := sdktypes.TerraformModuleVersionSortableFieldCreatedAtDesc
-				return listTerraformModuleVersionsInput{
-					ModuleID: "module-id",
-					Sort:     &sort,
-				}
-			}(),
-			versions: []sdktypes.TerraformModuleVersion{
-				{
-					Metadata: sdktypes.ResourceMetadata{ID: "version-2", TRN: "trn:terraform_module_version:group/vpc/aws/1.1.0"},
-					ModuleID: "module-id",
-					Version:  "1.1.0",
-					Status:   "uploaded",
-					Latest:   true,
-				},
-			},
-			pageInfo: sdktypes.PageInfo{},
-			validate: func(t *testing.T, output listTerraformModuleVersionsOutput) {
-				assert.Len(t, output.ModuleVersions, 1)
-				assert.Equal(t, "1.1.0", output.ModuleVersions[0].Version)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModuleVersion := tharsis.NewTerraformModuleVersion(t)
-
-			mockClient.On("TerraformModuleVersions").Return(mockModuleVersion)
-			mockModuleVersion.On("GetModuleVersions", mock.Anything, mock.Anything).
-				Return(&sdktypes.GetTerraformModuleVersionsOutput{
-					ModuleVersions: tt.versions,
-					PageInfo:       &tt.pageInfo,
+			name:  "list module versions successfully",
+			input: &listTerraformModuleVersionsInput{ModuleID: "m1", Limit: ptr.Int32(10)},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.terraformModules.On("GetTerraformModuleVersions", mock.Anything, &pb.GetTerraformModuleVersionsRequest{
+					ModuleId:          "m1",
+					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
+				}).Return(&pb.GetTerraformModuleVersionsResponse{
+					Versions: []*pb.TerraformModuleVersion{
+						{Metadata: &pb.ResourceMetadata{
+							Id:  "mv1",
+							Trn: "trn:terraform_module_version:group/module/aws/1.0.0",
+						},
+							ModuleId:        "m1",
+							SemanticVersion: "1.0.0",
+							Status:          "uploaded",
+						},
+					},
+					PageInfo: &pb.PageInfo{HasNextPage: false},
 				}, nil)
+			},
+			expectResults: 1,
+		},
+		{
+			name:  "list call failed",
+			input: &listTerraformModuleVersionsInput{ModuleID: "m1", Limit: ptr.Int32(10)},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.terraformModules.On("GetTerraformModuleVersions", mock.Anything, &pb.GetTerraformModuleVersionsRequest{
+					ModuleId:          "m1",
+					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
+				}).Return(nil, status.Error(codes.Internal, "internal error"))
+			},
+			expectError: true,
+		},
+	}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &terraformModuleVersionMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+			}
+
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
 			}
 
-			_, handler := listTerraformModuleVersions(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := listTerraformModuleVersions(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			assert.NoError(t, err)
-			if tt.validate != nil {
-				tt.validate(t, output)
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Len(t, output.ModuleVersions, tc.expectResults)
 		})
 	}
 }
 
 func TestGetTerraformModuleVersion(t *testing.T) {
-	versionID := "version-id"
-
 	type testCase struct {
-		name     string
-		input    getTerraformModuleVersionInput
-		version  *sdktypes.TerraformModuleVersion
-		validate func(*testing.T, getTerraformModuleVersionOutput)
+		name        string
+		input       *getTerraformModuleVersionInput
+		mockSetup   func(*terraformModuleVersionMocks)
+		expectError bool
+		expectID    string
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "get version by ID",
-			input: getTerraformModuleVersionInput{
-				ID: versionID,
+			name:  "get module version successfully",
+			input: &getTerraformModuleVersionInput{ID: "mv1"},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.terraformModules.On("GetTerraformModuleVersionByID", mock.Anything, &pb.GetTerraformModuleVersionByIDRequest{Id: "mv1"}).Return(&pb.TerraformModuleVersion{
+					Metadata:        &pb.ResourceMetadata{Id: "mv1", Trn: "trn:terraform_module_version:group/module/aws/1.0.0"},
+					ModuleId:        "m1",
+					SemanticVersion: "1.0.0",
+					Status:          "uploaded",
+				}, nil)
 			},
-			version: &sdktypes.TerraformModuleVersion{
-				Metadata: sdktypes.ResourceMetadata{ID: versionID, TRN: "trn:terraform_module_version:group/vpc/aws/1.0.0"},
-				ModuleID: "module-id",
-				Version:  "1.0.0",
-				SHASum:   "abc123",
-				Status:   "uploaded",
-				Latest:   true,
-			},
-			validate: func(t *testing.T, output getTerraformModuleVersionOutput) {
-				assert.Equal(t, versionID, output.ModuleVersion.ID)
-				assert.Equal(t, "1.0.0", output.ModuleVersion.Version)
-				assert.True(t, output.ModuleVersion.Latest)
-			},
+			expectID: "mv1",
 		},
 		{
-			name: "get version by TRN",
-			input: getTerraformModuleVersionInput{
-				ID: "trn:terraform_module_version:group/vpc/aws/1.0.0",
+			name:  "module version not found",
+			input: &getTerraformModuleVersionInput{ID: "nonexistent"},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.terraformModules.On("GetTerraformModuleVersionByID", mock.Anything, &pb.GetTerraformModuleVersionByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
 			},
-			version: &sdktypes.TerraformModuleVersion{
-				Metadata: sdktypes.ResourceMetadata{ID: versionID, TRN: "trn:terraform_module_version:group/vpc/aws/1.0.0"},
-				ModuleID: "module-id",
-				Version:  "1.0.0",
-				SHASum:   "abc123",
-				Status:   "uploaded",
-			},
-			validate: func(t *testing.T, output getTerraformModuleVersionOutput) {
-				assert.Equal(t, "1.0.0", output.ModuleVersion.Version)
-				assert.Equal(t, "abc123", output.ModuleVersion.SHASum)
-			},
+			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModuleVersion := tharsis.NewTerraformModuleVersion(t)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &terraformModuleVersionMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+			}
 
-			mockClient.On("TerraformModuleVersions").Return(mockModuleVersion)
-			mockModuleVersion.On("GetModuleVersion", mock.Anything, mock.MatchedBy(func(input *sdktypes.GetTerraformModuleVersionInput) bool {
-				return input.ID != nil && *input.ID == tt.input.ID
-			})).Return(tt.version, nil)
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
 			}
 
-			_, handler := getTerraformModuleVersion(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := getTerraformModuleVersion(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			assert.NoError(t, err)
-			if tt.validate != nil {
-				tt.validate(t, output)
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectID, output.ModuleVersion.ID)
 		})
 	}
 }
 
 func TestDeleteTerraformModuleVersion(t *testing.T) {
-	versionID := "version-id"
-
 	type testCase struct {
 		name        string
-		aclError    error
+		input       *deleteTerraformModuleVersionInput
+		mockSetup   func(*terraformModuleVersionMocks)
 		expectError bool
-		validate    func(*testing.T, deleteTerraformModuleVersionOutput)
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "successful version deletion",
-			validate: func(t *testing.T, output deleteTerraformModuleVersionOutput) {
-				assert.True(t, output.Success)
-				assert.Contains(t, output.Message, "deleted successfully")
+			name:  "delete module version successfully",
+			input: &deleteTerraformModuleVersionInput{ID: "mv1"},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "mv1", trn.ResourceTypeTerraformModuleVersion).Return(nil)
+				m.terraformModules.On("DeleteTerraformModuleVersion", mock.Anything, &pb.DeleteTerraformModuleVersionRequest{Id: "mv1"}).Return(nil, nil)
 			},
 		},
 		{
-			name:        "ACL denial",
-			aclError:    assert.AnError,
+			name:  "module version not found",
+			input: &deleteTerraformModuleVersionInput{ID: "nonexistent"},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeTerraformModuleVersion).Return(nil)
+				m.terraformModules.On("DeleteTerraformModuleVersion", mock.Anything, &pb.DeleteTerraformModuleVersionRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+			},
+			expectError: true,
+		},
+		{
+			name:  "acl denial",
+			input: &deleteTerraformModuleVersionInput{ID: "mv1"},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "mv1", trn.ResourceTypeTerraformModuleVersion).
+					Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModuleVersion := tharsis.NewTerraformModuleVersion(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockACL.On("Authorize", mock.Anything, mockClient, versionID, trn.ResourceTypeTerraformModuleVersion).Return(tt.aclError)
-
-			if tt.aclError == nil {
-				mockClient.On("TerraformModuleVersions").Return(mockModuleVersion)
-				mockModuleVersion.On("DeleteModuleVersion", mock.Anything, &sdktypes.DeleteTerraformModuleVersionInput{
-					ID: versionID,
-				}).Return(nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &terraformModuleVersionMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+				acl:              acl.NewMockChecker(t),
 			}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := deleteTerraformModuleVersion(tc)
-			_, output, err := handler(t.Context(), nil, deleteTerraformModuleVersionInput{ID: versionID})
+			_, handler := deleteTerraformModuleVersion(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
 		})
 	}
 }
 
 func TestUploadModuleVersion(t *testing.T) {
-	moduleID := "module-id"
-	versionID := "version-id"
-
 	type testCase struct {
 		name        string
-		input       uploadModuleVersionInput
-		aclError    error
+		setupDir    func() string
+		input       func(string) *uploadModuleVersionInput
+		mockSetup   func(*terraformModuleVersionMocks)
 		expectError bool
-		validate    func(*testing.T, uploadModuleVersionOutput)
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "successful upload",
-			input: uploadModuleVersionInput{
-				ModuleID:      moduleID,
-				Version:       "1.0.0",
-				DirectoryPath: t.TempDir(),
+			name: "upload module version successfully",
+			setupDir: func() string {
+				dir := t.TempDir()
+				// Create a minimal terraform file
+				_ = os.WriteFile(filepath.Join(dir, "main.tf"), []byte("# test"), 0600)
+				return dir
 			},
-			validate: func(t *testing.T, output uploadModuleVersionOutput) {
-				assert.Contains(t, output.Message, "upload initiated")
-				assert.Equal(t, versionID, output.ModuleVersion.ID)
+			input: func(dir string) *uploadModuleVersionInput {
+				return &uploadModuleVersionInput{
+					ModuleID:      "m1",
+					Version:       "1.0.0",
+					DirectoryPath: dir,
+				}
+			},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.terraformModules.On("CreateTerraformModuleVersion", mock.Anything, mock.MatchedBy(func(input *pb.CreateTerraformModuleVersionRequest) bool {
+					return input.ModuleId == "m1" && input.Version == "1.0.0" && input.ShaSum != ""
+				})).Return(&pb.TerraformModuleVersion{
+					Metadata:        &pb.ResourceMetadata{Id: "mv1", Trn: "trn:terraform_module_version:group/module/aws/1.0.0"},
+					ModuleId:        "m1",
+					SemanticVersion: "1.0.0",
+					Status:          "pending",
+				}, nil)
+				m.tfe.On("UploadModuleVersion", mock.Anything, mock.MatchedBy(func(input *tfe.UploadModuleVersionInput) bool {
+					return input.ModuleVersionID == "mv1"
+				})).Return(nil)
 			},
 		},
 		{
-			name: "ACL denial",
-			input: uploadModuleVersionInput{
-				ModuleID:      moduleID,
-				Version:       "1.0.0",
-				DirectoryPath: t.TempDir(),
+			name: "acl denial",
+			setupDir: func() string {
+				return t.TempDir()
 			},
-			aclError:    assert.AnError,
+			input: func(dir string) *uploadModuleVersionInput {
+				return &uploadModuleVersionInput{
+					ModuleID:      "m1",
+					Version:       "1.0.0",
+					DirectoryPath: dir,
+				}
+			},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
 			expectError: true,
 		},
 		{
 			name: "directory does not exist",
-			input: uploadModuleVersionInput{
-				ModuleID:      moduleID,
-				Version:       "1.0.0",
-				DirectoryPath: "/nonexistent/path",
+			setupDir: func() string {
+				return "/nonexistent/path"
+			},
+			input: func(dir string) *uploadModuleVersionInput {
+				return &uploadModuleVersionInput{
+					ModuleID:      "m1",
+					Version:       "1.0.0",
+					DirectoryPath: dir,
+				}
+			},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+			},
+			expectError: true,
+		},
+		{
+			name: "create version fails",
+			setupDir: func() string {
+				dir := t.TempDir()
+				_ = os.WriteFile(filepath.Join(dir, "main.tf"), []byte("# test"), 0600)
+				return dir
+			},
+			input: func(dir string) *uploadModuleVersionInput {
+				return &uploadModuleVersionInput{
+					ModuleID:      "m1",
+					Version:       "1.0.0",
+					DirectoryPath: dir,
+				}
+			},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.terraformModules.On("CreateTerraformModuleVersion", mock.Anything, mock.MatchedBy(func(input *pb.CreateTerraformModuleVersionRequest) bool {
+					return input.ModuleId == "m1" && input.Version == "1.0.0" && input.ShaSum != ""
+				})).Return(nil, status.Error(codes.Internal, "internal error"))
+			},
+			expectError: true,
+		},
+		{
+			name: "upload fails",
+			setupDir: func() string {
+				dir := t.TempDir()
+				_ = os.WriteFile(filepath.Join(dir, "main.tf"), []byte("# test"), 0600)
+				return dir
+			},
+			input: func(dir string) *uploadModuleVersionInput {
+				return &uploadModuleVersionInput{
+					ModuleID:      "m1",
+					Version:       "1.0.0",
+					DirectoryPath: dir,
+				}
+			},
+			mockSetup: func(m *terraformModuleVersionMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.terraformModules.On("CreateTerraformModuleVersion", mock.Anything, mock.MatchedBy(func(input *pb.CreateTerraformModuleVersionRequest) bool {
+					return input.ModuleId == "m1" && input.Version == "1.0.0" && input.ShaSum != ""
+				})).Return(&pb.TerraformModuleVersion{
+					Metadata:        &pb.ResourceMetadata{Id: "mv1", Trn: "trn:terraform_module_version:group/module/aws/1.0.0"},
+					ModuleId:        "m1",
+					SemanticVersion: "1.0.0",
+					Status:          "pending",
+				}, nil)
+				m.tfe.On("UploadModuleVersion", mock.Anything, mock.MatchedBy(func(input *tfe.UploadModuleVersionInput) bool {
+					return input.ModuleVersionID == "mv1"
+				})).Return(status.Error(codes.Internal, "upload failed"))
+				m.terraformModules.On("DeleteTerraformModuleVersion", mock.Anything, &pb.DeleteTerraformModuleVersionRequest{Id: "mv1"}).Return(nil, nil)
 			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModuleVersion := tharsis.NewTerraformModuleVersion(t)
-			mockACL := acl.NewMockChecker(t)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := tc.setupDir()
+			input := tc.input(dir)
 
-			mockACL.On("Authorize", mock.Anything, mockClient, tt.input.ModuleID, trn.ResourceTypeTerraformModule).Return(tt.aclError)
-
-			if tt.aclError == nil && tt.name != "directory does not exist" {
-				mockClient.On("TerraformModuleVersions").Return(mockModuleVersion)
-				mockModuleVersion.On("CreateModuleVersion", mock.Anything, mock.MatchedBy(func(input *sdktypes.CreateTerraformModuleVersionInput) bool {
-					return input.Version == tt.input.Version
-				})).Return(&sdktypes.TerraformModuleVersion{
-					Metadata: sdktypes.ResourceMetadata{ID: versionID, TRN: "trn:terraform_module_version:group/module/system/1.0.0"},
-					Version:  tt.input.Version,
-					Status:   "pending",
-				}, nil)
-				mockModuleVersion.On("UploadModuleVersion", mock.Anything, versionID, mock.Anything).Return(nil)
+			testMocks := &terraformModuleVersionMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+				acl:              acl.NewMockChecker(t),
+				tfe:              tfe.NewMockRESTClient(t),
 			}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
-				acl: mockACL,
+				acl:       testMocks.acl,
+				tfeClient: testMocks.tfe,
 			}
 
-			_, handler := uploadModuleVersion(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := uploadModuleVersion(toolCtx)
+			_, output, err := handler(t.Context(), nil, input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.NotNil(t, output.ModuleVersion)
 		})
 	}
 }

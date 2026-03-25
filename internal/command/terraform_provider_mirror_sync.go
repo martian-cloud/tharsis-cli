@@ -1,153 +1,116 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
-	"io"
-	"log"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/apparentlymart/go-versions/versions"
-	logger "github.com/caarlos0/log"
-	"github.com/dustin/go-humanize"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	tfaddr "github.com/hashicorp/terraform-registry-address"
-	svchost "github.com/hashicorp/terraform-svchost"
-	"github.com/hashicorp/terraform-svchost/disco"
-	"github.com/mitchellh/cli"
-	"github.com/vbauerster/mpb/v8"
-	"github.com/vbauerster/mpb/v8/decor"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/provider"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-const (
-	// defaultSyncConcurrency is the default number of concurrent platform uploads.
-	defaultSyncConcurrency = 4
-	// maxSyncConcurrency is the maximum allowed concurrency.
-	maxSyncConcurrency = 10
-	// progressBarWidth is the width of the progress bar.
-	progressBarWidth = 60
-	// progressBarPrefix is the prefix for each progress bar line.
-	progressBarPrefix = "   \033[34m•\033[0m "
-)
-
-// syncPlatformsInput is the input for syncMissingPlatforms.
-type syncPlatformsInput struct {
-	client           *tharsis.Client
-	registryClient   provider.RegistryProtocol
-	versionMirror    *sdktypes.TerraformProviderVersionMirror
-	provider         *provider.Provider
-	missingPlatforms map[string]struct{}
-	registryOpts     []provider.RequestOption
-	concurrency      int
-	totalBytes       *atomic.Int64
+type registryConnection struct {
+	provider          *provider.Provider
+	client            provider.RegistryProtocol
+	requestOpts       []provider.RequestOption
+	token             *string
+	availableVersions []provider.VersionInfo
 }
 
 type terraformProviderMirrorSyncCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	sg        terminal.StepGroup
+	groupID   string
+	version   string
+	platforms []string
 }
 
-// NewTerraformProviderMirrorSyncCommandFactory returns a terraformProviderMirrorSyncCommand struct.
-func NewTerraformProviderMirrorSyncCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return terraformProviderMirrorSyncCommand{meta: meta}, nil
+func (c *terraformProviderMirrorSyncCommand) validate() error {
+	const message = "provider-fqn is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.groupID, validation.Required),
+	)
+}
+
+// NewTerraformProviderMirrorSyncCommandFactory returns a new terraformProviderMirrorSyncCommand
+func NewTerraformProviderMirrorSyncCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &terraformProviderMirrorSyncCommand{
+			BaseCommand: baseCommand,
+			sg:          baseCommand.UI.StepGroup(),
+		}, nil
 	}
 }
 
-func (c terraformProviderMirrorSyncCommand) Run(args []string) int {
-	c.meta.Logger.Debugf("Starting the 'terraform-provider-mirror sync' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		c.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *terraformProviderMirrorSyncCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("terraform-provider-mirror sync"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := c.meta.GetSDKClient()
+	registry, err := c.connectToRegistry()
 	if err != nil {
-		c.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to connect to registry")
 		return 1
 	}
 
-	ctx := context.Background()
+	if err := c.resolveVersion(registry); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to resolve version")
+		return 1
+	}
 
-	return c.doTerraformProviderMirrorSync(ctx, client, args)
+	versionMirror, err := c.getOrCreateVersionMirror(registry)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get version mirror")
+		return 1
+	}
+
+	if err := c.uploadMissingPlatforms(registry, versionMirror); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to upload platforms")
+		return 1
+	}
+
+	c.sg.Wait()
+	c.UI.Successf("\nProvider platform packages uploaded to mirror successfully!")
+	return 0
 }
 
-func (c terraformProviderMirrorSyncCommand) doTerraformProviderMirrorSync(ctx context.Context, client *tharsis.Client, opts []string) int {
-	c.meta.Logger.Debugf("will do terraform-provider-mirror sync, %d opts", len(opts))
-
-	defs := c.defs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(c.meta.BinaryName+" terraform-provider-mirror sync", defs, opts)
+func (c *terraformProviderMirrorSyncCommand) connectToRegistry() (conn *registryConnection, err error) {
+	parsedProvider, err := tfaddr.ParseProviderSource(c.arguments[0])
 	if err != nil {
-		c.meta.Logger.Error(output.FormatError("failed to parse terraform-provider-mirror sync options", err))
-		return cli.RunResultHelp
-	}
-	if len(cmdArgs) < 1 {
-		c.meta.Logger.Error(output.FormatError("missing terraform-provider-mirror sync <provider-path>", nil))
-		return cli.RunResultHelp
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive terraform-provider-mirror sync arguments: %s", cmdArgs)
-		c.meta.Logger.Error(output.FormatError(msg, nil))
-		return cli.RunResultHelp
+		return nil, err
 	}
 
-	fqn := cmdArgs[0]
-	groupPath := getOption("group-path", "", cmdOpts)[0]
-	version := getOption("version", "", cmdOpts)[0]
-	platforms := getOptionSlice("platform", cmdOpts)
-	concurrencyStr := getOption("concurrency", strconv.Itoa(defaultSyncConcurrency), cmdOpts)[0]
-	allPlatforms := len(platforms) == 0 // If no platform specified, default to all supported platforms.
-	useLatestVersion := version == ""   // If no version specified, use latest version.
+	step := c.sg.Add("Connect to provider registry")
+	defer func() { c.finalizeStep(step, err) }()
 
-	concurrency, err := strconv.Atoi(concurrencyStr)
+	registryClient := provider.NewRegistryClient(c.HTTPClient)
+
+	token, err := c.resolveRegistryToken(parsedProvider.Hostname.String())
 	if err != nil {
-		c.meta.UI.Error(output.FormatError("invalid concurrency value", err))
-		return 1
+		return nil, err
 	}
-	if concurrency < 1 || concurrency > maxSyncConcurrency {
-		c.meta.UI.Error(output.FormatError(fmt.Sprintf("concurrency must be between 1 and %d", maxSyncConcurrency), nil))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(groupPath)
-	if !isNamespacePathValid(c.meta, actualPath) {
-		return 1
-	}
-
-	for _, p := range platforms {
-		if !strings.Contains(p, "_") {
-			c.meta.UI.Output(output.FormatError("Invalid platform. Must be formatted as <os_arch>", nil))
-			return 1
-		}
-	}
-
-	// Validate and parse FQN.
-	slashCount := strings.Count(fqn, "/")
-	if slashCount < 1 || slashCount > 2 {
-		c.meta.UI.Error(output.FormatError("invalid FQN. Must be [hostname/]namespace/name", nil))
-		return 1
-	}
-
-	parsedProvider, err := tfaddr.ParseProviderSource(fqn)
-	if err != nil {
-		c.meta.UI.Error(output.FormatError("failed to parse provider FQN", err))
-		return 1
-	}
-
-	logger.Info("starting terraform-provider-mirror sync")
-
-	// Create an instance of the provider registry client.
-	registryClient := provider.NewRegistryClient(c.meta.HTTPClient)
 
 	prov := &provider.Provider{
 		Hostname:  parsedProvider.Hostname.String(),
@@ -155,121 +118,187 @@ func (c terraformProviderMirrorSyncCommand) doTerraformProviderMirrorSync(ctx co
 		Type:      parsedProvider.Type,
 	}
 
-	// Resolve authentication token for private registries.
 	var registryOpts []provider.RequestOption
-	token, err := c.resolveRegistryToken(prov.Hostname)
-	if err != nil {
-		c.meta.UI.Output(output.FormatError("failed to resolve registry token", err))
-		return 1
-	}
-
 	if token != nil {
 		registryOpts = append(registryOpts, provider.WithToken(*token))
 	}
 
-	availableVersions, err := registryClient.ListVersions(ctx, prov, registryOpts...)
+	availableVersions, err := registryClient.ListVersions(c.Context, prov, registryOpts...)
 	if err != nil {
-		c.meta.UI.Output(output.FormatError("failed to list available provider versions", err))
-		return 1
+		return nil, err
 	}
 
-	logger.Info("retrieved provider's supported platforms from the Terraform Registry API")
+	step.Update("Connect to provider registry (%d versions available)", len(availableVersions))
 
-	if useLatestVersion {
-		version, err = provider.FindLatestVersion(availableVersions)
-		if err != nil {
-			c.meta.UI.Output(output.FormatError("failed to find latest provider version", err))
-			return 1
-		}
-	} else {
+	return &registryConnection{
+		provider:          prov,
+		client:            registryClient,
+		requestOpts:       registryOpts,
+		token:             token,
+		availableVersions: availableVersions,
+	}, nil
+}
+
+func (c *terraformProviderMirrorSyncCommand) resolveVersion(registry *registryConnection) (err error) {
+	if c.version != "" {
 		// Normalize partial versions (e.g., 6.31 -> 6.31.0).
-		parsed, err := versions.ParseVersion(version)
+		parsed, err := versions.ParseVersion(c.version)
 		if err != nil {
-			c.meta.UI.Output(output.FormatError("invalid version format", err))
-			return 1
+			return err
 		}
+		c.version = parsed.String()
 
-		version = parsed.String()
+		return nil
 	}
 
-	logger.WithField("version", version).Info("using terraform provider version")
+	step := c.sg.Add("Find latest version")
+	defer func() { c.finalizeStep(step, err) }()
 
-	versionQueryInput := &sdktypes.GetTerraformProviderVersionMirrorByAddressInput{
-		RegistryHostname:  prov.Hostname,
-		RegistryNamespace: prov.Namespace,
-		Type:              prov.Type,
-		Version:           version,
-		GroupPath:         groupPath,
-	}
-
-	c.meta.Logger.Debugf("terraform-provider-mirror sync get version mirror input: %#v", versionQueryInput)
-
-	// Attempt to find the version mirror first incase it already exists.
-	versionMirror, err := client.TerraformProviderVersionMirror.GetProviderVersionMirrorByAddress(ctx, versionQueryInput)
-	if err != nil && !tharsis.IsNotFoundError(err) {
-		c.meta.UI.Error(output.FormatError("failed to get terraform provider version mirror", err))
-		return 1
-	}
-
-	if versionMirror == nil {
-		// Version mirror doesn't exist so, create it.
-		versionInput := &sdktypes.CreateTerraformProviderVersionMirrorInput{
-			RegistryToken:     token,
-			GroupPath:         groupPath,
-			Type:              prov.Type,
-			RegistryNamespace: prov.Namespace,
-			RegistryHostname:  prov.Hostname,
-			SemanticVersion:   version,
-		}
-
-		c.meta.Logger.Debugf("terraform-provider-mirror sync create version mirror input: %#v", versionInput)
-
-		versionMirror, err = client.TerraformProviderVersionMirror.CreateProviderVersionMirror(ctx, versionInput)
-		if err != nil {
-			c.meta.UI.Error(output.FormatError("failed to create terraform provider version mirror", err))
-			return 1
-		}
-	}
-
-	logger.WithField("id", versionMirror.Metadata.ID).Info("using terraform provider version mirror id")
-
-	// Determine which platforms need to be synced.
-	missingPlatforms, err := c.getMissingPlatforms(ctx, client, versionMirror, availableVersions, platforms, allPlatforms)
+	version, err := provider.FindLatestVersion(registry.availableVersions)
 	if err != nil {
-		c.meta.UI.Output(output.FormatError("failed to determine missing platforms", err))
-		return 1
+		return err
 	}
+
+	c.version = version
+	step.Update("Find latest version (%s)", c.version)
+
+	return nil
+}
+
+func (c *terraformProviderMirrorSyncCommand) getOrCreateVersionMirror(registry *registryConnection) (versionMirror *pb.TerraformProviderVersionMirror, err error) {
+	step := c.sg.Add("Get version mirror")
+	defer func() { c.finalizeStep(step, err) }()
+
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{
+		Id: c.groupID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	versionMirrorTRN := trn.NewResourceTRN(
+		trn.ResourceTypeTerraformProviderVersionMirror,
+		group.FullPath,
+		registry.provider.Hostname,
+		registry.provider.Namespace,
+		registry.provider.Type,
+		c.version,
+	)
+
+	versionMirror, err = c.grpcClient.TerraformProviderMirrorsClient.GetTerraformProviderVersionMirrorByID(c.Context, &pb.GetTerraformProviderVersionMirrorByIDRequest{
+		Id: versionMirrorTRN,
+	})
+	if err != nil && status.Code(err) != codes.NotFound {
+		return nil, err
+	}
+
+	if versionMirror != nil {
+		return versionMirror, nil
+	}
+
+	step.Update("Create version mirror")
+
+	versionMirror, err = c.grpcClient.TerraformProviderMirrorsClient.CreateTerraformProviderVersionMirror(c.Context, &pb.CreateTerraformProviderVersionMirrorRequest{
+		GroupPath:         group.FullPath,
+		Type:              registry.provider.Type,
+		RegistryNamespace: registry.provider.Namespace,
+		RegistryHostname:  registry.provider.Hostname,
+		SemanticVersion:   c.version,
+		RegistryToken:     registry.token,
+	})
+
+	return versionMirror, err
+}
+
+func (c *terraformProviderMirrorSyncCommand) uploadMissingPlatforms(registry *registryConnection, versionMirror *pb.TerraformProviderVersionMirror) (err error) {
+	step := c.sg.Add("Determine missing platforms")
+	defer func() { c.finalizeStep(step, err) }()
+
+	missingPlatforms, err := c.getMissingPlatforms(versionMirror, registry.availableVersions)
+	if err != nil {
+		return err
+	}
+
+	step.Update("Determine missing platforms (%d to sync)", len(missingPlatforms))
 
 	if len(missingPlatforms) == 0 {
-		c.meta.UI.Output("\nStopping since all platform packages are already mirrored")
-		return 0
+		return nil
 	}
 
-	// Sync the missing platforms.
-	if err := c.syncMissingPlatforms(ctx, &syncPlatformsInput{
-		client:           client,
-		registryClient:   registryClient,
-		versionMirror:    versionMirror,
-		provider:         prov,
-		missingPlatforms: missingPlatforms,
-		registryOpts:     registryOpts,
-		concurrency:      concurrency,
-		totalBytes:       &atomic.Int64{},
-	}); err != nil {
-		c.meta.UI.Output(output.FormatError("failed to sync platform packages", err))
-		return 1
+	step.Done()
+
+	curSettings, err := c.getCurrentSettings()
+	if err != nil {
+		return err
 	}
 
-	c.meta.UI.Output("\nProvider platform packages uploaded to mirror successfully!")
+	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
+	if err != nil {
+		return err
+	}
 
-	return 0
+	tfeClient, err := tfe.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenGetter, c.HTTPClient)
+	if err != nil {
+		return err
+	}
+
+	for platform := range missingPlatforms {
+		if err := c.uploadPlatform(tfeClient, registry, versionMirror, platform); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *terraformProviderMirrorSyncCommand) uploadPlatform(tfeClient tfe.RESTClient, registry *registryConnection, versionMirror *pb.TerraformProviderVersionMirror, platform string) (err error) {
+	step := c.sg.Add("Upload platform %s", platform)
+	start := time.Now()
+	defer func() {
+		step.Update("Upload platform %s (%s)", platform, time.Since(start).Round(time.Millisecond))
+		c.finalizeStep(step, err)
+	}()
+
+	parts := strings.Split(platform, "_")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid platform format: %s", platform)
+	}
+	os, arch := parts[0], parts[1]
+
+	packageInfo, err := registry.client.GetPackageInfo(c.Context, registry.provider, c.version, os, arch, registry.requestOpts...)
+	if err != nil {
+		return err
+	}
+
+	reader, _, err := registry.client.DownloadPackage(c.Context, packageInfo.DownloadURL)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	return tfeClient.UploadProviderPlatformPackageToMirror(c.Context, &tfe.UploadProviderPlatformPackageToMirrorInput{
+		VersionMirrorID: versionMirror.Metadata.Id,
+		OS:              os,
+		Arch:            arch,
+		Reader:          reader,
+	})
+}
+
+func (c *terraformProviderMirrorSyncCommand) finalizeStep(step terminal.Step, err error) {
+	if err != nil {
+		step.Abort()
+		c.sg.Wait()
+
+		return
+	}
+
+	step.Done()
 }
 
 // resolveRegistryToken resolves an authentication token for a provider registry.
 // It checks: 1) CLI environment variables (TF_TOKEN_...), 2) federated registries via service discovery.
-func (c terraformProviderMirrorSyncCommand) resolveRegistryToken(hostname string) (*string, error) {
+func (c *terraformProviderMirrorSyncCommand) resolveRegistryToken(hostname string) (*string, error) {
 	if hostname == provider.TerraformPublicRegistryHost {
-		c.meta.Logger.Debugf("skipping token resolution for %s", hostname)
 		return nil, nil
 	}
 
@@ -278,80 +307,70 @@ func (c terraformProviderMirrorSyncCommand) resolveRegistryToken(hostname string
 
 	// 1. Check CLI environment variable.
 	if token := os.Getenv(envVar); token != "" {
-		c.meta.Logger.Debugf("found token in CLI environment variable %s", envVar)
 		return &token, nil
 	}
 
 	// 2. Run service discovery and look for a federated registry match.
-	c.meta.Logger.Debugf("checking for federated registry match for %s", hostname)
-	serviceURL, err := c.discoverServiceURL(hostname)
+	discovered, err := provider.NewServiceDiscoverer(c.HTTPClient).DiscoverTFEServices(c.Context, hostname)
 	if err != nil {
 		// Discovery failed, assume public registry.
-		c.meta.Logger.Debugf("service discovery failed, assuming public registry: %v", err)
 		return nil, nil
 	}
 
-	c.meta.Logger.Debugf("looking for federated registry profile matching %s", serviceURL.Host)
-	currentSettings, err := c.meta.ReadSettings()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read settings: %w", err)
+	serviceURL, ok := discovered.Services[provider.ProvidersServiceID]
+	if !ok {
+		return nil, fmt.Errorf("service url for %q not found", provider.ProvidersServiceID)
 	}
 
-	for _, profile := range currentSettings.Profiles {
-		profileURL, pErr := url.Parse(profile.TharsisURL)
+	curSettings, err := c.getCurrentSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, profile := range curSettings.Profiles {
+		profileURL, pErr := url.Parse(profile.Endpoint)
 		if pErr != nil {
 			continue
 		}
 
-		if profileURL.Host == serviceURL.Host && profile.Token != nil {
-			c.meta.Logger.Debugf("found federated registry profile for %s", serviceURL.Host)
-			return profile.Token, nil
+		if profileURL.Host == serviceURL.Host {
+			tokenGetter, err := profile.NewTokenGetter(c.Context)
+			if err != nil {
+				continue
+			}
+
+			token, err := tokenGetter.Token(c.Context)
+			if err != nil {
+				continue
+			}
+
+			return &token, nil
 		}
 	}
 
 	// No matching profile, assume public registry.
-	c.meta.Logger.Debugf("no federated registry match found, assuming public registry")
 	return nil, nil
 }
 
-// discoverServiceURL wraps disco.DiscoverServiceURL and silences its debug logging.
-func (terraformProviderMirrorSyncCommand) discoverServiceURL(hostname string) (*url.URL, error) {
-	origLogOutput := log.Writer()
-	log.SetOutput(io.Discard)
-	defer log.SetOutput(origLogOutput)
-
-	return disco.New().DiscoverServiceURL(svchost.Hostname(hostname), provider.ProvidersServiceID)
-}
-
 // getMissingPlatforms returns platforms that need to be synced.
-func (c terraformProviderMirrorSyncCommand) getMissingPlatforms(
-	ctx context.Context,
-	client *tharsis.Client,
-	versionMirror *sdktypes.TerraformProviderVersionMirror,
+func (c *terraformProviderMirrorSyncCommand) getMissingPlatforms(
+	versionMirror *pb.TerraformProviderVersionMirror,
 	availableVersions []provider.VersionInfo,
-	platforms []string,
-	allPlatforms bool,
 ) (map[string]struct{}, error) {
-	c.meta.Logger.Debugf("getting missing platforms for version mirror %s", versionMirror.Metadata.ID)
-
-	platformsInput := &sdktypes.GetTerraformProviderPlatformMirrorsByVersionInput{
-		VersionMirrorID: versionMirror.Metadata.ID,
-	}
-
-	platformsList, err := client.TerraformProviderPlatformMirror.GetProviderPlatformMirrorsByVersion(ctx, platformsInput)
+	resp, err := c.grpcClient.TerraformProviderMirrorsClient.GetTerraformProviderPlatformMirrors(c.Context, &pb.GetTerraformProviderPlatformMirrorsRequest{
+		VersionMirrorId: versionMirror.Metadata.Id,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list platforms for provider version: %w", err)
+		return nil, err
 	}
-
-	c.meta.Logger.Debugf("found %d existing platforms", len(platformsList))
 
 	existingPlatforms := map[string]struct{}{}
-	for _, p := range platformsList {
-		existingPlatforms[fmt.Sprintf("%s_%s", p.OS, p.Arch)] = struct{}{}
+	for _, p := range resp.PlatformMirrors {
+		existingPlatforms[fmt.Sprintf("%s_%s", p.Os, p.Architecture)] = struct{}{}
 	}
 
 	missingPlatforms := map[string]struct{}{}
-	if allPlatforms {
+	if len(c.platforms) == 0 {
 		target, err := versions.ParseVersion(versionMirror.SemanticVersion)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse target provider version: %w", err)
@@ -370,145 +389,26 @@ func (c terraformProviderMirrorSyncCommand) getMissingPlatforms(
 						missingPlatforms[key] = struct{}{}
 					}
 				}
-
 				break
 			}
 		}
 	} else {
-		for _, p := range platforms {
+		for _, p := range c.platforms {
 			if _, ok := existingPlatforms[p]; !ok {
 				missingPlatforms[p] = struct{}{}
 			}
 		}
 	}
 
-	c.meta.Logger.Debugf("found %d missing platforms to sync", len(missingPlatforms))
-
 	return missingPlatforms, nil
 }
 
-// syncMissingPlatforms streams packages from upstream registry to mirror.
-func (c terraformProviderMirrorSyncCommand) syncMissingPlatforms(ctx context.Context, input *syncPlatformsInput) error {
-	logger.Infof("syncing %d platform(s)...", len(input.missingPlatforms))
-
-	start := time.Now()
-	progress := mpb.New(mpb.WithWidth(progressBarWidth))
-
-	var wg sync.WaitGroup
-	errCh := make(chan error, len(input.missingPlatforms))
-	sem := make(chan struct{}, input.concurrency)
-
-	for pf := range input.missingPlatforms {
-		wg.Add(1)
-		go func(platform string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			err := c.syncPlatform(ctx, input, platform, progress)
-			if err != nil {
-				errCh <- err
-			}
-		}(pf)
-	}
-
-	wg.Wait()
-	progress.Wait()
-	close(errCh)
-
-	var errs []error
-	for err := range errCh {
-		errs = append(errs, err)
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("failed to sync %d platform(s): %v", len(errs), errs)
-	}
-
-	logger.Infof("synced %s in %s", humanize.Bytes(uint64(input.totalBytes.Load())), time.Since(start).Round(time.Millisecond))
-
-	return nil
+func (*terraformProviderMirrorSyncCommand) Synopsis() string {
+	return "Sync provider platforms from upstream registry to mirror."
 }
 
-func (c terraformProviderMirrorSyncCommand) syncPlatform(ctx context.Context, input *syncPlatformsInput, platform string, progress *mpb.Progress) error {
-	c.meta.Logger.Debugf("syncing platform %s", platform)
-
-	parts := strings.Split(platform, "_")
-	packageInfo, err := input.registryClient.GetPackageInfo(ctx, input.provider, input.versionMirror.SemanticVersion, parts[0], parts[1], input.registryOpts...)
-	if err != nil {
-		return fmt.Errorf("%s: failed to find provider package: %w", platform, err)
-	}
-
-	c.meta.Logger.Debugf("downloading from %s", packageInfo.DownloadURL)
-
-	body, contentLength, err := input.registryClient.DownloadPackage(ctx, packageInfo.DownloadURL)
-	if err != nil {
-		return fmt.Errorf("%s: failed to download provider package: %w", platform, err)
-	}
-	defer body.Close()
-
-	if contentLength == 0 {
-		return fmt.Errorf("%s: provider package has no content", platform)
-	}
-
-	c.meta.Logger.Debugf("uploading %s to mirror", humanize.Bytes(uint64(contentLength)))
-
-	bar := progress.AddBar(contentLength,
-		mpb.PrependDecorators(decor.Name(progressBarPrefix+platform, decor.WCSyncSpaceR)),
-		mpb.AppendDecorators(
-			decor.CountersKiloByte("% .2f / % .2f"),
-			decor.Percentage(decor.WCSyncSpace),
-		),
-	)
-	reader := bar.ProxyReader(body)
-	defer reader.Close()
-
-	err = input.client.TerraformProviderPlatformMirror.UploadProviderPlatformPackageToMirror(ctx, &sdktypes.UploadProviderPlatformPackageToMirrorInput{
-		VersionMirrorID: input.versionMirror.Metadata.ID,
-		Reader:          reader,
-		OS:              parts[0],
-		Arch:            parts[1],
-	})
-	if err != nil {
-		bar.Abort(true)
-		return fmt.Errorf("%s: failed to upload provider package: %w", platform, err)
-	}
-
-	input.totalBytes.Add(contentLength)
-
-	return nil
-}
-
-func (terraformProviderMirrorSyncCommand) defs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"platform": {
-			Arguments: []string{"Platform"},
-			Synopsis:  "Specifies which platform (os_arch) the packages should be uploaded for. Defaults to all supported.",
-		},
-		"group-path": {
-			Arguments: []string{"Group_Path"},
-			Synopsis:  "Full path to the root group where this Terraform provider version will be mirrored.",
-			Required:  true,
-		},
-		"version": {
-			Arguments: []string{"Version"},
-			Synopsis:  "The semantic version of the target Terraform provider. Defaults to latest.",
-		},
-		"concurrency": {
-			Arguments: []string{"N"},
-			Synopsis:  fmt.Sprintf("Number of concurrent platform uploads. Defaults to %d.", defaultSyncConcurrency),
-		},
-	}
-}
-
-func (terraformProviderMirrorSyncCommand) Synopsis() string {
-	return "Sync Terraform provider packages from a registry to the provider mirror."
-}
-
-func (c terraformProviderMirrorSyncCommand) Help() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] terraform-provider-mirror sync [options] <FQN>
-
+func (*terraformProviderMirrorSyncCommand) Description() string {
+	return `
    The terraform-provider-mirror sync command downloads Terraform
    provider platform packages from a registry and uploads them to
    the Tharsis provider mirror. The --platform option can be used
@@ -527,8 +427,6 @@ Usage: %s [global options] terraform-provider-mirror sync [options] <FQN>
    2. Federated registry: runs service discovery and uses the
       token from a matching CLI profile
 
-   ---
-
    Fully Qualified Name (FQN) must be formatted as:
 
    [registry hostname/]{registry namespace}/{provider name}
@@ -537,23 +435,55 @@ Usage: %s [global options] terraform-provider-mirror sync [options] <FQN>
    public Terraform registry (registry.terraform.io).
 
    Examples: registry.terraform.io/hashicorp/aws, hashicorp/aws
+`
+}
 
-   ---
+func (*terraformProviderMirrorSyncCommand) Usage() string {
+	return "tharsis [global options] terraform-provider-mirror sync [options] <provider_fqn>"
+}
 
-   Example:
+func (*terraformProviderMirrorSyncCommand) Example() string {
+	return `
+tharsis terraform-provider-mirror sync \
+  --group-id my-group \
+  --version 1.0.0 \
+  --platform linux_amd64 \
+  hashicorp/aws
+`
+}
 
-   %s terraform-provider-mirror sync \
-      --platform="windows_amd64" \
-      --platform="linux_386" \
-      --group-path "top-level" \
-      hashicorp/aws
-
-   Above command will only find and upload packages for the
-   windows_amd64 and linux_386 platforms for the latest
-   version of the "aws" provider to "top-level" group's
-   provider mirror.
-
-%s
-
-`, c.meta.BinaryName, c.meta.BinaryName, buildHelpText(c.defs()))
+func (c *terraformProviderMirrorSyncCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.groupID,
+		"group-id",
+		"",
+		"The ID of the root group to create the mirror in.",
+	)
+	f.Func(
+		"group-path",
+		"Full path to the root group where this Terraform provider version will be mirrored. Deprecated.",
+		func(s string) error {
+			c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return nil
+		},
+	)
+	f.StringVar(
+		&c.version,
+		"version",
+		"",
+		"The provider version to sync. If not specified, uses the latest version.",
+	)
+	f.Func(
+		"platform",
+		"Platform to sync (format: os_arch). Can be specified multiple times. If not specified, syncs all platforms.",
+		func(s string) error {
+			if len(strings.Split(s, "_")) != 2 {
+				return fmt.Errorf("invalid platform format, must be os_arch")
+			}
+			c.platforms = append(c.platforms, s)
+			return nil
+		},
+	)
+	return f
 }

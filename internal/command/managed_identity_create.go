@@ -1,329 +1,229 @@
 package command
 
 import (
-	"context"
 	"encoding/base64"
-	"encoding/json"
+	"flag"
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
-// managedIdentityData holds decoded (or not-yet-encoded) type-specific data for a managed identity.
-type managedIdentityData struct {
-	awsRole                   *string
-	azureClientID             *string
-	azureTenantID             *string
-	tharsisServiceAccountPath *string
+// managedIdentityCreateCommand is the top-level structure for the managed identity create command.
+type managedIdentityCreateCommand struct {
+	*BaseCommand
+
+	name                               *string
+	groupID                            string
+	identityType                       *pb.ManagedIdentityType
+	description                        string
+	awsFederatedRole                   string
+	azureFederatedClientID             string
+	azureFederatedTenantID             string
+	tharsisFederatedServiceAccountPath string
+	kubernetesFederatedAudience        string
+	toJSON                             bool
 }
 
-// managedIdentityCreateCommand is the top-level structure for the managed-identity create command.
-type managedIdentityCreateCommand struct {
-	meta *Metadata
+var _ Command = (*managedIdentityCreateCommand)(nil)
+
+func (c *managedIdentityCreateCommand) validate() error {
+	const message = "name is required either as an argument or a flag"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.When(c.name == nil).Error(message),
+		),
+		validation.Field(&c.name, validation.Required.When(len(c.arguments) == 0).Error(message)),
+		validation.Field(&c.groupID, validation.Required),
+		validation.Field(&c.identityType, validation.NotNil),
+		validation.Field(&c.awsFederatedRole,
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_aws_federated, validation.Required),
+		),
+		validation.Field(&c.azureFederatedClientID,
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_azure_federated, validation.Required),
+		),
+		validation.Field(&c.azureFederatedTenantID,
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_azure_federated, validation.Required),
+		),
+		validation.Field(&c.tharsisFederatedServiceAccountPath,
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_tharsis_federated, validation.Required),
+		),
+		validation.Field(&c.kubernetesFederatedAudience,
+			validation.When(c.identityType != nil && *c.identityType == pb.ManagedIdentityType_kubernetes_federated, validation.Required),
+		),
+	)
 }
 
 // NewManagedIdentityCreateCommandFactory returns a managedIdentityCreateCommand struct.
-func NewManagedIdentityCreateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return managedIdentityCreateCommand{
-			meta: meta,
+func NewManagedIdentityCreateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &managedIdentityCreateCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (m managedIdentityCreateCommand) Run(args []string) int {
-	m.meta.Logger.Debugf("Starting the 'managed-identity create' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *managedIdentityCreateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("managed-identity create"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := m.meta.GetSDKClient()
+	if c.name != nil {
+		c.arguments = append(c.arguments, *c.name)
+	}
+
+	encodedData, err := c.encodeIdentityData()
 	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to encode managed identity data")
 		return 1
 	}
 
-	ctx := context.Background()
+	input := &pb.CreateManagedIdentityRequest{
+		Type:        *c.identityType,
+		Name:        c.arguments[0],
+		Description: c.description,
+		GroupId:     c.groupID,
+		Data:        encodedData,
+	}
 
-	return m.doManagedIdentityCreate(ctx, client, args)
+	createdIdentity, err := c.grpcClient.ManagedIdentitiesClient.CreateManagedIdentity(c.Context, input)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to create a managed identity")
+		return 1
+	}
+
+	return outputManagedIdentity(c.UI, c.toJSON, createdIdentity)
 }
 
-func (m managedIdentityCreateCommand) doManagedIdentityCreate(ctx context.Context,
-	client *tharsis.Client, opts []string,
-) int {
-	m.meta.Logger.Debugf("will do managed-identity create, %d opts", len(opts))
-
-	defs := buildManagedIdentityCreateDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(m.meta.BinaryName+" managed-identity create", defs, opts)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse managed-identity create options", err))
-		return 1
-	}
-	if len(cmdArgs) > 0 {
-		msg := fmt.Sprintf("excessive managed-identity create arguments: %s", cmdArgs)
-		m.meta.Logger.Error(output.FormatError(msg, nil), m.HelpManagedIdentityCreate())
-		return 1
+func (c *managedIdentityCreateCommand) encodeIdentityData() (string, error) {
+	dataMap := map[pb.ManagedIdentityType]string{
+		pb.ManagedIdentityType_aws_federated:        fmt.Sprintf(`{"role":"%s"}`, c.awsFederatedRole),
+		pb.ManagedIdentityType_azure_federated:      fmt.Sprintf(`{"clientId":"%s","tenantId":"%s"}`, c.azureFederatedClientID, c.azureFederatedTenantID),
+		pb.ManagedIdentityType_tharsis_federated:    fmt.Sprintf(`{"serviceAccountPath":"%s"}`, c.tharsisFederatedServiceAccountPath),
+		pb.ManagedIdentityType_kubernetes_federated: fmt.Sprintf(`{"audience":"%s"}`, c.kubernetesFederatedAudience),
 	}
 
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	description := getOption("description", "", cmdOpts)[0]
-	groupPath := getOption("group-path", "", cmdOpts)[0]
-	managedIdentityType := sdktypes.ManagedIdentityType(getOption("type", "", cmdOpts)[0])
-	name := getOption("name", "", cmdOpts)[0]
-
-	// Process the type-specific options and encode the data string.
-	data, err := encodeManagedIdentityData(managedIdentityType, cmdOpts)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to encode data", err))
-		return 1
+	dataToEncode, ok := dataMap[*c.identityType]
+	if !ok {
+		return "", fmt.Errorf("unknown managed identity type %s", *c.identityType)
 	}
 
-	input := &sdktypes.CreateManagedIdentityInput{
-		Description: description,
-		GroupPath:   groupPath,
-		Type:        managedIdentityType,
-		Name:        name,
-		Data:        data,
-	}
-	m.meta.Logger.Debugf("managed-identity create input: %#v", input)
-
-	managedIdentity, err := client.ManagedIdentity.CreateManagedIdentity(ctx, input)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to create managed identity", err))
-		return 1
-	}
-
-	if err = outputManagedIdentity(m.meta, toJSON, managedIdentity); err != nil {
-		m.meta.UI.Error(err.Error())
-		return 1
-	}
-
-	return 0
+	return base64.StdEncoding.EncodeToString([]byte(dataToEncode)), nil
 }
 
-// encodeManagedIdentityData encodes the data for a managed identity.
-func encodeManagedIdentityData(managedIdentityType sdktypes.ManagedIdentityType,
-	options map[string][]string,
-) (string, error) {
-	var toEncode interface{}
-
-	switch managedIdentityType {
-	case sdktypes.ManagedIdentityAWSFederated:
-		if _, ok := options["aws-federated-role"]; !ok {
-			return "", fmt.Errorf("missing required option: aws-federated-role")
-		}
-		toEncode = struct {
-			Role string `json:"role"`
-		}{
-			Role: getOption("aws-federated-role", "", options)[0],
-		}
-	case sdktypes.ManagedIdentityAzureFederated:
-		if _, ok := options["azure-federated-client-id"]; !ok {
-			return "", fmt.Errorf("missing required option: azure-federated-client-id")
-		}
-		if _, ok := options["azure-federated-tenant-id"]; !ok {
-			return "", fmt.Errorf("missing required option: azure-federated-tenant-id")
-		}
-		toEncode = struct {
-			ClientID string `json:"clientId"`
-			TenantID string `json:"tenantId"`
-		}{
-			ClientID: getOption("azure-federated-client-id", "", options)[0],
-			TenantID: getOption("azure-federated-tenant-id", "", options)[0],
-		}
-	case sdktypes.ManagedIdentityTharsisFederated:
-		// The service account does not need to be verified.
-		// It is possible to create a managed identity that refers to a non-existent service account.
-		if _, ok := options["tharsis-federated-service-account-path"]; !ok {
-			return "", fmt.Errorf("missing required option: tharsis-federated-service-account-path")
-		}
-		toEncode = struct {
-			ServiceAccountPath string `json:"serviceAccountPath"`
-		}{
-			ServiceAccountPath: getOption("tharsis-federated-service-account-path", "", options)[0],
-		}
-	}
-	data, err := json.Marshal(toEncode)
-	if err != nil {
-		return "", fmt.Errorf("failed to encode data: %s", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(data), nil
-}
-
-// decodeManagedIdentityData decodes the data for a managed identity.
-func decodeManagedIdentityData(managedIdentityType sdktypes.ManagedIdentityType, data string) (*managedIdentityData, error) {
-	result := &managedIdentityData{}
-
-	buffer, err := base64.StdEncoding.DecodeString(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode managed identity data: %s", err)
-	}
-
-	switch managedIdentityType {
-	case sdktypes.ManagedIdentityAWSFederated:
-		var target struct {
-			Role string `json:"role"`
-		}
-		if err := json.Unmarshal(buffer, &target); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal AWS federated data: %s", err)
-		}
-		result.awsRole = &target.Role
-	case sdktypes.ManagedIdentityAzureFederated:
-		var target struct {
-			ClientID string `json:"clientId"`
-			TenantID string `json:"tenantId"`
-		}
-		if err := json.Unmarshal(buffer, &target); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal Azure federated data: %s", err)
-		}
-		result.azureClientID = &target.ClientID
-		result.azureTenantID = &target.TenantID
-	case sdktypes.ManagedIdentityTharsisFederated:
-		var target struct {
-			ServiceAccountPath string `json:"serviceAccountPath"`
-		}
-		if err := json.Unmarshal(buffer, &target); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal Tharsis federated data: %s", err)
-		}
-		result.tharsisServiceAccountPath = &target.ServiceAccountPath
-	}
-
-	return result, nil
-}
-
-// outputManagedIdentity is the final output for most managed-identity operations.
-// This output function will be called by other commands, so it must return the raw error.
-func outputManagedIdentity(meta *Metadata, toJSON bool, managedIdentity *sdktypes.ManagedIdentity) error {
-	if toJSON {
-		buf, err := objectToJSON(managedIdentity)
-		if err != nil {
-			return fmt.Errorf("failed to encode managed identity to JSON: %s", err)
-		}
-		meta.UI.Output(string(buf))
-	} else {
-		tableHead := []string{
-			"id",
-			"name",
-			"resource path",
-			"type",
-			"description",
-			"is alias",
-		}
-		tableBody := []string{
-			managedIdentity.Metadata.ID,
-			managedIdentity.Name,
-			managedIdentity.ResourcePath,
-			string(managedIdentity.Type),
-			managedIdentity.Description,
-			fmt.Sprintf("%t", managedIdentity.IsAlias),
-		}
-
-		// If alias, add alias source ID.
-		if managedIdentity.IsAlias {
-			tableHead = append(tableHead, "alias source")
-			tableBody = append(tableBody, *managedIdentity.AliasSourceID)
-		}
-
-		// Add the type-specific data.
-		decoded, err := decodeManagedIdentityData(managedIdentity.Type, managedIdentity.Data)
-		if err != nil {
-			return err
-		}
-
-		switch managedIdentity.Type {
-		case sdktypes.ManagedIdentityAWSFederated:
-			tableHead = append(tableHead, "role")
-			tableBody = append(tableBody, *decoded.awsRole)
-		case sdktypes.ManagedIdentityAzureFederated:
-			tableHead = append(tableHead, "client ID", "tenant ID")
-			tableBody = append(tableBody, *decoded.azureClientID, *decoded.azureTenantID)
-		case sdktypes.ManagedIdentityTharsisFederated:
-			tableHead = append(tableHead, "service account path")
-			tableBody = append(tableBody, *decoded.tharsisServiceAccountPath)
-		}
-
-		// For now, do not display access rules or a list of aliases.
-
-		meta.UI.Output(tableformatter.FormatTable([][]string{tableHead, tableBody}))
-	}
-
-	return nil
-}
-
-// buildManagedIdentityCreateDefs returns defs used by managed-identity create command.
-func buildManagedIdentityCreateDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"description": {
-			Arguments: []string{"Description"},
-			Synopsis:  "Description for the managed identity.",
-		},
-		"group-path": {
-			Arguments: []string{"Group_Path"},
-			Synopsis:  "Full path of group where the managed identity will be created.",
-			Required:  true,
-		},
-		"type": {
-			Arguments: []string{""},
-			Synopsis:  "The type of managed identity: aws_federated, azure_federated, tharsis_federated.",
-			Required:  true,
-		},
-		"name": {
-			Arguments: []string{"Managed_Identity_Name"},
-			Synopsis:  "The name of the managed identity.",
-			Required:  true,
-		},
-		// The following are the options for the various types of managed identities.
-		// They are ignored if specified on a type that does not use them.
-		// See the Tharsis API's InputData struct in internal/services/managedidentity/awsfederated/delegate.go
-		"aws-federated-role": {
-			Arguments: []string{"AWS_Federated_Role"},
-			Synopsis:  fmt.Sprintf("AWS IAM role.  (Only if type is %s)", sdktypes.ManagedIdentityAWSFederated),
-		},
-		// See the API's InputData struct in internal/services/managedidentity/azurefederated/delegate.go
-		"azure-federated-client-id": {
-			Arguments: []string{"Azure_Federated_Client_ID"},
-			Synopsis:  fmt.Sprintf("Azure client ID.  (Only if type is %s)", sdktypes.ManagedIdentityAzureFederated),
-		},
-		"azure-federated-tenant-id": {
-			Arguments: []string{"Azure_Federated_Tenant_ID"},
-			Synopsis:  fmt.Sprintf("Azure tenant ID.  (Only if type is %s)", sdktypes.ManagedIdentityAzureFederated),
-		},
-		// See the API's InputData struct in internal/services/managedidentity/tharsisfederated/delegate.go
-		"tharsis-federated-service-account-path": {
-			Arguments: []string{"Tharsis_Federated_Service_Account_Path"},
-			Synopsis:  fmt.Sprintf("Tharsis service account path.  (Only if type is %s)", sdktypes.ManagedIdentityTharsisFederated),
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-func (m managedIdentityCreateCommand) Synopsis() string {
+func (*managedIdentityCreateCommand) Synopsis() string {
 	return "Create a new managed identity."
 }
 
-func (m managedIdentityCreateCommand) Help() string {
-	return m.HelpManagedIdentityCreate()
+func (*managedIdentityCreateCommand) Usage() string {
+	return "tharsis [global options] managed-identity create [options] <name>"
 }
 
-// HelpManagedIdentityCreate produces the help string for the 'managed-identity create' command.
-func (m managedIdentityCreateCommand) HelpManagedIdentityCreate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] managed-identity create [options]
-
+func (*managedIdentityCreateCommand) Description() string {
+	return `
    The managed-identity create command creates a new managed identity.
+`
+}
 
-%s
+func (*managedIdentityCreateCommand) Example() string {
+	return `
+tharsis managed-identity create \
+  --group-id trn:group:<group_path> \
+  --type aws_federated \
+  --aws-federated-role arn:aws:iam::123456789012:role/MyRole \
+  --description "AWS production role" \
+  aws-prod
+`
+}
 
-`, m.meta.BinaryName, buildHelpText(buildManagedIdentityCreateDefs()))
+func (c *managedIdentityCreateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"name",
+		"The name of the managed identity. Deprecated",
+		func(s string) error {
+			c.name = &s
+			return nil
+		},
+	)
+	f.StringVar(
+		&c.groupID,
+		"group-id",
+		"",
+		"Group ID or TRN where the managed identity will be created.",
+	)
+	f.Func(
+		"group-path",
+		"The group path where the managed identity will be created. Deprecated.",
+		func(s string) error {
+			c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return nil
+		},
+	)
+	f.Func(
+		"type",
+		"The type of managed identity: aws_federated, azure_federated, tharsis_federated, kubernetes_federated.",
+		func(s string) error {
+			val, ok := pb.ManagedIdentityType_value[strings.ToLower(s)]
+			if !ok {
+				return fmt.Errorf("invalid identity type: %s (valid types: %v)", s, slices.Collect(maps.Keys(pb.ManagedIdentityType_value)))
+			}
+			c.identityType = pb.ManagedIdentityType(val).Enum()
+			return nil
+		},
+	)
+	f.StringVar(
+		&c.description,
+		"description",
+		"",
+		"Description for the managed identity.",
+	)
+	f.StringVar(
+		&c.awsFederatedRole,
+		"aws-federated-role",
+		"",
+		"AWS IAM role. (Only if type is aws_federated)",
+	)
+	f.StringVar(
+		&c.azureFederatedClientID,
+		"azure-federated-client-id",
+		"",
+		"Azure client ID. (Only if type is azure_federated)",
+	)
+	f.StringVar(
+		&c.azureFederatedTenantID,
+		"azure-federated-tenant-id",
+		"",
+		"Azure tenant ID. (Only if type is azure_federated)",
+	)
+	f.StringVar(
+		&c.tharsisFederatedServiceAccountPath,
+		"tharsis-federated-service-account-path",
+		"",
+		"Tharsis service account path this managed identity will assume. (Only if type is tharsis_federated)",
+	)
+	f.StringVar(
+		&c.kubernetesFederatedAudience,
+		"kubernetes-federated-audience",
+		"",
+		"Kubernetes federated audience. The audience should match the client_id configured in your EKS OIDC identity provider. (Only if type is kubernetes_federated)",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
 }

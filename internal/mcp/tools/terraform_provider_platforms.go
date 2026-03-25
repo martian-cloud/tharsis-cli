@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 // terraformProviderPlatform is the output type for Terraform provider platforms.
@@ -18,19 +18,21 @@ type terraformProviderPlatform struct {
 	SHASum            string `json:"sha_sum" jsonschema:"SHA256 checksum of the provider binary"`
 	Filename          string `json:"filename" jsonschema:"Filename of the provider binary"`
 	BinaryUploaded    bool   `json:"binary_uploaded" jsonschema:"Whether the binary has been uploaded"`
+	CreatedBy         string `json:"created_by" jsonschema:"Username or service account that created this platform"`
 }
 
-// toTerraformProviderPlatform converts an SDK TerraformProviderPlatform to the MCP output type.
-func toTerraformProviderPlatform(p *sdktypes.TerraformProviderPlatform) terraformProviderPlatform {
+// toTerraformProviderPlatform converts a proto TerraformProviderPlatform to the MCP output type.
+func toTerraformProviderPlatform(p *pb.TerraformProviderPlatform) terraformProviderPlatform {
 	return terraformProviderPlatform{
-		ID:                p.Metadata.ID,
-		TRN:               p.Metadata.TRN,
-		ProviderVersionID: p.ProviderVersionID,
+		ID:                p.Metadata.Id,
+		TRN:               p.Metadata.Trn,
+		ProviderVersionID: p.ProviderVersionId,
 		OperatingSystem:   p.OperatingSystem,
 		Architecture:      p.Architecture,
-		SHASum:            p.SHASum,
+		SHASum:            p.ShaSum,
 		Filename:          p.Filename,
 		BinaryUploaded:    p.BinaryUploaded,
+		CreatedBy:         p.CreatedBy,
 	}
 }
 
@@ -45,7 +47,7 @@ type getTerraformProviderPlatformOutput struct {
 }
 
 // GetTerraformProviderPlatform returns an MCP tool for getting a Terraform provider platform.
-func getTerraformProviderPlatform(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getTerraformProviderPlatformInput, getTerraformProviderPlatformOutput]) {
+func getTerraformProviderPlatform(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getTerraformProviderPlatformInput, *getTerraformProviderPlatformOutput]) {
 	tool := mcp.Tool{
 		Name:        "get_terraform_provider_platform",
 		Description: "Get details of a specific Terraform provider platform by ID.",
@@ -55,21 +57,16 @@ func getTerraformProviderPlatform(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input getTerraformProviderPlatformInput) (*mcp.CallToolResult, getTerraformProviderPlatformOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, getTerraformProviderPlatformOutput{}, err
-		}
-
-		platform, err := client.TerraformProviderPlatforms().GetProviderPlatform(ctx, &sdktypes.GetTerraformProviderPlatformInput{
-			ID: input.ID,
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *getTerraformProviderPlatformInput) (*mcp.CallToolResult, *getTerraformProviderPlatformOutput, error) {
+		resp, err := tc.grpcClient.TerraformProvidersClient.GetTerraformProviderPlatformByID(ctx, &pb.GetTerraformProviderPlatformByIDRequest{
+			Id: input.ID,
 		})
 		if err != nil {
-			return nil, getTerraformProviderPlatformOutput{}, fmt.Errorf("failed to get provider platform: %w", err)
+			return nil, nil, fmt.Errorf("failed to get provider platform: %w", err)
 		}
 
-		return nil, getTerraformProviderPlatformOutput{
-			Platform: toTerraformProviderPlatform(platform),
+		return nil, &getTerraformProviderPlatformOutput{
+			Platform: toTerraformProviderPlatform(resp),
 		}, nil
 	}
 

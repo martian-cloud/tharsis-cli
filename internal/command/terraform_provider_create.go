@@ -1,172 +1,158 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
 	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// terraformProviderCreateCommand is the top-level structure for the terraform-provider create command.
 type terraformProviderCreateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	groupID       string
+	repositoryURL string
+	private       bool
+	toJSON        bool
 }
 
-// NewTerraformProviderCreateCommandFactory returns a (Terraform provider Create) Command struct.
-func NewTerraformProviderCreateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return terraformProviderCreateCommand{
-			meta: meta,
+// NewTerraformProviderCreateCommandFactory returns a terraformProviderCreateCommand struct.
+func NewTerraformProviderCreateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &terraformProviderCreateCommand{
+			BaseCommand: baseCommand,
+			private:     true,
 		}, nil
 	}
 }
 
-func (tpcc terraformProviderCreateCommand) Run(args []string) int {
-	tpcc.meta.Logger.Debugf("Starting the 'terraform-provider create' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		tpcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := tpcc.meta.GetSDKClient()
-	if err != nil {
-		tpcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return tpcc.doTerraformProviderCreate(ctx, client, args)
+func (c *terraformProviderCreateCommand) validate() error {
+	const message = "provider-name is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (tpcc terraformProviderCreateCommand) doTerraformProviderCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	tpcc.meta.Logger.Debugf("will do terraform-provider create, %d opts", len(opts))
-
-	defs := tpcc.buildTerraformProviderCreateDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(tpcc.meta.BinaryName+" terraform-provider create", defs, opts)
-	if err != nil {
-		tpcc.meta.Logger.Error(output.FormatError("failed to parse terraform-provider create options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		tpcc.meta.Logger.Error(output.FormatError("missing terraform-provider create path", nil),
-			tpcc.HelpTerraformProviderCreate())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive terraform-provider create arguments: %s", cmdArgs)
-		tpcc.meta.Logger.Error(output.FormatError(msg, nil), tpcc.HelpTerraformProviderCreate())
-		return 1
+func (c *terraformProviderCreateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("terraform-provider create"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	tfProviderPath := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		tpcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	repositoryURL := getOption("repository-url", "", cmdOpts)[0]
-	private, err := getBoolOptionValue("private", "true", cmdOpts)
-	if err != nil {
-		tpcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
+	providerName := c.arguments[0]
 
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(tfProviderPath)
-	if !isResourcePathValid(tpcc.meta, actualPath) {
-		return 1
-	}
-
-	// Create the Terraform provider
-	index := strings.LastIndex(tfProviderPath, "/")
-	tfProvider, err := client.TerraformProvider.CreateProvider(ctx, &types.CreateTerraformProviderInput{
-		Name:          tfProviderPath[index+1:],
-		GroupPath:     tfProviderPath[:index],
-		Private:       private,
-		RepositoryURL: repositoryURL,
-	})
-	if err != nil {
-		tpcc.meta.UI.Error(output.FormatError("failed to create Terraform provider", err))
-		return 1
-	}
-
-	return tpcc.outputTerraformProvider(toJSON, tfProvider)
-}
-
-func (tpcc terraformProviderCreateCommand) outputTerraformProvider(toJSON bool,
-	tfProvider *types.TerraformProvider,
-) int {
-	if toJSON {
-		buf, err := objectToJSON(tfProvider)
-		if err != nil {
-			tpcc.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+	parts := strings.Split(providerName, "/")
+	if len(parts) == 1 {
+		// Ensure a group is supplied when using just provider name argument.
+		if c.groupID == "" {
+			c.UI.Errorf("group-id is required when supplying the name in the argument")
 			return 1
 		}
-		tpcc.meta.UI.Output(string(buf))
 	} else {
-		tableInput := [][]string{
-			{
-				"id",
-				"name",
-				"resource path",
-				"registry namespace",
-				"private",
-				"repository url",
-			},
-			{
-				tfProvider.Metadata.ID,
-				tfProvider.Name,
-				tfProvider.ResourcePath,
-				tfProvider.RegistryNamespace,
-				fmt.Sprintf("%t", tfProvider.Private),
-				tfProvider.RepositoryURL,
-			},
+		if c.groupID != "" {
+			c.UI.Errorf("group-id should not be supplied when using provider path")
+			return 1
 		}
-		tpcc.meta.UI.Output(tableformatter.FormatTable(tableInput))
+
+		// Handle deprecated syntax by extracting name and group path.
+		parent, child := extractParentPath(providerName)
+		providerName = child
+		c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, parent)
 	}
 
+	input := &pb.CreateTerraformProviderRequest{
+		Name:          providerName,
+		GroupId:       c.groupID,
+		RepositoryUrl: c.repositoryURL,
+		Private:       c.private,
+	}
+
+	provider, err := c.grpcClient.TerraformProvidersClient.CreateTerraformProvider(c.Context, input)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to create terraform provider")
+		return 1
+	}
+
+	if c.toJSON {
+		if err := c.UI.JSON(provider); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+		return 0
+	}
+
+	t := terminal.NewTable("id", "name", "private")
+	t.Rich([]string{
+		provider.Metadata.Id,
+		provider.Name,
+		fmt.Sprintf("%t", provider.Private),
+	}, nil)
+
+	c.UI.Table(t)
 	return 0
 }
 
-// buildTerraformProviderCreateDefs returns defs used by terraform-provider create command.
-func (tpcc terraformProviderCreateCommand) buildTerraformProviderCreateDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"private": {
-			Arguments: []string{"Private"},
-			Synopsis:  "Set private to false to allow all groups to view and use the Terraform provider (default=true).",
-		},
-		"repository-url": {
-			Arguments: []string{"Repository_URL"},
-			Synopsis:  "The repository URL for this Terraform provider.",
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
+func (*terraformProviderCreateCommand) Synopsis() string {
+	return "Create a new terraform provider."
 }
 
-func (tpcc terraformProviderCreateCommand) Synopsis() string {
-	return "Create a new Terraform provider."
+func (*terraformProviderCreateCommand) Description() string {
+	return `
+   The terraform-provider create command creates a new terraform provider.
+`
 }
 
-func (tpcc terraformProviderCreateCommand) Help() string {
-	return tpcc.HelpTerraformProviderCreate()
+func (*terraformProviderCreateCommand) Usage() string {
+	return "tharsis [global options] terraform-provider create [options] <provider-name>"
 }
 
-// HelpTerraformProviderCreate produces the help string for the 'terraform-provider create' command.
-func (tpcc terraformProviderCreateCommand) HelpTerraformProviderCreate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] terraform-provider create [options] <full_path>
+func (*terraformProviderCreateCommand) Example() string {
+	return `
+tharsis terraform-provider create \
+  --group-id trn:group:<group_path> \
+  --repository-url https://github.com/example/terraform-provider-example \
+  my-provider
+`
+}
 
-   The terraform-provider create command creates a new Terraform provider.
+func (c *terraformProviderCreateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.groupID,
+		"group-id",
+		"",
+		"The ID of the group to create the provider in.",
+	)
+	f.StringVar(
+		&c.repositoryURL,
+		"repository-url",
+		"",
+		"The repository URL for this terraform provider.",
+	)
+	f.BoolVar(
+		&c.private,
+		"private",
+		true,
+		"Set to false to allow all groups to view and use the terraform provider.",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-%s
-
-`, tpcc.meta.BinaryName, buildHelpText(tpcc.buildTerraformProviderCreateDefs()))
+	return f
 }

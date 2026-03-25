@@ -1,165 +1,166 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// workspaceAddMembershipCommand is the top-level structure for the workspace add-membership command.
 type workspaceAddMembershipCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	roleID           string
+	userID           *string
+	serviceAccountID *string
+	teamID           *string
+	toJSON           bool
 }
 
 // NewWorkspaceAddMembershipCommandFactory returns a workspaceAddMembershipCommand struct.
-func NewWorkspaceAddMembershipCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceAddMembershipCommand{
-			meta: meta,
+func NewWorkspaceAddMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceAddMembershipCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (ggc workspaceAddMembershipCommand) Run(args []string) int {
-	ggc.meta.Logger.Debugf("Starting the 'workspace add-membership' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		ggc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := ggc.meta.GetSDKClient()
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return ggc.doWorkspaceAddMembership(ctx, client, args)
+func (c *workspaceAddMembershipCommand) validate() error {
+	const message = "workspace-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.roleID, validation.Required),
+	)
 }
 
-func (ggc workspaceAddMembershipCommand) doWorkspaceAddMembership(ctx context.Context, client *tharsis.Client, opts []string) int {
-	ggc.meta.Logger.Debugf("will do workspace add-membership, %d opts", len(opts))
+func (c *workspaceAddMembershipCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace add-membership"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := ggc.buildWorkspaceAddMembershipOptionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(ggc.meta.BinaryName+" workspace add-membership", defs, opts)
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
+		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+	})
 	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to parse workspace add-membership argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		ggc.meta.Logger.Error(output.FormatError("missing workspace add-membership full path", nil), ggc.HelpWorkspaceAddMembership())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace add-membership arguments: %s", cmdArgs)
-		ggc.meta.Logger.Error(output.FormatError(msg, nil), ggc.HelpWorkspaceAddMembership())
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
-	path := cmdArgs[0]
-	username := getOption("username", "", cmdOpts)[0]
-	serviceAccountID := getOption("service-account-id", "", cmdOpts)[0]
-	teamName := getOption("team-name", "", cmdOpts)[0]
-	role := getOption("role", "", cmdOpts)[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
+	input := &pb.CreateNamespaceMembershipRequest{
+		NamespacePath:    workspace.FullPath,
+		RoleId:           c.roleID,
+		UserId:           c.userID,
+		ServiceAccountId: c.serviceAccountID,
+		TeamId:           c.teamID,
+	}
+
+	membership, err := c.grpcClient.NamespaceMembershipsClient.CreateNamespaceMembership(c.Context, input)
 	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
+		c.UI.ErrorWithSummary(err, "failed to add workspace membership")
 		return 1
 	}
 
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(path)
-	if !isNamespacePathValid(ggc.meta, actualPath) {
-		return 1
-	}
-
-	// Query for the workspace to make sure it exists and is a workspace.
-	trnID := trn.ToTRN(path, trn.ResourceTypeWorkspace)
-	_, err = client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &trnID})
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to find workspace", err))
-		return 1
-	}
-
-	// Prepare the inputs.
-	// Extract path from TRN if needed - NamespacePath field expects paths, not TRNs
-	actualPath = trn.ToPath(path)
-
-	input := &sdktypes.CreateNamespaceMembershipInput{
-		NamespacePath: actualPath,
-		Role:          role,
-	}
-	if username != "" {
-		input.Username = &username
-	}
-	if serviceAccountID != "" {
-		input.ServiceAccountID = &serviceAccountID
-	}
-	if teamName != "" {
-		input.TeamName = &teamName
-	}
-	ggc.meta.Logger.Debugf("workspace add-membership input: %#v", input)
-
-	// Add the membership to the workspace.
-	addedMembership, err := client.NamespaceMembership.AddMembership(ctx, input)
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to add membership to a workspace", err))
-		return 1
-	}
-
-	return outputNamespaceMembership(ggc.meta, toJSON, addedMembership)
+	return outputMembership(c.UI, c.toJSON, membership)
 }
 
-// buildWorkspaceAddMembershipOptionDefs returns the defs used by
-// workspace add-membership command.
-func (ggc workspaceAddMembershipCommand) buildWorkspaceAddMembershipOptionDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"username": {
-			Arguments: []string{"Username"},
-			Synopsis:  "Username for new membership for the workspace.",
-		},
-		"service-account-id": {
-			Arguments: []string{"Service_Account_ID"},
-			Synopsis:  "Service account ID for new membership for the workspace.",
-		},
-		"team-name": {
-			Arguments: []string{"TeamName"},
-			Synopsis:  "Team name for new membership for the workspace.",
-		},
-		"role": {
-			Arguments: []string{"Role"},
-			Synopsis:  "Role for new membership.",
-			Required:  true,
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-func (ggc workspaceAddMembershipCommand) Synopsis() string {
+func (*workspaceAddMembershipCommand) Synopsis() string {
 	return "Add a membership to a workspace."
 }
 
-func (ggc workspaceAddMembershipCommand) Help() string {
-	return ggc.HelpWorkspaceAddMembership()
+func (*workspaceAddMembershipCommand) Description() string {
+	return `
+   The workspace add-membership command adds a membership to a workspace.
+   Exactly one of -user-id, -service-account-id, or -team-id must be specified.
+`
 }
 
-// HelpWorkspaceAddMembership prints the help string for the 'workspace add-membership' command.
-func (ggc workspaceAddMembershipCommand) HelpWorkspaceAddMembership() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace add-membership [options] <full_path>
+func (*workspaceAddMembershipCommand) Usage() string {
+	return "tharsis [global options] workspace add-membership [options] <workspace-id>"
+}
 
-   The workspace add-membership command adds a membership to a workspace.
+func (*workspaceAddMembershipCommand) Example() string {
+	return `
+tharsis workspace add-membership \
+  --role-id trn:role:owner \
+  --user-id trn:user:john.smith \
+  trn:workspace:<workspace_path>
+`
+}
 
-   Note: Supply exactly one of --username, --service-account-id, and --team-name.
+func (c *workspaceAddMembershipCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.roleID,
+		"role-id",
+		"",
+		"The role ID for the membership.",
+	)
+	f.Func(
+		"user-id",
+		"The user ID for the membership.",
+		func(s string) error {
+			c.userID = &s
+			return nil
+		},
+	)
+	f.Func(
+		"role",
+		"Role name for new membership. Deprecated.",
+		func(s string) error {
+			c.roleID = trn.NewResourceTRN(trn.ResourceTypeRole, s)
+			return nil
+		},
+	)
+	f.Func(
+		"username",
+		"Username for the new membership. Deprecated.",
+		func(s string) error {
+			c.userID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeUser, s))
+			return nil
+		},
+	)
+	f.Func(
+		"team-name",
+		"Team name for the new membership. Deprecated.",
+		func(s string) error {
+			c.teamID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeTeam, s))
+			return nil
+		},
+	)
+	f.Func(
+		"service-account-id",
+		"The service account ID for the membership.",
+		func(s string) error {
+			c.serviceAccountID = &s
+			return nil
+		},
+	)
+	f.Func(
+		"team-id",
+		"The team ID for the membership.",
+		func(s string) error {
+			c.teamID = &s
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-%s
-
-`, ggc.meta.BinaryName, buildHelpText(ggc.buildWorkspaceAddMembershipOptionDefs()))
+	return f
 }

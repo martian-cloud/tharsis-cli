@@ -1,47 +1,57 @@
 package command
 
 import (
+	"flag"
 	"fmt"
 	"sort"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
-// configureListCommand is the top-level structure for the configure list command.
+// configureListCommand is the structure for the configure list command.
 type configureListCommand struct {
-	meta *Metadata
+	*BaseCommand
+}
+
+var _ Command = (*configureListCommand)(nil)
+
+func (c *configureListCommand) validate() error {
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments, validation.Empty),
+	)
 }
 
 // NewConfigureListCommandFactory returns a configureListCommand struct.
-func NewConfigureListCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return configureListCommand{
-			meta: meta,
+func NewConfigureListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &configureListCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (clc configureListCommand) Run(args []string) int {
-	clc.meta.Logger.Debugf("Starting the 'configure list' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		clc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *configureListCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithCommandName("configure list"),
+		WithInputValidator(c.validate),
+	); code != 0 {
+		return code
 	}
 
 	// Attempt to read the existing settings.
-	gotSettings, err := settings.ReadSettings(nil)
+	gotSettings, err := settings.ReadSettings()
 	if err != nil {
-		clc.meta.UI.Output(output.FormatError("Failed to read pre-existing settings", err))
+		c.UI.ErrorWithSummary(err, "failed to read pre-existing settings")
 		return 1
 	}
 
-	return clc.showAllProfiles(gotSettings)
+	return c.showAllProfiles(gotSettings)
 }
 
-func (clc configureListCommand) showAllProfiles(settings *settings.Settings) int {
-
+func (c *configureListCommand) showAllProfiles(settings *settings.Settings) int {
 	// First sort the profile names.
 	profileNames := []string{}
 	for profileName := range settings.Profiles {
@@ -49,31 +59,43 @@ func (clc configureListCommand) showAllProfiles(settings *settings.Settings) int
 	}
 	sort.Strings(profileNames)
 
+	t := terminal.NewTable("Profile", "HTTP Endpoint", "TLS Skip Verify")
+
 	// Format and print the output.
-	tableInput := make([][]string, len(settings.Profiles)+1)
-	tableInput[0] = []string{"Profile", "URL"}
-	for ix, profileName := range profileNames {
-		tableInput[ix+1] = []string{profileName, settings.Profiles[profileName].TharsisURL}
+	for _, profileName := range profileNames {
+		p := settings.Profiles[profileName]
+		t.Rich([]string{
+			profileName,
+			p.Endpoint,
+			fmt.Sprintf("%t", p.TLSSkipVerify),
+		}, nil)
 	}
-	clc.meta.UI.Output(tableformatter.FormatTable(tableInput))
+
+	c.UI.Table(t)
 
 	return 0
 }
 
-func (clc configureListCommand) Synopsis() string {
-	return "Show all profiles"
+func (c *configureListCommand) Synopsis() string {
+	return "Show all profiles."
 }
 
-func (clc configureListCommand) Help() string {
-	return clc.HelpConfigureList()
+func (c *configureListCommand) Usage() string {
+	return "tharsis configure list"
 }
 
-// HelpConfigureList produces the help string for the 'configure list' command.
-func (clc configureListCommand) HelpConfigureList() string {
-	return fmt.Sprintf(`
-Usage: %s configure list
+func (c *configureListCommand) Example() string {
+	return `
+tharsis configure list
+`
+}
 
+func (c *configureListCommand) Description() string {
+	return `
    The configure list command prints information about all profiles.
+`
+}
 
-`, clc.meta.BinaryName)
+func (c *configureListCommand) Flags() *flag.FlagSet {
+	return nil
 }

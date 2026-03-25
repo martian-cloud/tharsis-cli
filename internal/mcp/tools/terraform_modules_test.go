@@ -6,167 +6,149 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+type terraformModuleMocks struct {
+	terraformModules *mocks.TerraformModulesClient
+	groups           *mocks.GroupsClient
+	acl              *acl.MockChecker
+}
 
 func TestListTerraformModules(t *testing.T) {
 	type testCase struct {
-		name     string
-		input    listTerraformModulesInput
-		modules  []sdktypes.TerraformModule
-		pageInfo sdktypes.PageInfo
-		validate func(*testing.T, listTerraformModulesOutput)
+		name          string
+		input         *listTerraformModulesInput
+		mockSetup     func(*terraformModuleMocks)
+		expectError   bool
+		expectResults int
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name:  "list modules without filter",
-			input: listTerraformModulesInput{},
-			modules: []sdktypes.TerraformModule{
-				{
-					Metadata:  sdktypes.ResourceMetadata{ID: "module-1", TRN: "trn:terraform_module:group/vpc/aws"},
-					Name:      "vpc",
-					System:    "aws",
-					GroupPath: "group",
-					Private:   false,
-				},
-				{
-					Metadata:  sdktypes.ResourceMetadata{ID: "module-2", TRN: "trn:terraform_module:group/s3/aws"},
-					Name:      "s3",
-					System:    "aws",
-					GroupPath: "group",
-					Private:   true,
-				},
-			},
-			pageInfo: sdktypes.PageInfo{
-				HasNextPage: false,
-			},
-			validate: func(t *testing.T, output listTerraformModulesOutput) {
-				assert.Len(t, output.Modules, 2)
-				assert.Equal(t, "module-1", output.Modules[0].ID)
-				assert.Equal(t, "trn:terraform_module:group/vpc/aws", output.Modules[0].TRN)
-				assert.Equal(t, "vpc", output.Modules[0].Name)
-				assert.False(t, output.PageInfo.HasNextPage)
-			},
-		},
-		{
-			name: "list modules with search",
-			input: listTerraformModulesInput{
-				Search: ptr.String("vpc"),
-			},
-			modules: []sdktypes.TerraformModule{
-				{
-					Metadata:  sdktypes.ResourceMetadata{ID: "module-1", TRN: "trn:terraform_module:group/vpc/aws"},
-					Name:      "vpc",
-					System:    "aws",
-					GroupPath: "group",
-				},
-			},
-			pageInfo: sdktypes.PageInfo{},
-			validate: func(t *testing.T, output listTerraformModulesOutput) {
-				assert.Len(t, output.Modules, 1)
-				assert.Equal(t, "vpc", output.Modules[0].Name)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModule := tharsis.NewTerraformModule(t)
-
-			mockClient.On("TerraformModules").Return(mockModule)
-			mockModule.On("GetModules", mock.Anything, mock.Anything).
-				Return(&sdktypes.GetTerraformModulesOutput{
-					TerraformModules: tt.modules,
-					PageInfo:         &tt.pageInfo,
+			name:  "list modules successfully",
+			input: &listTerraformModulesInput{Limit: ptr.Int32(10)},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.terraformModules.On("GetTerraformModules", mock.Anything, &pb.GetTerraformModulesRequest{
+					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
+				}).Return(&pb.GetTerraformModulesResponse{
+					Modules: []*pb.TerraformModule{
+						{Metadata: &pb.ResourceMetadata{Id: "m1", Trn: "trn:terraform_module:group/module/aws"}, Name: "module", System: "aws"},
+					},
+					PageInfo: &pb.PageInfo{HasNextPage: false},
 				}, nil)
+			},
+			expectResults: 1,
+		},
+		{
+			name:  "list call fails",
+			input: &listTerraformModulesInput{Limit: ptr.Int32(10)},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.terraformModules.On("GetTerraformModules", mock.Anything, &pb.GetTerraformModulesRequest{
+					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
+				}).Return(nil, status.Error(codes.Internal, "internal error"))
+			},
+			expectError: true,
+		},
+	}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &terraformModuleMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+			}
+
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
 			}
 
-			_, handler := listTerraformModules(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := listTerraformModules(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			assert.NoError(t, err)
-			if tt.validate != nil {
-				tt.validate(t, output)
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Len(t, output.Modules, tc.expectResults)
 		})
 	}
 }
 
 func TestGetTerraformModule(t *testing.T) {
-	moduleID := "module-id"
-
 	type testCase struct {
-		name     string
-		input    getTerraformModuleInput
-		module   *sdktypes.TerraformModule
-		validate func(*testing.T, getTerraformModuleOutput)
+		name        string
+		input       *getTerraformModuleInput
+		mockSetup   func(*terraformModuleMocks)
+		expectError bool
+		expectID    string
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "get module by ID",
-			input: getTerraformModuleInput{
-				ID: moduleID,
+			name:  "get module successfully",
+			input: &getTerraformModuleInput{ID: "m1"},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.terraformModules.On("GetTerraformModuleByID", mock.Anything, &pb.GetTerraformModuleByIDRequest{Id: "m1"}).Return(&pb.TerraformModule{
+					Metadata:      &pb.ResourceMetadata{Id: "m1", Trn: "trn:terraform_module:group/module/aws"},
+					Name:          "module",
+					System:        "aws",
+					RepositoryUrl: "https://github.com/org/repo",
+				}, nil)
 			},
-			module: &sdktypes.TerraformModule{
-				Metadata:  sdktypes.ResourceMetadata{ID: moduleID, TRN: "trn:terraform_module:group/vpc/aws"},
-				Name:      "vpc",
-				System:    "aws",
-				GroupPath: "group",
-			},
-			validate: func(t *testing.T, output getTerraformModuleOutput) {
-				assert.Equal(t, moduleID, output.Module.ID)
-				assert.Equal(t, "vpc", output.Module.Name)
-			},
+			expectID: "m1",
 		},
 		{
-			name: "get module by TRN",
-			input: getTerraformModuleInput{
-				ID: "trn:terraform_module:group/vpc/aws",
+			name:  "module not found",
+			input: &getTerraformModuleInput{ID: "nonexistent"},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.terraformModules.On("GetTerraformModuleByID", mock.Anything, &pb.GetTerraformModuleByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
 			},
-			module: &sdktypes.TerraformModule{
-				Metadata:  sdktypes.ResourceMetadata{ID: moduleID, TRN: "trn:terraform_module:group/vpc/aws"},
-				Name:      "vpc",
-				System:    "aws",
-				GroupPath: "group",
-			},
-			validate: func(t *testing.T, output getTerraformModuleOutput) {
-				assert.Equal(t, "trn:terraform_module:group/vpc/aws", output.Module.TRN)
-			},
+			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModule := tharsis.NewTerraformModule(t)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &terraformModuleMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+			}
 
-			mockClient.On("TerraformModules").Return(mockModule)
-			mockModule.On("GetModule", mock.Anything, mock.Anything).Return(tt.module, nil)
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
 			}
 
-			_, handler := getTerraformModule(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := getTerraformModule(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			assert.NoError(t, err)
-			if tt.validate != nil {
-				tt.validate(t, output)
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectID, output.Module.ID)
 		})
 	}
 }
@@ -174,223 +156,253 @@ func TestGetTerraformModule(t *testing.T) {
 func TestCreateTerraformModule(t *testing.T) {
 	type testCase struct {
 		name        string
-		input       createTerraformModuleInput
-		module      *sdktypes.TerraformModule
-		aclError    error
+		input       *createTerraformModuleInput
+		mockSetup   func(*terraformModuleMocks)
 		expectError bool
-		validate    func(*testing.T, createTerraformModuleOutput)
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "successful module creation",
-			input: createTerraformModuleInput{
-				Name:          "vpc",
+			name: "create module successfully",
+			input: &createTerraformModuleInput{
+				GroupID:       "g1",
+				Name:          "new-module",
 				System:        "aws",
-				GroupPath:     "group",
-				RepositoryURL: "https://github.com/org/vpc",
-				Private:       false,
+				RepositoryURL: "https://github.com/org/repo",
 			},
-			module: &sdktypes.TerraformModule{
-				Metadata:      sdktypes.ResourceMetadata{ID: "module-id", TRN: "trn:terraform_module:group/vpc/aws"},
-				Name:          "vpc",
-				System:        "aws",
-				GroupPath:     "group",
-				RepositoryURL: "https://github.com/org/vpc",
-				Private:       false,
-			},
-			validate: func(t *testing.T, output createTerraformModuleOutput) {
-				assert.Equal(t, "module-id", output.Module.ID)
-				assert.Equal(t, "vpc", output.Module.Name)
-				assert.Equal(t, "https://github.com/org/vpc", output.Module.RepositoryURL)
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.ResourceTypeGroup).Return(nil)
+				m.terraformModules.On("CreateTerraformModule", mock.Anything, &pb.CreateTerraformModuleRequest{
+					GroupId:       "g1",
+					Name:          "new-module",
+					System:        "aws",
+					RepositoryUrl: "https://github.com/org/repo",
+				}).Return(&pb.TerraformModule{
+					Metadata:      &pb.ResourceMetadata{Id: "m1", Trn: "trn:terraform_module:group1/new-module/aws"},
+					Name:          "new-module",
+					System:        "aws",
+					RepositoryUrl: "https://github.com/org/repo",
+				}, nil)
 			},
 		},
 		{
-			name: "ACL denial",
-			input: createTerraformModuleInput{
-				Name:          "vpc",
-				System:        "aws",
-				GroupPath:     "group",
-				RepositoryURL: "https://github.com/org/vpc",
+			name: "acl denial",
+			input: &createTerraformModuleInput{
+				GroupID: "g1",
+				Name:    "new-module",
+				System:  "aws",
 			},
-			aclError:    assert.AnError,
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.ResourceTypeGroup).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
+			expectError: true,
+		},
+		{
+			name: "create failed",
+			input: &createTerraformModuleInput{
+				GroupID:       "g1",
+				Name:          "new-module",
+				System:        "aws",
+				RepositoryURL: "https://github.com/org/repo",
+			},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.ResourceTypeGroup).Return(nil)
+				m.terraformModules.On("CreateTerraformModule", mock.Anything, &pb.CreateTerraformModuleRequest{
+					GroupId:       "g1",
+					Name:          "new-module",
+					System:        "aws",
+					RepositoryUrl: "https://github.com/org/repo",
+				}).Return(nil, status.Error(codes.Aborted, "already exists"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModule := tharsis.NewTerraformModule(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockACL.On("Authorize", mock.Anything, mockClient, "trn:group:"+tt.input.GroupPath, trn.ResourceTypeGroup).Return(tt.aclError)
-
-			if tt.aclError == nil {
-				mockClient.On("TerraformModules").Return(mockModule)
-				mockModule.On("CreateModule", mock.Anything, mock.Anything).Return(tt.module, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &terraformModuleMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+				acl:              acl.NewMockChecker(t),
 			}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := createTerraformModule(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := createTerraformModule(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, output)
+			require.NotNil(t, output.Module)
 		})
 	}
 }
 
 func TestUpdateTerraformModule(t *testing.T) {
-	moduleID := "module-id"
-
 	type testCase struct {
 		name        string
-		input       updateTerraformModuleInput
-		module      *sdktypes.TerraformModule
-		aclError    error
+		input       *updateTerraformModuleInput
+		mockSetup   func(*terraformModuleMocks)
 		expectError bool
-		validate    func(*testing.T, updateTerraformModuleOutput)
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "successful module update",
-			input: updateTerraformModuleInput{
-				ID:            moduleID,
-				RepositoryURL: ptr.String("https://github.com/org/new-vpc"),
-				Private:       ptr.Bool(true),
+			name: "update module successfully",
+			input: &updateTerraformModuleInput{
+				ID:            "m1",
+				RepositoryURL: ptr.String("https://github.com/org/new-repo"),
 			},
-			module: &sdktypes.TerraformModule{
-				Metadata:      sdktypes.ResourceMetadata{ID: moduleID, TRN: "trn:terraform_module:group/vpc/aws"},
-				Name:          "vpc",
-				System:        "aws",
-				GroupPath:     "group",
-				RepositoryURL: "https://github.com/org/new-vpc",
-				Private:       true,
-			},
-			validate: func(t *testing.T, output updateTerraformModuleOutput) {
-				assert.Equal(t, moduleID, output.Module.ID)
-				assert.Equal(t, "https://github.com/org/new-vpc", output.Module.RepositoryURL)
-				assert.True(t, output.Module.Private)
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.terraformModules.On("UpdateTerraformModule", mock.Anything, &pb.UpdateTerraformModuleRequest{
+					Id:            "m1",
+					RepositoryUrl: ptr.String("https://github.com/org/new-repo"),
+				}).Return(&pb.TerraformModule{
+					Metadata:      &pb.ResourceMetadata{Id: "m1", Trn: "trn:terraform_module:group/module/aws"},
+					Name:          "module",
+					System:        "aws",
+					RepositoryUrl: "https://github.com/org/new-repo",
+				}, nil)
 			},
 		},
 		{
-			name: "ACL denial",
-			input: updateTerraformModuleInput{
-				ID:            moduleID,
-				RepositoryURL: ptr.String("https://github.com/org/new-vpc"),
+			name: "acl denial",
+			input: &updateTerraformModuleInput{
+				ID:            "m1",
+				RepositoryURL: ptr.String("https://github.com/org/repo"),
 			},
-			aclError:    assert.AnError,
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
+			expectError: true,
+		},
+		{
+			name: "module not found",
+			input: &updateTerraformModuleInput{
+				ID:            "nonexistent",
+				RepositoryURL: ptr.String("https://github.com/org/repo"),
+			},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeTerraformModule).Return(nil)
+				m.terraformModules.On("UpdateTerraformModule", mock.Anything, &pb.UpdateTerraformModuleRequest{
+					Id:            "nonexistent",
+					RepositoryUrl: ptr.String("https://github.com/org/repo"),
+				}).Return(nil, status.Error(codes.NotFound, "not found"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModule := tharsis.NewTerraformModule(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockACL.On("Authorize", mock.Anything, mockClient, moduleID, trn.ResourceTypeTerraformModule).Return(tt.aclError)
-
-			if tt.aclError == nil {
-				mockClient.On("TerraformModules").Return(mockModule)
-				mockModule.On("UpdateModule", mock.Anything, mock.Anything).Return(tt.module, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &terraformModuleMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+				acl:              acl.NewMockChecker(t),
 			}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := updateTerraformModule(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := updateTerraformModule(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, output)
 		})
 	}
 }
 
 func TestDeleteTerraformModule(t *testing.T) {
-	moduleID := "module-id"
-
 	type testCase struct {
 		name        string
-		aclError    error
+		input       *deleteTerraformModuleInput
+		mockSetup   func(*terraformModuleMocks)
 		expectError bool
-		validate    func(*testing.T, deleteTerraformModuleOutput)
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "successful module deletion",
-			validate: func(t *testing.T, output deleteTerraformModuleOutput) {
-				assert.True(t, output.Success)
-				assert.Contains(t, output.Message, "deleted successfully")
+			name:  "delete module successfully",
+			input: &deleteTerraformModuleInput{ID: "m1"},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.terraformModules.On("DeleteTerraformModule", mock.Anything, &pb.DeleteTerraformModuleRequest{Id: "m1"}).Return(nil, nil)
 			},
 		},
 		{
-			name:        "ACL denial",
-			aclError:    assert.AnError,
+			name:  "acl denial",
+			input: &deleteTerraformModuleInput{ID: "m1"},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
+			expectError: true,
+		},
+		{
+			name:  "module not found",
+			input: &deleteTerraformModuleInput{ID: "nonexistent"},
+			mockSetup: func(m *terraformModuleMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeTerraformModule).Return(nil)
+				m.terraformModules.On("DeleteTerraformModule", mock.Anything, &pb.DeleteTerraformModuleRequest{Id: "nonexistent"}).Return(nil, status.Error(codes.NotFound, "not found"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockModule := tharsis.NewTerraformModule(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockACL.On("Authorize", mock.Anything, mockClient, moduleID, trn.ResourceTypeTerraformModule).Return(tt.aclError)
-
-			if tt.aclError == nil {
-				mockClient.On("TerraformModules").Return(mockModule)
-				mockModule.On("DeleteModule", mock.Anything, &sdktypes.DeleteTerraformModuleInput{
-					ID: moduleID,
-				}).Return(nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &terraformModuleMocks{
+				terraformModules: mocks.NewTerraformModulesClient(t),
+				acl:              acl.NewMockChecker(t),
 			}
 
-			tc := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					TerraformModulesClient: testMocks.terraformModules,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := deleteTerraformModule(tc)
-			_, output, err := handler(t.Context(), nil, deleteTerraformModuleInput{ID: moduleID})
+			_, handler := deleteTerraformModule(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
 		})
 	}
 }

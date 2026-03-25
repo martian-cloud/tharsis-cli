@@ -1,302 +1,234 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // workspaceCreateCommand is the top-level structure for the workspace create command.
 type workspaceCreateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	parentGroupID      string
+	description        string
+	terraformVersion   string
+	maxJobDuration     *int32
+	preventDestroyPlan bool
+	managedIdentityID  *string
+	labels             map[string]string
+	toJSON             bool
+	ifNotExists        bool
+}
+
+var _ Command = (*workspaceCreateCommand)(nil)
+
+func (c *workspaceCreateCommand) validate() error {
+	const message = "name is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewWorkspaceCreateCommandFactory returns a workspaceCreateCommand struct.
-func NewWorkspaceCreateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return workspaceCreateCommand{
-			meta: meta,
+func NewWorkspaceCreateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &workspaceCreateCommand{
+			BaseCommand: baseCommand,
+			labels:      make(map[string]string),
 		}, nil
 	}
 }
 
-func (wcc workspaceCreateCommand) Run(args []string) int {
-	wcc.meta.Logger.Debugf("Starting the 'workspace create' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		wcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *workspaceCreateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("workspace create"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := wcc.meta.GetSDKClient()
-	if err != nil {
-		wcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
+	name := c.arguments[0]
+
+	if c.parentGroupID == "" {
+		// Handle deprecated syntax where full path of the workspace is passed into the argument.
+		parent, child := extractParentPath(name)
+		c.parentGroupID = trn.NewResourceTRN(trn.ResourceTypeGroup, parent)
+		name = child
 	}
 
-	ctx := context.Background()
+	if c.ifNotExists {
+		c.Logger.Debug("getting parent group", "value", c.parentGroupID)
 
-	return wcc.doWorkspaceCreate(ctx, client, args)
-}
-
-func (wcc workspaceCreateCommand) doWorkspaceCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	wcc.meta.Logger.Debugf("will do workspace create, %d opts", len(opts))
-
-	defs := wcc.buildWorkspaceCreateDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(wcc.meta.BinaryName+" workspace create", defs, opts)
-	if err != nil {
-		wcc.meta.Logger.Error(output.FormatError("failed to parse workspace create options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		wcc.meta.Logger.Error(output.FormatError("missing workspace create full path", nil), wcc.HelpWorkspaceCreate())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive workspace create arguments: %s", cmdArgs)
-		wcc.meta.Logger.Error(output.FormatError(msg, nil), wcc.HelpWorkspaceCreate())
-		return 1
-	}
-
-	workspacePath := cmdArgs[0]
-	description := getOption("description", "", cmdOpts)[0]
-	ifNotExists, err := getBoolOptionValue("if-not-exists", "false", cmdOpts)
-	if err != nil {
-		wcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	terraformVersion := getOption("terraform-version", "", cmdOpts)[0]
-	identityPaths := getOptionSlice("managed-identity", cmdOpts)
-	maxJobDuration := getOption("max-job-duration", "", cmdOpts)[0]
-	preventDestroyPlan, err := getBoolOptionValue("prevent-destroy-plan", "false", cmdOpts)
-	if err != nil {
-		wcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		wcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	labels, err := parseLabels(cmdOpts)
-	if err != nil {
-		wcc.meta.Logger.Error(output.FormatError("failed to parse labels", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(workspacePath)
-	if !isNamespacePathValid(wcc.meta, actualPath) {
-		return 1
-	}
-
-	// Validate managed identity paths.
-	for _, identity := range identityPaths {
-		actualPath = trn.ToPath(identity)
-		if !isResourcePathValid(wcc.meta, actualPath) {
-			return 1
-		}
-	}
-
-	// Convert maxJobDuration to an int.
-	var jobDuration *int32
-	if maxJobDuration != "" {
-		duration, pErr := parseMaximumJobDuration(maxJobDuration)
-		if pErr != nil {
-			wcc.meta.Logger.Error(output.FormatError("failed to parse max job duration", pErr))
-			return 1
-		}
-		jobDuration = &duration
-	}
-
-	// Check if workspace already exists.
-	if ifNotExists {
-		trnID := trn.ToTRN(workspacePath, trn.ResourceTypeWorkspace)
-		ws, wErr := client.Workspaces.GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &trnID})
-		if (wErr != nil) && !tharsis.IsNotFoundError(wErr) {
-			wcc.meta.Logger.Error(output.FormatError("failed to check workspace", wErr))
-			return 1
-		}
-
-		if ws != nil {
-			return outputWorkspace(wcc.meta, toJSON, ws)
-		}
-	}
-
-	// Prepare the inputs. Output an error or slice out of bounds in input preparation.
-	index := strings.LastIndex(workspacePath, sep)
-	if index == -1 {
-		wcc.meta.Logger.Error(output.FormatError("workspace path is invalid", nil))
-		return 1
-	}
-
-	input := &sdktypes.CreateWorkspaceInput{
-		Name:               workspacePath[index+1:],
-		GroupPath:          workspacePath[:index],
-		Description:        description,
-		MaxJobDuration:     jobDuration,
-		PreventDestroyPlan: &preventDestroyPlan,
-		Labels:             labels,
-	}
-
-	if terraformVersion != "" {
-		input.TerraformVersion = &terraformVersion
-	}
-
-	wcc.meta.Logger.Debugf("workspace create input: %#v", input)
-
-	// Create the workspace.
-	createdWorkspace, err := client.Workspaces.CreateWorkspace(ctx, input)
-	if err != nil {
-		wcc.meta.Logger.Error(output.FormatError("failed to create a workspace", err))
-		return 1
-	}
-
-	if len(identityPaths) > 0 {
-		createdWorkspace, err = assignManagedIdentities(ctx, workspacePath, identityPaths, client)
+		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.parentGroupID})
 		if err != nil {
-			wcc.meta.Logger.Error(output.FormatError("failed to assign managed identity to workspace", err))
+			c.UI.ErrorWithSummary(err, "failed to get parent group")
 			return 1
 		}
-	}
 
-	return outputWorkspace(wcc.meta, toJSON, createdWorkspace)
-}
+		checkID := trn.NewResourceTRN(trn.ResourceTypeWorkspace, group.FullPath, name)
+		c.Logger.Debug("checking if workspace exists", "value", checkID)
 
-func parseLabels(cmdOpts map[string][]string) ([]sdktypes.WorkspaceLabelInput, error) {
-	var labels []sdktypes.WorkspaceLabelInput
-	for _, label := range getOptionSlice("label", cmdOpts) {
-		parts := strings.Split(label, "=")
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			return labels, fmt.Errorf("label key and value cannot be empty")
-		}
-
-		if labels == nil {
-			labels = make([]sdktypes.WorkspaceLabelInput, 0)
-		}
-
-		labels = append(labels, sdktypes.WorkspaceLabelInput{
-			Key:   parts[0],
-			Value: parts[1],
-		})
-	}
-	return labels, nil
-}
-
-// outputWorkspace is the final output for most workspace operations.
-func outputWorkspace(meta *Metadata, toJSON bool, workspace *sdktypes.Workspace) int {
-	if toJSON {
-		buf, err := objectToJSON(workspace)
-		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+		workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: checkID})
+		if err != nil && status.Code(err) != codes.NotFound {
+			c.UI.ErrorWithSummary(err, "failed to check workspace")
 			return 1
 		}
-		meta.UI.Output(string(buf))
-	} else {
-		tableInput := [][]string{
-			{
-				"id",
-				"name",
-				"description",
-				"full path",
-				"max job duration (minutes)",
-				"terraform version",
-				"prevent destroy plan",
-			},
-			{
-				workspace.Metadata.ID,
-				workspace.Name,
-				workspace.Description,
-				workspace.FullPath,
-				fmt.Sprintf("%d", workspace.MaxJobDuration),
-				workspace.TerraformVersion,
-				fmt.Sprintf("%t", workspace.PreventDestroyPlan),
-			},
+
+		if workspace != nil {
+			c.Logger.Debug("workspace already exists, returning existing workspace")
+			return outputWorkspace(c.UI, c.toJSON, workspace)
 		}
-		meta.UI.Output(tableformatter.FormatTable(tableInput))
 	}
 
-	return 0
-}
+	input := &pb.CreateWorkspaceRequest{
+		Name:               name,
+		GroupId:            c.parentGroupID,
+		Description:        c.description,
+		TerraformVersion:   c.terraformVersion,
+		MaxJobDuration:     c.maxJobDuration,
+		PreventDestroyPlan: c.preventDestroyPlan,
+		Labels:             c.labels,
+	}
 
-// parseMaximumJobDuration parses the maxJobDuration and returns an int32.
-func parseMaximumJobDuration(maxJobDuration string) (int32, error) {
-	value, err := strconv.ParseInt(maxJobDuration, 10, 64)
+	createdWorkspace, err := c.grpcClient.WorkspacesClient.CreateWorkspace(c.Context, input)
 	if err != nil {
-		return 0, err
+		c.UI.ErrorWithSummary(err, "failed to create a workspace")
+		return 1
 	}
 
-	return int32(value), nil
+	if c.managedIdentityID != nil {
+		assignInput := &pb.AssignManagedIdentityToWorkspaceRequest{
+			ManagedIdentityId: trn.ToTRN(trn.ResourceTypeManagedIdentity, *c.managedIdentityID),
+			WorkspaceId:       createdWorkspace.Metadata.Id,
+		}
+
+		if _, err := c.grpcClient.ManagedIdentitiesClient.AssignManagedIdentityToWorkspace(c.Context, assignInput); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to assign managed identity to workspace")
+			return 1
+		}
+	}
+
+	return outputWorkspace(c.UI, c.toJSON, createdWorkspace)
 }
 
-// buildCommonCreateOptionDefs returns the common defs used by
-// workspace and group create commands.
-func buildCommonCreateOptionDefs(synopsis string) optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"description": {
-			Arguments: []string{"Description"},
-			Synopsis:  fmt.Sprintf("Description for the new %s.", synopsis),
-		},
-		"if-not-exists": {
-			Arguments: []string{},
-			Synopsis:  fmt.Sprintf("Create a %s if it does not already exist.", synopsis),
-		},
-		"terraform-version": {
-			Arguments: []string{"Terraform_Version"},
-			Synopsis:  fmt.Sprintf("The default Terraform CLI version for the new %s.", synopsis),
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-// buildWorkspaceCreateDefs returns defs used by workspace create command.
-func (wcc workspaceCreateCommand) buildWorkspaceCreateDefs() optparser.OptionDefinitions {
-	defs := buildCommonCreateOptionDefs("workspace")
-	identityDef := optparser.OptionDefinition{
-		Arguments: []string{"Managed_Identity"},
-		Synopsis:  "The full resource path to a managed identity.",
-	}
-	defs["managed-identity"] = &identityDef
-
-	defs["label"] = &optparser.OptionDefinition{
-		Arguments: []string{"Label"},
-		Synopsis:  "Labels for the new workspace (key=value).",
-	}
-
-	// Get common defs used by multiple workspace commands.
-	buildCommonWorkspaceDefs(defs)
-
-	return defs
-}
-
-func (wcc workspaceCreateCommand) Synopsis() string {
+func (*workspaceCreateCommand) Synopsis() string {
 	return "Create a new workspace."
 }
 
-func (wcc workspaceCreateCommand) Help() string {
-	return wcc.HelpWorkspaceCreate()
+func (*workspaceCreateCommand) Usage() string {
+	return "tharsis [global options] workspace create [options] <name>"
 }
 
-// HelpWorkspaceCreate produces the help string for the 'workspace create' command.
-func (wcc workspaceCreateCommand) HelpWorkspaceCreate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] workspace create [options] <full_path>
-
+func (*workspaceCreateCommand) Description() string {
+	return `
    The workspace create command creates a new workspace. It
    allows setting a workspace's description (optional),
    maximum job duration and managed identity. Shows final
    output as JSON, if specified. Idempotent when used with
    --if-not-exists option.
+`
+}
 
-%s
+func (*workspaceCreateCommand) Example() string {
+	return `
+tharsis workspace create \
+  --parent-group-id trn:group:<group_path> \
+  --description "Production workspace" \
+  --terraform-version "1.5.0" \
+  --max-job-duration 60 \
+  --prevent-destroy-plan \
+  --managed-identity trn:managed_identity:<group_path>/<identity_name> \
+  --label env=prod \
+  --label team=platform \
+  <name>
+`
+}
 
-`, wcc.meta.BinaryName, buildHelpText(wcc.buildWorkspaceCreateDefs()))
+func (c *workspaceCreateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.parentGroupID,
+		"parent-group-id",
+		"",
+		"Parent group ID.",
+	)
+	f.StringVar(
+		&c.description,
+		"description",
+		"",
+		"Description for the new workspace.",
+	)
+	f.StringVar(
+		&c.terraformVersion,
+		"terraform-version",
+		"",
+		"The default Terraform CLI version for the new workspace.",
+	)
+	f.Func(
+		"max-job-duration",
+		"The amount of minutes before a job is gracefully canceled (Default 720).",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return err
+			}
+			c.maxJobDuration = ptr.Int32(int32(v))
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.preventDestroyPlan,
+		"prevent-destroy-plan",
+		false,
+		"Whether a run/plan will be prevented from destroying deployed resources.",
+	)
+	f.Func(
+		"label",
+		"Labels for the new workspace (key=value). Can be specified multiple times.",
+		func(s string) error {
+			parts := strings.Split(s, "=")
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return fmt.Errorf("label key and value cannot be empty")
+			}
+			c.labels[parts[0]] = parts[1]
+			return nil
+		},
+	)
+	f.Func(
+		"managed-identity",
+		"The ID of a managed identity to assign.",
+		func(s string) error {
+			c.managedIdentityID = &s
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+	f.BoolVar(
+		&c.ifNotExists,
+		"if-not-exists",
+		false,
+		"Create a workspace if it does not already exist.",
+	)
+
+	return f
 }

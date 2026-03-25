@@ -5,144 +5,183 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-func TestAssignManagedIdentity(t *testing.T) {
-	workspacePath := "group/workspace"
-	managedIdentityID := "mi-id"
+type managedIdentityMocks struct {
+	managedIdentities *mocks.ManagedIdentitiesClient
+	acl               *acl.MockChecker
+}
 
-	tests := []struct {
+func TestAssignManagedIdentity(t *testing.T) {
+	type testCase struct {
 		name        string
-		aclError    error
+		input       *assignManagedIdentityInput
+		mockSetup   func(*managedIdentityMocks)
 		expectError bool
-		validate    func(*testing.T, assignManagedIdentityOutput)
-	}{
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful assignment",
-			validate: func(t *testing.T, output assignManagedIdentityOutput) {
-				assert.True(t, output.Success)
-				assert.Contains(t, output.Message, managedIdentityID)
-				assert.Contains(t, output.Message, workspacePath)
+			name: "assign managed identity successfully",
+			input: &assignManagedIdentityInput{
+				WorkspaceID:       "ws1",
+				ManagedIdentityID: "mi1",
+			},
+			mockSetup: func(m *managedIdentityMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.managedIdentities.On("AssignManagedIdentityToWorkspace", mock.Anything, &pb.AssignManagedIdentityToWorkspaceRequest{
+					ManagedIdentityId: "mi1",
+					WorkspaceId:       "ws1",
+				}).Return(nil, nil)
 			},
 		},
 		{
-			name:        "ACL denial",
-			aclError:    assert.AnError,
+			name: "acl denial",
+			input: &assignManagedIdentityInput{
+				WorkspaceID:       "ws1",
+				ManagedIdentityID: "mi1",
+			},
+			mockSetup: func(m *managedIdentityMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
+			expectError: true,
+		},
+		{
+			name: "assign call unsuccessful",
+			input: &assignManagedIdentityInput{
+				WorkspaceID:       "nonexistent",
+				ManagedIdentityID: "mi1",
+			},
+			mockSetup: func(m *managedIdentityMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeWorkspace).Return(nil)
+				m.managedIdentities.On("AssignManagedIdentityToWorkspace", mock.Anything, &pb.AssignManagedIdentityToWorkspaceRequest{
+					ManagedIdentityId: "mi1",
+					WorkspaceId:       "nonexistent",
+				}).Return(nil, status.Error(codes.NotFound, "workspace not found"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockMI := tharsis.NewManagedIdentity(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockACL.On("Authorize", mock.Anything, mockClient, "trn:workspace:"+workspacePath, trn.ResourceTypeWorkspace).Return(tt.aclError)
-
-			if tt.aclError == nil {
-				mockClient.On("ManagedIdentities").Return(mockMI)
-				mockMI.On("AssignManagedIdentityToWorkspace", mock.Anything, &sdktypes.AssignManagedIdentityInput{
-					ManagedIdentityID: &managedIdentityID,
-					WorkspacePath:     workspacePath,
-				}).Return(&sdktypes.Workspace{}, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &managedIdentityMocks{
+				managedIdentities: mocks.NewManagedIdentitiesClient(t),
+				acl:               acl.NewMockChecker(t),
 			}
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					ManagedIdentitiesClient: testMocks.managedIdentities,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := assignManagedIdentity(tc)
-			_, output, err := handler(t.Context(), nil, assignManagedIdentityInput{
-				WorkspacePath:     workspacePath,
-				ManagedIdentityID: managedIdentityID,
-			})
+			_, handler := assignManagedIdentity(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
 		})
 	}
 }
 
 func TestUnassignManagedIdentity(t *testing.T) {
-	workspacePath := "group/workspace"
-	managedIdentityID := "mi-id"
-
-	tests := []struct {
+	type testCase struct {
 		name        string
-		aclError    error
+		input       *unassignManagedIdentityInput
+		mockSetup   func(*managedIdentityMocks)
 		expectError bool
-		validate    func(*testing.T, unassignManagedIdentityOutput)
-	}{
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful unassignment",
-			validate: func(t *testing.T, output unassignManagedIdentityOutput) {
-				assert.True(t, output.Success)
-				assert.Contains(t, output.Message, managedIdentityID)
-				assert.Contains(t, output.Message, workspacePath)
+			name: "unassign managed identity successfully",
+			input: &unassignManagedIdentityInput{
+				WorkspaceID:       "ws1",
+				ManagedIdentityID: "mi1",
+			},
+			mockSetup: func(m *managedIdentityMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.managedIdentities.On("RemoveManagedIdentityFromWorkspace", mock.Anything, &pb.RemoveManagedIdentityFromWorkspaceRequest{
+					ManagedIdentityId: "mi1",
+					WorkspaceId:       "ws1",
+				}).Return(nil, nil)
 			},
 		},
 		{
-			name:        "ACL denial",
-			aclError:    assert.AnError,
+			name: "acl denial",
+			input: &unassignManagedIdentityInput{
+				WorkspaceID:       "ws1",
+				ManagedIdentityID: "mi1",
+			},
+			mockSetup: func(m *managedIdentityMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
+			expectError: true,
+		},
+		{
+			name: "unassign call unsuccessful",
+			input: &unassignManagedIdentityInput{
+				WorkspaceID:       "ws1",
+				ManagedIdentityID: "mi1",
+			},
+			mockSetup: func(m *managedIdentityMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.managedIdentities.On("RemoveManagedIdentityFromWorkspace", mock.Anything, &pb.RemoveManagedIdentityFromWorkspaceRequest{
+					ManagedIdentityId: "mi1",
+					WorkspaceId:       "ws1",
+				}).Return(nil, status.Error(codes.NotFound, "assignment not found"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockMI := tharsis.NewManagedIdentity(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockACL.On("Authorize", mock.Anything, mockClient, "trn:workspace:"+workspacePath, trn.ResourceTypeWorkspace).Return(tt.aclError)
-
-			if tt.aclError == nil {
-				mockClient.On("ManagedIdentities").Return(mockMI)
-				mockMI.On("UnassignManagedIdentityFromWorkspace", mock.Anything, &sdktypes.AssignManagedIdentityInput{
-					ManagedIdentityID: &managedIdentityID,
-					WorkspacePath:     workspacePath,
-				}).Return(&sdktypes.Workspace{}, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &managedIdentityMocks{
+				managedIdentities: mocks.NewManagedIdentitiesClient(t),
+				acl:               acl.NewMockChecker(t),
 			}
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					ManagedIdentitiesClient: testMocks.managedIdentities,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := unassignManagedIdentity(tc)
-			_, output, err := handler(t.Context(), nil, unassignManagedIdentityInput{
-				WorkspacePath:     workspacePath,
-				ManagedIdentityID: managedIdentityID,
-			})
+			_, handler := unassignManagedIdentity(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
 		})
 	}
 }

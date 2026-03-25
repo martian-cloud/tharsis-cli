@@ -1,153 +1,125 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-// runCancelCommand is the top-level structure for the run cancel command.
 type runCancelCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	force bool
 }
 
 // NewRunCancelCommandFactory returns a runCancelCommand struct.
-func NewRunCancelCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return runCancelCommand{
-			meta: meta,
+func NewRunCancelCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &runCancelCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (rc runCancelCommand) Run(args []string) int {
-	rc.meta.Logger.Debugf("Starting the 'run cancel' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		rc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := rc.meta.GetSDKClient()
-	if err != nil {
-		rc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return rc.doRunCancel(ctx, client, args)
+func (c *runCancelCommand) validate() error {
+	const message = "run-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (rc runCancelCommand) doRunCancel(ctx context.Context, client *tharsis.Client, opts []string) int {
-	rc.meta.Logger.Debugf("will do run cancel, %d opts", len(opts))
+func (c *runCancelCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("run cancel"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+		WithForcePrompt("Are you sure you want to cancel this run?"),
+	); code != 0 {
+		return code
+	}
 
-	defs := rc.buildRunCancelDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(rc.meta.BinaryName+" run cancel", defs, opts)
+	runID := c.arguments[0]
+
+	// Subscribe to run events
+	stream, err := c.grpcClient.RunsClient.SubscribeToRunEvents(c.Context, &pb.SubscribeToRunEventsRequest{
+		RunId: &runID,
+	})
 	if err != nil {
-		rc.meta.Logger.Error(output.FormatError("failed to parse run cancel options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 || cmdArgs[0] == "" {
-		rc.meta.Logger.Error(output.FormatError("missing run cancel ID", nil), rc.HelpRunCancel())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive run cancel arguments: %s", cmdArgs)
-		rc.meta.Logger.Error(output.FormatError(msg, nil), rc.HelpRunCancel())
+		c.UI.ErrorWithSummary(err, "failed to subscribe to run events")
 		return 1
 	}
 
-	force, err := getBoolOptionValue("force", "false", cmdOpts)
-	if err != nil {
-		rc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
+	input := &pb.CancelRunRequest{
+		Id:    runID,
+		Force: &c.force,
 	}
-	id := cmdArgs[0]
 
-	run, err := client.Run.GetRun(ctx, &sdktypes.GetRunInput{ID: id})
-	if err != nil {
-		rc.meta.Logger.Error(output.FormatError("failed to get run", err))
+	if _, err = c.grpcClient.RunsClient.CancelRun(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to cancel run")
 		return 1
 	}
 
-	// Subscribe to run events and wait for event to be canceled.
-	eventChan, err := client.Run.SubscribeToWorkspaceRunEvents(ctx,
-		&sdktypes.RunSubscriptionInput{
-			WorkspacePath: run.WorkspacePath,
-			RunID:         &id,
-		})
-	if err != nil {
-		rc.meta.Logger.Error(output.FormatError("failed subscribe to workspace run events", err))
-		return 1
-	}
+	c.UI.Output("Run cancellation in progress...")
 
-	input := &sdktypes.CancelRunInput{RunID: id, Force: &force}
-	rc.meta.Logger.Debugf("run cancel input: %#v", input)
-
-	_, err = client.Run.CancelRun(ctx, input)
-	if err != nil {
-		rc.meta.Logger.Error(output.FormatError("failed to cancel a run", err))
-		return 1
-	}
-
-	rc.meta.UI.Info("Run cancellation in progress...")
-
-	// Wait for an event on eventChan.
+	// Wait for cancellation to complete
 	for {
 		select {
-		case <-ctx.Done():
-			err = ctx.Err()
-		case eventRun := <-eventChan:
-			switch eventRun.Status {
-			case sdktypes.RunApplied,
-				sdktypes.RunPlanned,
-				sdktypes.RunPlannedAndFinished,
-				sdktypes.RunErrored:
-				err = fmt.Errorf("run status: %s", eventRun.Status)
-			case sdktypes.RunCanceled:
-				rc.meta.UI.Info("Run cancel succeeded")
+		case <-c.Context.Done():
+			c.UI.ErrorWithSummary(c.Context.Err(), "context canceled")
+			return 1
+		default:
+			event, err := stream.Recv()
+			if err != nil {
+				c.UI.ErrorWithSummary(err, "failed to receive run event")
+				return 1
+			}
+
+			switch event.Run.Status {
+			case "canceled":
+				c.UI.Successf("Run canceled successfully!")
 				return 0
+			case "applied", "planned", "planned_and_finished", "errored":
+				c.UI.Errorf("Run completed with status: %s", event.Run.Status)
+				return 1
 			}
 		}
-
-		if err != nil {
-			rc.meta.Logger.Error(output.FormatError("failed to cancel a run", err))
-			return 1
-		}
 	}
 }
 
-func (rc runCancelCommand) buildRunCancelDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"force": {
-			Arguments: []string{},
-			Synopsis:  "Force the run to cancel.",
-		},
-	}
-}
-
-func (rc runCancelCommand) Synopsis() string {
+func (*runCancelCommand) Synopsis() string {
 	return "Cancel a run."
 }
 
-func (rc runCancelCommand) Help() string {
-	return rc.HelpRunCancel()
+func (*runCancelCommand) Description() string {
+	return `
+   The run cancel command cancels a run. Supports forced cancellation which is useful when a graceful cancel is not enough.
+`
 }
 
-// HelpRunCancel produces the help string for the 'run cancel' command.
-func (rc runCancelCommand) HelpRunCancel() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] run cancel [options] <id>
+func (*runCancelCommand) Usage() string {
+	return "tharsis [global options] run cancel [options] <run-id>"
+}
 
-   The run cancel command cancels a run. Expects the target
-   run ID as an argument. Supports forced cancellation of a
-   run which is useful when a graceful cancel is not enough.
+func (*runCancelCommand) Example() string {
+	return `
+tharsis run cancel --force <id>
+`
+}
 
-%s
+func (c *runCancelCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.force,
+		"force",
+		false,
+		"Force the run to cancel.",
+	)
 
-`, rc.meta.BinaryName, buildHelpText(rc.buildRunCancelDefs()))
+	return f
 }

@@ -6,11 +6,12 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
-	sdk "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // setVariableInput is the input for setting a variable.
@@ -28,7 +29,7 @@ type setVariableOutput struct {
 }
 
 // SetVariable returns an MCP tool for setting a namespace variable.
-func setVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[setVariableInput, setVariableOutput]) {
+func setVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*setVariableInput, *setVariableOutput]) {
 	tool := mcp.Tool{
 		Name:        "set_variable",
 		Description: "Set a Terraform or environment variable on a workspace or group. Creates if doesn't exist, updates if it does. Note: Sensitive variables are not supported.",
@@ -39,54 +40,48 @@ func setVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[setVariableInput
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input setVariableInput) (*mcp.CallToolResult, setVariableOutput, error) {
-		client, err := tc.clientGetter()
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *setVariableInput) (*mcp.CallToolResult, *setVariableOutput, error) {
+		categoryValue, ok := pb.VariableCategory_value[input.Category]
+		if !ok {
+			return nil, nil, fmt.Errorf("invalid category: must be 'terraform' or 'environment'")
+		}
+
+		namespacePath, resourceType, err := getNamespacePath(ctx, tc.grpcClient, input.NamespaceID)
 		if err != nil {
-			return nil, setVariableOutput{}, err
+			return nil, nil, err
 		}
 
-		category, err := parseVariableCategory(input.Category)
-		if err != nil {
-			return nil, setVariableOutput{}, err
+		if err = tc.acl.Authorize(ctx, tc.grpcClient, input.NamespaceID, resourceType); err != nil {
+			return nil, nil, err
 		}
 
-		namespacePath, resourceType, err := getNamespacePath(ctx, client, input.NamespaceID)
-		if err != nil {
-			return nil, setVariableOutput{}, err
-		}
-
-		if err = tc.acl.Authorize(ctx, client, input.NamespaceID, resourceType); err != nil {
-			return nil, setVariableOutput{}, err
-		}
-
-		variableID := fmt.Sprintf("trn:variable:%s/%s/%s", namespacePath, category, input.Key)
-		variable, err := client.Variables().GetVariable(ctx, &sdktypes.GetNamespaceVariableInput{ID: variableID})
-		if err != nil && !sdk.IsNotFoundError(err) {
-			return nil, setVariableOutput{}, fmt.Errorf("failed to get variable: %w", err)
+		variableID := trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, input.Category, input.Key)
+		variable, err := tc.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(ctx, &pb.GetNamespaceVariableByIDRequest{Id: variableID})
+		if err != nil && status.Code(err) != codes.NotFound {
+			return nil, nil, fmt.Errorf("failed to get variable: %w", err)
 		}
 
 		if variable != nil {
-			_, err = client.Variables().UpdateVariable(ctx, &sdktypes.UpdateNamespaceVariableInput{
-				ID:    variable.Metadata.ID,
+			_, err = tc.grpcClient.NamespaceVariablesClient.UpdateNamespaceVariable(ctx, &pb.UpdateNamespaceVariableRequest{
+				Id:    variable.Metadata.Id,
 				Key:   variable.Key,
 				Value: input.Value,
 			})
 			if err != nil {
-				return nil, setVariableOutput{}, fmt.Errorf("failed to update variable: %w", err)
+				return nil, nil, fmt.Errorf("failed to update variable: %w", err)
 			}
 		} else {
-			_, err = client.Variables().CreateVariable(ctx, &sdktypes.CreateNamespaceVariableInput{
+			if _, err = tc.grpcClient.NamespaceVariablesClient.CreateNamespaceVariable(ctx, &pb.CreateNamespaceVariableRequest{
 				Key:           input.Key,
 				Value:         input.Value,
-				Category:      category,
+				Category:      pb.VariableCategory(categoryValue),
 				NamespacePath: namespacePath,
-			})
-			if err != nil {
-				return nil, setVariableOutput{}, fmt.Errorf("failed to create variable: %w", err)
+			}); err != nil {
+				return nil, nil, fmt.Errorf("failed to create variable: %w", err)
 			}
 		}
 
-		return nil, setVariableOutput{
+		return nil, &setVariableOutput{
 			Message: fmt.Sprintf("Variable '%s' set successfully in namespace %s", input.Key, namespacePath),
 			Success: true,
 		}, nil
@@ -109,7 +104,7 @@ type setTerraformVariablesFromFileOutput struct {
 }
 
 // SetTerraformVariablesFromFile returns an MCP tool for setting multiple Terraform variables from a file.
-func setTerraformVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[setTerraformVariablesFromFileInput, setTerraformVariablesFromFileOutput]) {
+func setTerraformVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*setTerraformVariablesFromFileInput, *setTerraformVariablesFromFileOutput]) {
 	tool := mcp.Tool{
 		Name:        "set_terraform_variables_from_file",
 		Description: "Set multiple Terraform variables from a .tfvars file on a workspace or group. Overwrites existing Terraform variables.",
@@ -120,19 +115,14 @@ func setTerraformVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFo
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input setTerraformVariablesFromFileInput) (*mcp.CallToolResult, setTerraformVariablesFromFileOutput, error) {
-		client, err := tc.clientGetter()
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *setTerraformVariablesFromFileInput) (*mcp.CallToolResult, *setTerraformVariablesFromFileOutput, error) {
+		namespacePath, resourceType, err := getNamespacePath(ctx, tc.grpcClient, input.NamespaceID)
 		if err != nil {
-			return nil, setTerraformVariablesFromFileOutput{}, err
+			return nil, nil, err
 		}
 
-		namespacePath, resourceType, err := getNamespacePath(ctx, client, input.NamespaceID)
-		if err != nil {
-			return nil, setTerraformVariablesFromFileOutput{}, err
-		}
-
-		if err = tc.acl.Authorize(ctx, client, input.NamespaceID, resourceType); err != nil {
-			return nil, setTerraformVariablesFromFileOutput{}, err
+		if err = tc.acl.Authorize(ctx, tc.grpcClient, input.NamespaceID, resourceType); err != nil {
+			return nil, nil, err
 		}
 
 		parser := varparser.NewVariableParser(nil, false)
@@ -140,29 +130,26 @@ func setTerraformVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFo
 			TfVarFilePaths: []string{input.FilePath},
 		})
 		if err != nil {
-			return nil, setTerraformVariablesFromFileOutput{}, fmt.Errorf("failed to parse variables file: %w", err)
+			return nil, nil, fmt.Errorf("failed to parse variables file: %w", err)
 		}
 
-		setVars := make([]sdktypes.SetNamespaceVariablesVariable, len(variables))
+		setVars := make([]*pb.SetNamespaceVariablesInputVariable, len(variables))
 		for i, v := range variables {
-			setVars[i] = sdktypes.SetNamespaceVariablesVariable{
+			setVars[i] = &pb.SetNamespaceVariablesInputVariable{
 				Key:   v.Key,
 				Value: v.Value,
 			}
 		}
 
-		setInput := &sdktypes.SetNamespaceVariablesInput{
+		if _, err = tc.grpcClient.NamespaceVariablesClient.SetNamespaceVariables(ctx, &pb.SetNamespaceVariablesRequest{
 			NamespacePath: namespacePath,
-			Category:      sdktypes.TerraformVariableCategory,
+			Category:      pb.VariableCategory_terraform,
 			Variables:     setVars,
+		}); err != nil {
+			return nil, nil, fmt.Errorf("failed to set variables: %w", err)
 		}
 
-		err = client.Variables().SetVariables(ctx, setInput)
-		if err != nil {
-			return nil, setTerraformVariablesFromFileOutput{}, fmt.Errorf("failed to set variables: %w", err)
-		}
-
-		return nil, setTerraformVariablesFromFileOutput{
+		return nil, &setTerraformVariablesFromFileOutput{
 			Message: fmt.Sprintf("Set %d Terraform variables successfully in namespace %s", len(variables), namespacePath),
 			Success: true,
 			Count:   len(variables),
@@ -186,7 +173,7 @@ type setEnvironmentVariablesFromFileOutput struct {
 }
 
 // SetEnvironmentVariablesFromFile returns an MCP tool for setting multiple environment variables from a file.
-func setEnvironmentVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[setEnvironmentVariablesFromFileInput, setEnvironmentVariablesFromFileOutput]) {
+func setEnvironmentVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*setEnvironmentVariablesFromFileInput, *setEnvironmentVariablesFromFileOutput]) {
 	tool := mcp.Tool{
 		Name:        "set_environment_variables_from_file",
 		Description: "Set multiple environment variables from a file on a workspace or group. Overwrites existing environment variables.",
@@ -197,19 +184,14 @@ func setEnvironmentVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandler
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input setEnvironmentVariablesFromFileInput) (*mcp.CallToolResult, setEnvironmentVariablesFromFileOutput, error) {
-		client, err := tc.clientGetter()
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *setEnvironmentVariablesFromFileInput) (*mcp.CallToolResult, *setEnvironmentVariablesFromFileOutput, error) {
+		namespacePath, resourceType, err := getNamespacePath(ctx, tc.grpcClient, input.NamespaceID)
 		if err != nil {
-			return nil, setEnvironmentVariablesFromFileOutput{}, err
+			return nil, nil, err
 		}
 
-		namespacePath, resourceType, err := getNamespacePath(ctx, client, input.NamespaceID)
-		if err != nil {
-			return nil, setEnvironmentVariablesFromFileOutput{}, err
-		}
-
-		if err = tc.acl.Authorize(ctx, client, input.NamespaceID, resourceType); err != nil {
-			return nil, setEnvironmentVariablesFromFileOutput{}, err
+		if err = tc.acl.Authorize(ctx, tc.grpcClient, input.NamespaceID, resourceType); err != nil {
+			return nil, nil, err
 		}
 
 		parser := varparser.NewVariableParser(nil, false)
@@ -217,29 +199,26 @@ func setEnvironmentVariablesFromFile(tc *ToolContext) (mcp.Tool, mcp.ToolHandler
 			EnvVarFilePaths: []string{input.FilePath},
 		})
 		if err != nil {
-			return nil, setEnvironmentVariablesFromFileOutput{}, fmt.Errorf("failed to parse environment variables file: %w", err)
+			return nil, nil, fmt.Errorf("failed to parse environment variables file: %w", err)
 		}
 
-		setVars := make([]sdktypes.SetNamespaceVariablesVariable, len(variables))
+		setVars := make([]*pb.SetNamespaceVariablesInputVariable, len(variables))
 		for i, v := range variables {
-			setVars[i] = sdktypes.SetNamespaceVariablesVariable{
+			setVars[i] = &pb.SetNamespaceVariablesInputVariable{
 				Key:   v.Key,
 				Value: v.Value,
 			}
 		}
 
-		setInput := &sdktypes.SetNamespaceVariablesInput{
+		if _, err = tc.grpcClient.NamespaceVariablesClient.SetNamespaceVariables(ctx, &pb.SetNamespaceVariablesRequest{
 			NamespacePath: namespacePath,
-			Category:      sdktypes.EnvironmentVariableCategory,
+			Category:      pb.VariableCategory_environment,
 			Variables:     setVars,
+		}); err != nil {
+			return nil, nil, fmt.Errorf("failed to set environment variables: %w", err)
 		}
 
-		err = client.Variables().SetVariables(ctx, setInput)
-		if err != nil {
-			return nil, setEnvironmentVariablesFromFileOutput{}, fmt.Errorf("failed to set environment variables: %w", err)
-		}
-
-		return nil, setEnvironmentVariablesFromFileOutput{
+		return nil, &setEnvironmentVariablesFromFileOutput{
 			Message: fmt.Sprintf("Set %d environment variables successfully in namespace %s", len(variables), namespacePath),
 			Success: true,
 			Count:   len(variables),
@@ -263,7 +242,7 @@ type deleteVariableOutput struct {
 }
 
 // DeleteVariable returns an MCP tool for deleting a namespace variable.
-func deleteVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[deleteVariableInput, deleteVariableOutput]) {
+func deleteVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteVariableInput, *deleteVariableOutput]) {
 	tool := mcp.Tool{
 		Name:        "delete_variable",
 		Description: "Delete a Terraform or environment variable from a workspace or group.",
@@ -273,38 +252,27 @@ func deleteVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[deleteVariabl
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input deleteVariableInput) (*mcp.CallToolResult, deleteVariableOutput, error) {
-		client, err := tc.clientGetter()
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *deleteVariableInput) (*mcp.CallToolResult, *deleteVariableOutput, error) {
+		if _, ok := pb.VariableCategory_value[input.Category]; !ok {
+			return nil, nil, fmt.Errorf("invalid category: must be 'terraform' or 'environment'")
+		}
+
+		namespacePath, resourceType, err := getNamespacePath(ctx, tc.grpcClient, input.NamespaceID)
 		if err != nil {
-			return nil, deleteVariableOutput{}, err
+			return nil, nil, err
 		}
 
-		category, err := parseVariableCategory(input.Category)
+		if err = tc.acl.Authorize(ctx, tc.grpcClient, input.NamespaceID, resourceType); err != nil {
+			return nil, nil, err
+		}
+
+		variableID := trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, input.Category, input.Key)
+		_, err = tc.grpcClient.NamespaceVariablesClient.DeleteNamespaceVariable(ctx, &pb.DeleteNamespaceVariableRequest{Id: variableID})
 		if err != nil {
-			return nil, deleteVariableOutput{}, err
+			return nil, nil, fmt.Errorf("failed to delete variable: %w", err)
 		}
 
-		namespacePath, resourceType, err := getNamespacePath(ctx, client, input.NamespaceID)
-		if err != nil {
-			return nil, deleteVariableOutput{}, err
-		}
-
-		if err = tc.acl.Authorize(ctx, client, input.NamespaceID, resourceType); err != nil {
-			return nil, deleteVariableOutput{}, err
-		}
-
-		variableID := fmt.Sprintf("trn:variable:%s/%s/%s", namespacePath, category, input.Key)
-		variable, err := client.Variables().GetVariable(ctx, &sdktypes.GetNamespaceVariableInput{ID: variableID})
-		if err != nil {
-			return nil, deleteVariableOutput{}, fmt.Errorf("failed to get variable: %w", err)
-		}
-
-		err = client.Variables().DeleteVariable(ctx, &sdktypes.DeleteNamespaceVariableInput{ID: variable.Metadata.ID})
-		if err != nil {
-			return nil, deleteVariableOutput{}, fmt.Errorf("failed to delete variable: %w", err)
-		}
-
-		return nil, deleteVariableOutput{
+		return nil, &deleteVariableOutput{
 			Message: fmt.Sprintf("Variable '%s' deleted successfully from namespace %s", input.Key, namespacePath),
 			Success: true,
 		}, nil
@@ -313,28 +281,19 @@ func deleteVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[deleteVariabl
 	return tool, handler
 }
 
-func parseVariableCategory(category string) (sdktypes.VariableCategory, error) {
-	switch category {
-	case "terraform":
-		return sdktypes.TerraformVariableCategory, nil
-	case "environment":
-		return sdktypes.EnvironmentVariableCategory, nil
-	default:
-		return "", fmt.Errorf("invalid category: must be 'terraform' or 'environment'")
-	}
-}
-
-func getNamespacePath(ctx context.Context, c tharsis.Client, namespaceID string) (string, trn.ResourceType, error) {
-	workspace, err := c.Workspaces().GetWorkspace(ctx, &sdktypes.GetWorkspaceInput{ID: &namespaceID})
+func getNamespacePath(ctx context.Context, c *client.Client, namespaceID string) (string, trn.ResourceType, error) {
+	workspace, err := c.WorkspacesClient.GetWorkspaceByID(ctx, &pb.GetWorkspaceByIDRequest{Id: namespaceID})
 	if err == nil {
 		return workspace.FullPath, trn.ResourceTypeWorkspace, nil
 	}
-	if sdk.IsNotFoundError(err) {
-		group, gErr := c.Groups().GetGroup(ctx, &sdktypes.GetGroupInput{ID: &namespaceID})
+
+	if status.Code(err) == codes.NotFound {
+		group, gErr := c.GroupsClient.GetGroupByID(ctx, &pb.GetGroupByIDRequest{Id: namespaceID})
 		if gErr != nil {
 			return "", "", fmt.Errorf("failed to get workspace or group: %w", gErr)
 		}
 		return group.FullPath, trn.ResourceTypeGroup, nil
 	}
+
 	return "", "", fmt.Errorf("failed to get namespace: %w", err)
 }

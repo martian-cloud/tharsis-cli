@@ -1,151 +1,160 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
-// managedIdentityAccessRuleUpdateCommand is the top-level structure for the managed-identity-access-rule update command.
+// managedIdentityAccessRuleUpdateCommand is the top-level structure for the managed identity access rule update command.
 type managedIdentityAccessRuleUpdateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	allowedUsers              []string
+	allowedServiceAccounts    []string
+	allowedTeams              []string
+	verifyStateLineage        *bool
+	moduleAttestationPolicies []string
+	toJSON                    bool
+}
+
+var _ Command = (*managedIdentityAccessRuleUpdateCommand)(nil)
+
+func (c *managedIdentityAccessRuleUpdateCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewManagedIdentityAccessRuleUpdateCommandFactory returns a managedIdentityAccessRuleUpdateCommand struct.
-func NewManagedIdentityAccessRuleUpdateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return managedIdentityAccessRuleUpdateCommand{
-			meta: meta,
+func NewManagedIdentityAccessRuleUpdateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &managedIdentityAccessRuleUpdateCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (m managedIdentityAccessRuleUpdateCommand) Run(args []string) int {
-	m.meta.Logger.Debugf("Starting the 'managed-identity-access-rule update' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *managedIdentityAccessRuleUpdateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("managed-identity-access-rule update"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := m.meta.GetSDKClient()
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return m.doManagedIdentityAccessRuleUpdate(ctx, client, args)
-}
-
-func (m managedIdentityAccessRuleUpdateCommand) doManagedIdentityAccessRuleUpdate(ctx context.Context,
-	client *tharsis.Client, opts []string,
-) int {
-	m.meta.Logger.Debugf("will do managed-identity-access-rule update, %d opts", len(opts))
-
-	defs := buildManagedIdentityAccessRuleUpdateDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(m.meta.BinaryName+" managed-identity-access-rule update", defs, opts)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse managed-identity-access-rule update options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		m.meta.Logger.Error(output.FormatError("missing managed identity access rule ID", nil))
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive managed-identity-access-rule update arguments: %s", cmdArgs)
-		m.meta.Logger.Error(output.FormatError(msg, nil), m.HelpManagedIdentityAccessRuleUpdate())
-		return 1
-	}
-
-	managedIdentityAccessRuleID := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	moduleAttestationPolicies := getOptionSlice("module-attestation-policy", cmdOpts)
-	allowedUsers := getOptionSlice("allowed-user", cmdOpts)
-	allowedServiceAccounts := getOptionSlice("allowed-service-account", cmdOpts)
-	allowedTeams := getOptionSlice("allowed-team", cmdOpts)
-
-	var verifyStateLineage *bool
-	if _, ok := cmdOpts["verify-state-lineage"]; ok {
-		v, vErr := getBoolOptionValue("verify-state-lineage", "false", cmdOpts)
-		if vErr != nil {
-			m.meta.Logger.Error(output.FormatError("failed to parse -verify-state-lineage option value", vErr))
-			return 1
-		}
-		verifyStateLineage = &v
-	}
-
-	// Get the original managed identity access rule from its path.
-	managedIdentityAccessRule, err := client.ManagedIdentity.GetManagedIdentityAccessRule(ctx, &sdktypes.GetManagedIdentityAccessRuleInput{
-		ID: managedIdentityAccessRuleID,
-	})
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to get managed identity access rule", err))
-		return 1
-	}
-
-	// Build the input based on the original managed identity access rule and the options.
-	// If no -allowed-user, -allowed-service-account, or -allowed-team option is specified,
-	// empty the respective slice.
-	input := &sdktypes.UpdateManagedIdentityAccessRuleInput{
-		ID:                     managedIdentityAccessRuleID,
-		RunStage:               managedIdentityAccessRule.RunStage,
-		AllowedUsers:           allowedUsers,
-		AllowedServiceAccounts: allowedServiceAccounts,
-		AllowedTeams:           allowedTeams,
-		VerifyStateLineage:     verifyStateLineage,
-	}
-
-	// If no -module-attestation-policy option is specified, error out if it's a module attestation rule.
-	if _, ok := cmdOpts["module-attestation-policy"]; ok {
-		input.ModuleAttestationPolicies, err = buildModuleAttestationPolicies(moduleAttestationPolicies)
+	var policies []*pb.ManagedIdentityAccessRuleModuleAttestationPolicy
+	if len(c.moduleAttestationPolicies) > 0 {
+		var err error
+		policies, err = buildModuleAttestationPolicies(c.moduleAttestationPolicies)
 		if err != nil {
-			m.meta.Logger.Error(output.FormatError("failed to parse/build module attestation policies", err))
+			c.UI.ErrorWithSummary(err, "failed to parse module attestation policies")
 			return 1
 		}
-	} else if managedIdentityAccessRule.Type == sdktypes.ManagedIdentityAccessRuleModuleAttestation {
-		m.meta.UI.Error(output.FormatError("at least one attestation policy is required", err))
-		return 1
 	}
 
-	m.meta.Logger.Debugf("managed-identity-access-rule update input: %#v", input)
-	managedIdentityAccessRule, err = client.ManagedIdentity.UpdateManagedIdentityAccessRule(ctx, input)
+	input := &pb.UpdateManagedIdentityAccessRuleRequest{
+		Id:                        c.arguments[0],
+		AllowedUsers:              c.allowedUsers,
+		AllowedServiceAccounts:    c.allowedServiceAccounts,
+		AllowedTeams:              c.allowedTeams,
+		VerifyStateLineage:        c.verifyStateLineage,
+		ModuleAttestationPolicies: policies,
+	}
+
+	updatedRule, err := c.grpcClient.ManagedIdentitiesClient.UpdateManagedIdentityAccessRule(c.Context, input)
 	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to update managed identity access rule", err))
+		c.UI.ErrorWithSummary(err, "failed to update managed identity access rule")
 		return 1
 	}
 
-	return outputManagedIdentityAccessRule(m.meta, toJSON, managedIdentityAccessRule)
+	return outputManagedIdentityAccessRule(c.UI, c.toJSON, updatedRule)
 }
 
-// buildManagedIdentityAccessRuleUpdateDefs returns defs used by managed-identity-access-rule update command.
-func buildManagedIdentityAccessRuleUpdateDefs() optparser.OptionDefinitions {
-	return buildManagedIdentityAccessRuleSharedDefs()
+func (*managedIdentityAccessRuleUpdateCommand) Synopsis() string {
+	return "Update a managed identity access rule."
 }
 
-func (m managedIdentityAccessRuleUpdateCommand) Synopsis() string {
-	return "Update a new managed identity access rule."
+func (*managedIdentityAccessRuleUpdateCommand) Usage() string {
+	return "tharsis [global options] managed-identity-access-rule update [options] <id>"
 }
 
-func (m managedIdentityAccessRuleUpdateCommand) Help() string {
-	return m.HelpManagedIdentityAccessRuleUpdate()
+func (*managedIdentityAccessRuleUpdateCommand) Description() string {
+	return `
+   The managed-identity-access-rule update command updates an existing managed identity access rule.
+`
 }
 
-// HelpManagedIdentityAccessRuleUpdate produces the help string for the 'managed-identity-access-rule update' command.
-func (m managedIdentityAccessRuleUpdateCommand) HelpManagedIdentityAccessRuleUpdate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] managed-identity-access-rule update [options] <managed-identity-access-rule-ID>
+func (*managedIdentityAccessRuleUpdateCommand) Example() string {
+	return `
+tharsis managed-identity-access-rule update \
+  --allowed-user trn:user:<username> \
+  <id>
+`
+}
 
-%s
+func (c *managedIdentityAccessRuleUpdateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"allowed-user",
+		"Allowed user ID. (This flag may be repeated)",
+		func(s string) error {
+			c.allowedUsers = append(c.allowedUsers, trn.ToTRN(trn.ResourceTypeUser, s))
+			return nil
+		},
+	)
+	f.Func(
+		"allowed-service-account",
+		"Allowed service account ID. (This flag may be repeated)",
+		func(s string) error {
+			c.allowedServiceAccounts = append(c.allowedServiceAccounts, trn.ToTRN(trn.ResourceTypeServiceAccount, s))
+			return nil
+		},
+	)
+	f.Func(
+		"allowed-team",
+		"Allowed team ID. (This flag may be repeated)",
+		func(s string) error {
+			c.allowedTeams = append(c.allowedTeams, trn.ToTRN(trn.ResourceTypeTeam, s))
+			return nil
+		},
+	)
+	f.BoolFunc(
+		"verify-state-lineage",
+		"Verify state lineage.",
+		func(s string) error {
+			val, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+			c.verifyStateLineage = &val
+			return nil
+		},
+	)
+	f.Func(
+		"module-attestation-policy",
+		"Module attestation policy in format \"[PredicateType=someval,]PublicKeyFile=/path/to/file\". (This flag may be repeated)",
+		func(s string) error {
+			c.moduleAttestationPolicies = append(c.moduleAttestationPolicies, s)
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
 
-`, m.meta.BinaryName, buildHelpText(buildManagedIdentityAccessRuleUpdateDefs()))
+	return f
 }
