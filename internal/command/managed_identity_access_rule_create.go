@@ -1,248 +1,239 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
-	"strconv"
+	"maps"
+	"os"
+	"slices"
+	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
-// managedIdentityAccessRuleCreateCommand is the top-level structure for the managed-identity-access-rule create command.
+// managedIdentityAccessRuleCreateCommand is the top-level structure for the managed identity access rule create command.
 type managedIdentityAccessRuleCreateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	managedIdentityID         string
+	ruleType                  *pb.ManagedIdentityAccessRuleType
+	runStage                  *pb.JobType
+	allowedUsers              []string
+	allowedServiceAccounts    []string
+	allowedTeams              []string
+	verifyStateLineage        bool
+	moduleAttestationPolicies []string
+	toJSON                    bool
+}
+
+var _ Command = (*managedIdentityAccessRuleCreateCommand)(nil)
+
+func (c *managedIdentityAccessRuleCreateCommand) validate() error {
+	return validation.ValidateStruct(c,
+		validation.Field(&c.managedIdentityID, validation.Required),
+		validation.Field(&c.ruleType, validation.NotNil),
+		validation.Field(&c.runStage, validation.NotNil),
+	)
 }
 
 // NewManagedIdentityAccessRuleCreateCommandFactory returns a managedIdentityAccessRuleCreateCommand struct.
-func NewManagedIdentityAccessRuleCreateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return managedIdentityAccessRuleCreateCommand{
-			meta: meta,
+func NewManagedIdentityAccessRuleCreateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &managedIdentityAccessRuleCreateCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (m managedIdentityAccessRuleCreateCommand) Run(args []string) int {
-	m.meta.Logger.Debugf("Starting the 'managed-identity-access-rule create' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *managedIdentityAccessRuleCreateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("managed-identity-access-rule create"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := m.meta.GetSDKClient()
+	policies, err := buildModuleAttestationPolicies(c.moduleAttestationPolicies)
 	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to parse module attestation policies")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return m.doManagedIdentityAccessRuleCreate(ctx, client, args)
-}
-
-func (m managedIdentityAccessRuleCreateCommand) doManagedIdentityAccessRuleCreate(ctx context.Context,
-	client *tharsis.Client, opts []string,
-) int {
-	m.meta.Logger.Debugf("will do managed-identity-access-rule create, %d opts", len(opts))
-
-	defs := buildManagedIdentityAccessRuleCreateDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(m.meta.BinaryName+" managed-identity-access-rule create", defs, opts)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse managed-identity-access-rule create options", err))
-		return 1
-	}
-	if len(cmdArgs) > 0 {
-		msg := fmt.Sprintf("excessive managed-identity-access-rule create arguments: %s", cmdArgs)
-		m.meta.Logger.Error(output.FormatError(msg, nil), m.HelpManagedIdentityAccessRuleCreate())
-		return 1
-	}
-
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	managedIdentityPath := getOption("managed-identity-path", "", cmdOpts)[0]
-	ruleType := getOption("rule-type", "", cmdOpts)[0]
-	moduleAttestationPolicies := getOptionSlice("module-attestation-policy", cmdOpts)
-	runStage := getOption("run-stage", "", cmdOpts)[0]
-	allowedUsers := getOptionSlice("allowed-user", cmdOpts)
-	allowedServiceAccounts := getOptionSlice("allowed-service-account", cmdOpts)
-	allowedTeams := getOptionSlice("allowed-team", cmdOpts)
-
-	// Get the managed identity from its path.
-	managedIdentity, err := client.ManagedIdentity.GetManagedIdentity(ctx, &sdktypes.GetManagedIdentityInput{
-		Path: &managedIdentityPath,
-	})
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to get managed identity", err))
-		return 1
-	}
-
-	// Build the module attestation policies.
-	policies, err := buildModuleAttestationPolicies(moduleAttestationPolicies)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse/build module attestation policies", err))
-		return 1
-	}
-
-	var verifyStateLineage *bool
-	if _, ok := cmdOpts["verify-state-lineage"]; ok {
-		v, vErr := getBoolOptionValue("verify-state-lineage", "false", cmdOpts)
-		if vErr != nil {
-			m.meta.Logger.Error(output.FormatError("failed to parse -verify-state-lineage option value", vErr))
-			return 1
-		}
-		verifyStateLineage = &v
-	}
-
-	input := &sdktypes.CreateManagedIdentityAccessRuleInput{
-		Type:                      sdktypes.ManagedIdentityAccessRuleType(ruleType),
+	input := &pb.CreateManagedIdentityAccessRuleRequest{
+		Type:                      *c.ruleType,
+		RunStage:                  *c.runStage,
+		ManagedIdentityId:         c.managedIdentityID,
+		AllowedUsers:              c.allowedUsers,
+		AllowedServiceAccounts:    c.allowedServiceAccounts,
+		AllowedTeams:              c.allowedTeams,
+		VerifyStateLineage:        c.verifyStateLineage,
 		ModuleAttestationPolicies: policies,
-		ManagedIdentityID:         managedIdentity.Metadata.ID,
-		RunStage:                  sdktypes.JobType(runStage),
-		AllowedUsers:              allowedUsers,
-		AllowedServiceAccounts:    allowedServiceAccounts,
-		AllowedTeams:              allowedTeams,
-		VerifyStateLineage:        verifyStateLineage,
 	}
-	m.meta.Logger.Debugf("managed-identity-access-rule create input: %#v", input)
 
-	managedIdentityAccessRule, err := client.ManagedIdentity.CreateManagedIdentityAccessRule(ctx, input)
+	createdRule, err := c.grpcClient.ManagedIdentitiesClient.CreateManagedIdentityAccessRule(c.Context, input)
 	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to create managed identity access rule", err))
+		c.UI.ErrorWithSummary(err, "failed to create a managed identity access rule")
 		return 1
 	}
 
-	return outputManagedIdentityAccessRule(m.meta, toJSON, managedIdentityAccessRule)
+	return outputManagedIdentityAccessRule(c.UI, c.toJSON, createdRule)
 }
 
-// outputManagedIdentityAccessRule is the final output for most managed-identity-access-rule operations.
-// It displays exactly one access rule.
-func outputManagedIdentityAccessRule(meta *Metadata, toJSON bool,
-	managedIdentityAccessRule *sdktypes.ManagedIdentityAccessRule,
-) int {
-	if toJSON {
-		buf, err := objectToJSON(managedIdentityAccessRule)
-		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
-			return 1
-		}
-		meta.UI.Output(string(buf))
-		return 0
-	}
-
-	return outputManagedIdentityAccessRulesTable(meta, []sdktypes.ManagedIdentityAccessRule{*managedIdentityAccessRule})
-}
-
-// outputManagedIdentityAccessRules is the final output for the managed-identity-access-rule list operation.
-func outputManagedIdentityAccessRules(meta *Metadata, toJSON bool,
-	managedIdentityAccessRules []sdktypes.ManagedIdentityAccessRule,
-) int {
-	if toJSON {
-		buf, err := objectToJSON(managedIdentityAccessRules)
-		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
-			return 1
-		}
-		meta.UI.Output(string(buf))
-		return 0
-	}
-
-	return outputManagedIdentityAccessRulesTable(meta, managedIdentityAccessRules)
-
-}
-
-// outputManagedIdentityAccessRulesTable is the final output for managed-identity-access-rule
-// operations when JSON has not been requested.
-func outputManagedIdentityAccessRulesTable(meta *Metadata,
-	managedIdentityAccessRules []sdktypes.ManagedIdentityAccessRule,
-) int {
-	tableInput := [][]string{
-		{"id", "type", "run-stage", "verify-state-lineage"},
-	}
-
-	for _, rule := range managedIdentityAccessRules {
-		tableInput = append(tableInput, []string{
-			rule.Metadata.ID,
-			string(rule.Type),
-			string(rule.RunStage),
-			strconv.FormatBool(rule.VerifyStateLineage),
-		})
-	}
-
-	meta.UI.Output(tableformatter.FormatTable(tableInput))
-	// For now, this function does not display the module attestation policies.
-
-	return 0
-}
-
-// buildManagedIdentityAccessRuleSharedDefs returns defs used by managed-identity-access-rule create and update commands.
-func buildManagedIdentityAccessRuleSharedDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"module-attestation-policy": {
-			Arguments: []string{"Module_Attestation_Policy"},
-			Synopsis:  "One module attestation policy: --module-attestation-policy=\"[PredicateType=someval,]PublicKeyFile=/path/to/file\".",
-		},
-		"allowed-user": {
-			Arguments: []string{"Allowed_User"},
-			Synopsis:  "One allowed username (repeatable).",
-		},
-		"allowed-service-account": {
-			Arguments: []string{"Allowed_Service_Account"},
-			Synopsis:  "One allowed service account resource path (repeatable).",
-		},
-		"allowed-team": {
-			Arguments: []string{"Allowed_Team"},
-			Synopsis:  "One allowed team name (repeatable).",
-		},
-		"verify-state-lineage": {
-			Arguments: []string{"Verify_State_Lineage"},
-			Synopsis:  "Whether to verify state lineage.",
-		},
-	}
-	return buildJSONOptionDefs(defs)
-}
-
-// buildManagedIdentityAccessRuleCreateDefs returns defs used by managed-identity-access-rule create command.
-func buildManagedIdentityAccessRuleCreateDefs() optparser.OptionDefinitions {
-	defs := buildManagedIdentityAccessRuleSharedDefs()
-	defs["managed-identity-path"] = &optparser.OptionDefinition{
-		Arguments: []string{"Managed_Identity_Path"},
-		Synopsis:  "Resource path to the managed identity.",
-		Required:  true,
-	}
-	defs["run-stage"] = &optparser.OptionDefinition{
-		Arguments: []string{"Run_Stage"},
-		Synopsis:  "Which run stage (job type) for this rule: plan or apply.",
-		Required:  true,
-	}
-	defs["rule-type"] = &optparser.OptionDefinition{
-		Arguments: []string{"Rule_Type"},
-		Synopsis:  "Which type of rule to create: 'eligible_principals' or 'module_attestation'.",
-		Required:  true,
-	}
-	return defs
-}
-
-func (m managedIdentityAccessRuleCreateCommand) Synopsis() string {
+func (*managedIdentityAccessRuleCreateCommand) Synopsis() string {
 	return "Create a new managed identity access rule."
 }
 
-func (m managedIdentityAccessRuleCreateCommand) Help() string {
-	return m.HelpManagedIdentityAccessRuleCreate()
+func (*managedIdentityAccessRuleCreateCommand) Usage() string {
+	return "tharsis [global options] managed-identity-access-rule create [options]"
 }
 
-// HelpManagedIdentityAccessRuleCreate produces the help string for the 'managed-identity-access-rule create' command.
-func (m managedIdentityAccessRuleCreateCommand) HelpManagedIdentityAccessRuleCreate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] managed-identity-access-rule create [options]
+func (*managedIdentityAccessRuleCreateCommand) Description() string {
+	return `
+   The managed-identity-access-rule create command creates a new managed identity access rule.
+`
+}
 
-%s
+func (*managedIdentityAccessRuleCreateCommand) Example() string {
+	return `
+tharsis managed-identity-access-rule create \
+  --managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name> \
+  --rule-type eligible_principals \
+  --run-stage plan \
+  --allowed-user trn:user:<username> \
+  --allowed-team trn:team:<team_name>
+`
+}
 
-`, m.meta.BinaryName, buildHelpText(buildManagedIdentityAccessRuleCreateDefs()))
+func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.managedIdentityID,
+		"managed-identity-id",
+		"",
+		"The ID or TRN of the managed identity.",
+	)
+	f.Func(
+		"managed-identity-path",
+		"Resource path to the managed identity. Deprecated.",
+		func(s string) error {
+			c.managedIdentityID = trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
+			return nil
+		},
+	)
+	f.Func(
+		"rule-type",
+		"The type of access rule: eligible_principals or module_attestation.",
+		func(s string) error {
+			val, ok := pb.ManagedIdentityAccessRuleType_value[strings.ToLower(s)]
+			if !ok {
+				return fmt.Errorf("invalid rule type: %s (valid types: %v)", s, slices.Collect(maps.Keys(pb.ManagedIdentityAccessRuleType_value)))
+			}
+			c.ruleType = pb.ManagedIdentityAccessRuleType(val).Enum()
+			return nil
+		},
+	)
+	f.Func(
+		"run-stage",
+		"The run stage: plan or apply.",
+		func(s string) error {
+			val, ok := pb.JobType_value[strings.ToLower(s)]
+			if !ok {
+				return fmt.Errorf("invalid run stage: %s (valid stages: %v)", s, slices.Collect(maps.Keys(pb.JobType_value)))
+			}
+			c.runStage = pb.JobType(val).Enum()
+			return nil
+		},
+	)
+	f.Func(
+		"allowed-user",
+		"Allowed user ID. (This flag may be repeated)",
+		func(s string) error {
+			c.allowedUsers = append(c.allowedUsers, trn.ToTRN(trn.ResourceTypeUser, s))
+			return nil
+		},
+	)
+	f.Func(
+		"allowed-service-account",
+		"Allowed service account ID. (This flag may be repeated)",
+		func(s string) error {
+			c.allowedServiceAccounts = append(c.allowedServiceAccounts, trn.ToTRN(trn.ResourceTypeServiceAccount, s))
+			return nil
+		},
+	)
+	f.Func(
+		"allowed-team",
+		"Allowed team ID. (This flag may be repeated)",
+		func(s string) error {
+			c.allowedTeams = append(c.allowedTeams, trn.ToTRN(trn.ResourceTypeTeam, s))
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.verifyStateLineage,
+		"verify-state-lineage",
+		false,
+		"Verify state lineage.",
+	)
+	f.Func(
+		"module-attestation-policy",
+		"Module attestation policy in format \"[PredicateType=someval,]PublicKeyFile=/path/to/file\". (This flag may be repeated)",
+		func(s string) error {
+			c.moduleAttestationPolicies = append(c.moduleAttestationPolicies, s)
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
+}
+
+func buildModuleAttestationPolicies(policies []string) ([]*pb.ManagedIdentityAccessRuleModuleAttestationPolicy, error) {
+	var result []*pb.ManagedIdentityAccessRuleModuleAttestationPolicy
+
+	for _, policy := range policies {
+		var predicateType *string
+		var filename string
+
+		for _, kv := range strings.Split(policy, ",") {
+			parts := strings.Split(kv, "=")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid module attestation policy format: %s", policy)
+			}
+
+			switch parts[0] {
+			case "PredicateType":
+				predicateType = &parts[1]
+			case "PublicKeyFile":
+				filename = parts[1]
+			default:
+				return nil, fmt.Errorf("invalid module attestation policy key: %s", parts[0])
+			}
+		}
+
+		if filename == "" {
+			return nil, fmt.Errorf("missing PublicKeyFile in module attestation policy: %s", policy)
+		}
+
+		publicKey, err := os.ReadFile(filename)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read public key from file %s: %w", filename, err)
+		}
+
+		result = append(result, &pb.ManagedIdentityAccessRuleModuleAttestationPolicy{
+			PredicateType: predicateType,
+			PublicKey:     string(publicKey),
+		})
+	}
+
+	return result, nil
 }

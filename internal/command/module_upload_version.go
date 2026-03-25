@@ -1,231 +1,260 @@
 package command
 
 import (
-	"context"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"os"
 	"time"
 
-	"github.com/caarlos0/log"
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// moduleUploadVersionCommand is the top-level structure for the module upload-version command.
+const (
+	moduleVersionStatusUploaded = "uploaded"
+	moduleVersionStatusErrored  = "errored"
+)
+
 type moduleUploadVersionCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	sg            terminal.StepGroup
+	directoryPath string
+	version       string
 }
 
 // NewModuleUploadVersionCommandFactory returns a moduleUploadVersionCommand struct.
-func NewModuleUploadVersionCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleUploadVersionCommand{
-			meta: meta,
+func NewModuleUploadVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleUploadVersionCommand{
+			BaseCommand: baseCommand,
+			sg:          baseCommand.UI.StepGroup(),
 		}, nil
 	}
 }
 
-func (muc moduleUploadVersionCommand) Run(args []string) int {
-	muc.meta.Logger.Debugf("Starting the 'module upload-version' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		muc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := muc.meta.GetSDKClient()
-	if err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return muc.doModuleUploadVersion(ctx, client, args)
+func (c *moduleUploadVersionCommand) validate() error {
+	const message = "module-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.version, validation.Required),
+	)
 }
 
-func (muc moduleUploadVersionCommand) doModuleUploadVersion(ctx context.Context, client *tharsis.Client, opts []string) int {
-	muc.meta.Logger.Debugf("will do module upload-version, %d opts", len(opts))
+func (c *moduleUploadVersionCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("module upload-version"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := muc.buildModuleUploadVersionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(muc.meta.BinaryName+" module upload-version", defs, opts)
+	dirStat, err := os.Stat(c.directoryPath)
 	if err != nil {
-		muc.meta.Logger.Error(output.FormatError("failed to parse module upload-version options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		muc.meta.Logger.Error(output.FormatError("missing module upload-version module path", nil), muc.HelpModuleUploadVersion())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module upload-version arguments: %s", cmdArgs)
-		muc.meta.Logger.Error(output.FormatError(msg, nil), muc.HelpModuleUploadVersion())
+		c.UI.ErrorWithSummary(err, "failed to stat directory path")
 		return 1
 	}
 
-	modulePath := cmdArgs[0]
-	directoryPath := getOption("directory-path", ".", cmdOpts)[0] // default to "." (should work in *x and Windows)
-	version := getOption("version", "", cmdOpts)[0]
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(modulePath)
-	if !isResourcePathValid(muc.meta, actualPath) {
+	if !dirStat.IsDir() {
+		c.UI.Errorf("path is not a directory: %s", c.directoryPath)
 		return 1
 	}
 
-	// Make sure the directory path exists and is a directory--to give more precise messages.
-	if err = muc.checkDirPath(directoryPath); err != nil {
-		muc.meta.Logger.Error(output.FormatError("invalid directory path", err))
-		return 1
-	}
-
-	log.Info("starting module upload-version...")
-
-	log.WithField("directory-path", directoryPath).Info("creating module package...")
-
-	slugFile, err := os.CreateTemp("", "terraform-slug.tgz")
+	module, err := c.getModule()
 	if err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to create module version", err))
+		c.UI.ErrorWithSummary(err, "failed to get module")
 		return 1
 	}
-	defer os.Remove(slugFile.Name())
 
-	slug, err := slug.NewSlug(directoryPath, slugFile.Name())
+	slugFile, shaSum, err := c.createModulePackage()
 	if err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to create module package", err))
+		c.UI.ErrorWithSummary(err, "failed to create module package")
 		return 1
 	}
+	defer os.Remove(slugFile)
 
-	log.Info("module package successfully created")
-
-	reader, err := slug.Open()
+	moduleVersion, err := c.createModuleVersion(module.Metadata.Id, shaSum)
 	if err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to create module version", err))
-		return 1
-	}
-	defer reader.Close()
-
-	log.WithField("module", modulePath).WithField("version", version).Info("creating module version...")
-
-	// Create module version
-	moduleVersion, err := client.TerraformModuleVersion.CreateModuleVersion(ctx, &sdktypes.CreateTerraformModuleVersionInput{
-		ModulePath: modulePath,
-		Version:    version,
-		SHASum:     hex.EncodeToString(slug.SHASum),
-	})
-	if err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to create module version", err))
+		c.UI.ErrorWithSummary(err, "failed to create module version")
 		return 1
 	}
 
-	log.Info("module version successfully created")
-	log.Info("starting upload...")
+	if err = c.uploadModuleVersion(moduleVersion.Metadata.Id, slugFile); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to upload module version")
 
-	uploadStartTime := time.Now()
-
-	if err = client.TerraformModuleVersion.UploadModuleVersion(ctx, moduleVersion.Metadata.ID, reader); err != nil {
-		muc.meta.UI.Error(output.FormatError("failed to upload module version", err))
-
-		// Delete module version
-		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{
-			ID: moduleVersion.Metadata.ID,
-		}); err != nil {
-			muc.meta.UI.Error(output.FormatError("failed to delete module version", err))
+		if _, dErr := c.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(c.Context, &pb.DeleteTerraformModuleVersionRequest{
+			Id: moduleVersion.Metadata.Id,
+		}); dErr != nil {
+			c.UI.ErrorWithSummary(dErr, "failed to delete module version")
 		}
+
 		return 1
 	}
 
-	log.IncreasePadding()
-
-	// Wait for module version upload to complete
-	// Wait for the upload to complete:
-	var updatedModuleVersion *sdktypes.TerraformModuleVersion
-	for {
-
-		log.Info(fmt.Sprintf("upload in progress [%s elapsed]", time.Since(uploadStartTime)))
-
-		updatedModuleVersion, err = client.TerraformModuleVersion.GetModuleVersion(ctx, &sdktypes.GetTerraformModuleVersionInput{
-			ID: &moduleVersion.Metadata.ID,
-		})
-		if err != nil {
-			muc.meta.UI.Error(output.FormatError("failed to check module version upload status", err))
-			return 1
-		}
-		if updatedModuleVersion.Status == "uploaded" || updatedModuleVersion.Status == "errored" {
-			break
-		}
-		time.Sleep(2 * time.Second)
-	}
-
-	log.ResetPadding()
-
-	if updatedModuleVersion.Status == "errored" {
-		log.WithField("error", updatedModuleVersion.Error).Error("module version upload failed")
-		muc.meta.UI.Output(updatedModuleVersion.Diagnostics)
-		// Delete module version
-		if err = client.TerraformModuleVersion.DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{
-			ID: moduleVersion.Metadata.ID,
-		}); err != nil {
-			muc.meta.UI.Error(output.FormatError("failed to delete module version", err))
-		}
-		return 1
-	}
-
-	log.Info("module version upload complete")
-
+	c.sg.Wait()
+	c.UI.Successf("\nModule version uploaded successfully!")
 	return 0
 }
 
-func (muc moduleUploadVersionCommand) checkDirPath(directoryPath string) error {
-	dirStat, err := os.Stat(directoryPath)
-	if os.IsNotExist(err) {
-		return fmt.Errorf("directory path does not exist: %s", directoryPath)
-	}
+func (c *moduleUploadVersionCommand) getModule() (module *pb.TerraformModule, err error) {
+	step := c.sg.Add("Get module")
+	defer func() { c.finalizeStep(step, err) }()
+
+	module, err = c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{
+		Id: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+	})
 	if err != nil {
-		return fmt.Errorf("failed to stat directory path %s: %s", directoryPath, err)
+		return nil, err
 	}
-	if !dirStat.IsDir() {
-		return fmt.Errorf("path is not a directory: %s", directoryPath)
+
+	step.Update("Get module (%s)", module.Name)
+
+	return module, nil
+}
+
+func (c *moduleUploadVersionCommand) createModulePackage() (slugPath string, shaSum []byte, err error) {
+	step := c.sg.Add("Create module package")
+	defer func() { c.finalizeStep(step, err) }()
+
+	slugFile, err := os.CreateTemp("", "terraform-slug.tgz")
+	if err != nil {
+		return "", nil, err
 	}
+
+	s, err := slug.NewSlug(c.directoryPath, slugFile.Name())
+	if err != nil {
+		os.Remove(slugFile.Name())
+		return "", nil, err
+	}
+
+	return slugFile.Name(), s.SHASum, nil
+}
+
+func (c *moduleUploadVersionCommand) createModuleVersion(moduleID string, shaSum []byte) (version *pb.TerraformModuleVersion, err error) {
+	step := c.sg.Add("Create module version %q", c.version)
+	defer func() { c.finalizeStep(step, err) }()
+
+	version, err = c.grpcClient.TerraformModulesClient.CreateTerraformModuleVersion(c.Context, &pb.CreateTerraformModuleVersionRequest{
+		ModuleId: moduleID,
+		Version:  c.version,
+		ShaSum:   hex.EncodeToString(shaSum),
+	})
+
+	return version, err
+}
+
+func (c *moduleUploadVersionCommand) uploadModuleVersion(moduleVersionID, slugPath string) (err error) {
+	step := c.sg.Add("Upload module version")
+	defer func() { c.finalizeStep(step, err) }()
+
+	uploadStartTime := time.Now()
+
+	curSettings, err := c.getCurrentSettings()
+	if err != nil {
+		return err
+	}
+
+	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
+	if err != nil {
+		return err
+	}
+
+	tfeClient, err := tfe.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenGetter, c.HTTPClient)
+	if err != nil {
+		return err
+	}
+
+	if err = tfeClient.UploadModuleVersion(c.Context, &tfe.UploadModuleVersionInput{
+		ModuleVersionID: moduleVersionID,
+		PackagePath:     slugPath,
+	}); err != nil {
+		return err
+	}
+
+	// Poll for upload completion.
+	for {
+		updatedVersion, pErr := c.grpcClient.TerraformModulesClient.GetTerraformModuleVersionByID(c.Context, &pb.GetTerraformModuleVersionByIDRequest{
+			Id: moduleVersionID,
+		})
+		if pErr != nil {
+			return pErr
+		}
+
+		if updatedVersion.Status == moduleVersionStatusErrored {
+			return fmt.Errorf("module version upload failed: %s\n%s", updatedVersion.Error, updatedVersion.Diagnostics)
+		}
+
+		if updatedVersion.Status == moduleVersionStatusUploaded {
+			break
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	step.Update("Upload module version (elapsed: %s)", time.Since(uploadStartTime))
+
 	return nil
 }
 
-// buildModuleUploadVersionDefs returns defs used by module upload-version command.
-func (muc moduleUploadVersionCommand) buildModuleUploadVersionDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"directory-path": {
-			Arguments: []string{"Directory_Path"},
-			Synopsis:  "The path of the terraform module's directory.",
-		},
-		"version": {
-			Arguments: []string{"Version"},
-			Synopsis:  "The semantic version for the new module version.",
-			Required:  true,
-		},
+func (c *moduleUploadVersionCommand) finalizeStep(step terminal.Step, err error) {
+	if err != nil {
+		step.Abort()
+		c.sg.Wait()
+
+		return
 	}
+
+	step.Done()
 }
 
-func (muc moduleUploadVersionCommand) Synopsis() string {
+func (*moduleUploadVersionCommand) Synopsis() string {
 	return "Upload a new module version to the module registry."
 }
 
-func (muc moduleUploadVersionCommand) Help() string {
-	return muc.HelpModuleUploadVersion()
-}
-
-// HelpModuleUploadVersion produces the help string for the 'module upload-version' command.
-func (muc moduleUploadVersionCommand) HelpModuleUploadVersion() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module upload-version [options] <module-path>
-
+func (*moduleUploadVersionCommand) Description() string {
+	return `
    The module upload-version command uploads a new
    module version to the module registry.
+`
+}
 
-%s
+func (*moduleUploadVersionCommand) Usage() string {
+	return "tharsis [global options] module upload-version [options] <module-id>"
+}
 
-`, muc.meta.BinaryName, buildHelpText(muc.buildModuleUploadVersionDefs()))
+func (*moduleUploadVersionCommand) Example() string {
+	return `
+tharsis module upload-version \
+  --version 1.0.0 \
+  --directory-path ./my-module \
+  trn:terraform_module:<group_path>/<module_name>/<system>
+`
+}
+
+func (c *moduleUploadVersionCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.directoryPath,
+		"directory-path",
+		".",
+		"The path of the terraform module's directory.",
+	)
+	f.StringVar(
+		&c.version,
+		"version",
+		"",
+		"The semantic version for the new module version (required).",
+	)
+	return f
 }

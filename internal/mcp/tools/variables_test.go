@@ -1,426 +1,620 @@
 package tools
 
 import (
-	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-func TestSetVariable(t *testing.T) {
-	namespaceID := "workspace-id"
+type variableMocks struct {
+	variables  *mocks.NamespaceVariablesClient
+	workspaces *mocks.WorkspacesClient
+	groups     *mocks.GroupsClient
+	acl        *acl.MockChecker
+}
 
-	tests := []struct {
+func TestSetVariable(t *testing.T) {
+	type testCase struct {
 		name        string
-		input       setVariableInput
-		workspace   *sdktypes.Workspace
-		variable    *sdktypes.NamespaceVariable
-		aclError    error
+		input       *setVariableInput
+		mockSetup   func(*variableMocks)
 		expectError bool
-		validate    func(*testing.T, setVariableOutput)
-	}{
+	}
+
+	testCases := []testCase{
 		{
 			name: "create new terraform variable",
-			input: setVariableInput{
-				NamespaceID: namespaceID,
+			input: &setVariableInput{
+				NamespaceID: "ws1",
 				Key:         "region",
 				Value:       "us-east-1",
 				Category:    "terraform",
 			},
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.variables.On("GetNamespaceVariableByID", mock.Anything, &pb.GetNamespaceVariableByIDRequest{
+					Id: "trn:variable:group/workspace/terraform/region",
+				}).Return(nil, status.Error(codes.NotFound, "not found"))
+				m.variables.On("CreateNamespaceVariable", mock.Anything, &pb.CreateNamespaceVariableRequest{
+					Key:           "region",
+					Value:         "us-east-1",
+					Category:      pb.VariableCategory_terraform,
+					NamespacePath: "group/workspace",
+				}).Return(&pb.NamespaceVariable{
+					Metadata: &pb.ResourceMetadata{Id: "v1"},
+					Key:      "region",
+					Value:    ptr.String("us-east-1"),
+				}, nil)
 			},
-			validate: func(t *testing.T, output setVariableOutput) {
-				assert.True(t, output.Success)
-				assert.Contains(t, output.Message, "region")
+		},
+		{
+			name: "acl denial",
+			input: &setVariableInput{
+				NamespaceID: "ws1",
+				Key:         "region",
+				Value:       "us-east-1",
+				Category:    "terraform",
 			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
+			expectError: true,
 		},
 		{
 			name: "update existing environment variable",
-			input: setVariableInput{
-				NamespaceID: namespaceID,
-				Key:         "ENV",
-				Value:       "production",
+			input: &setVariableInput{
+				NamespaceID: "ws1",
+				Key:         "PATH",
+				Value:       "/usr/bin",
 				Category:    "environment",
 			},
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
-			},
-			variable: &sdktypes.NamespaceVariable{
-				Metadata: sdktypes.ResourceMetadata{ID: "var-id"},
-				Key:      "ENV",
-				Value:    ptr.String("staging"),
-			},
-			validate: func(t *testing.T, output setVariableOutput) {
-				assert.True(t, output.Success)
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.variables.On("GetNamespaceVariableByID", mock.Anything, &pb.GetNamespaceVariableByIDRequest{
+					Id: "trn:variable:group/workspace/environment/PATH",
+				}).Return(&pb.NamespaceVariable{
+					Metadata: &pb.ResourceMetadata{Id: "v1"},
+					Key:      "PATH",
+					Value:    ptr.String("/bin"),
+				}, nil)
+				m.variables.On("UpdateNamespaceVariable", mock.Anything, &pb.UpdateNamespaceVariableRequest{
+					Id:    "v1",
+					Key:   "PATH",
+					Value: "/usr/bin",
+				}).Return(&pb.NamespaceVariable{
+					Metadata: &pb.ResourceMetadata{Id: "v1"},
+					Key:      "PATH",
+					Value:    ptr.String("/usr/bin"),
+				}, nil)
 			},
 		},
 		{
-			name: "ACL denial",
-			input: setVariableInput{
-				NamespaceID: namespaceID,
+			name: "invalid category",
+			input: &setVariableInput{
+				NamespaceID: "ws1",
+				Key:         "key",
+				Value:       "value",
+				Category:    "INVALID",
+			},
+			expectError: true,
+		},
+		{
+			name: "workspace not found, uses group instead",
+			input: &setVariableInput{
+				NamespaceID: "group1",
 				Key:         "region",
-				Value:       "us-east-1",
+				Value:       "us-west-2",
 				Category:    "terraform",
 			},
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "group1"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "group1"}).
+					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.variables.On("GetNamespaceVariableByID", mock.Anything, &pb.GetNamespaceVariableByIDRequest{
+					Id: "trn:variable:group1/terraform/region",
+				}).Return(nil, status.Error(codes.NotFound, "not found"))
+				m.variables.On("CreateNamespaceVariable", mock.Anything, &pb.CreateNamespaceVariableRequest{
+					Key:           "region",
+					Value:         "us-west-2",
+					Category:      pb.VariableCategory_terraform,
+					NamespacePath: "group1",
+				}).Return(&pb.NamespaceVariable{
+					Metadata: &pb.ResourceMetadata{Id: "v2"},
+					Key:      "region",
+					Value:    ptr.String("us-west-2"),
+				}, nil)
 			},
-			aclError:    assert.AnError,
+		},
+		{
+			name: "namespace not found",
+			input: &setVariableInput{
+				NamespaceID: "nonexistent",
+				Key:         "key",
+				Value:       "value",
+				Category:    "terraform",
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockWorkspaces := tharsis.NewWorkspaces(t)
-			mockVariable := tharsis.NewVariable(t)
-			mockACL := acl.NewMockChecker(t)
-
-			if tt.aclError == nil {
-				mockClient.On("Workspaces").Return(mockWorkspaces)
-				mockClient.On("Variables").Return(mockVariable)
-				mockWorkspaces.On("GetWorkspace", mock.Anything, &sdktypes.GetWorkspaceInput{ID: &namespaceID}).Return(tt.workspace, nil)
-
-				category := sdktypes.TerraformVariableCategory
-				if tt.input.Category == "environment" {
-					category = sdktypes.EnvironmentVariableCategory
-				}
-				variableID := fmt.Sprintf("trn:variable:%s/%s/%s", tt.workspace.FullPath, category, tt.input.Key)
-
-				mockVariable.On("GetVariable", mock.Anything, &sdktypes.GetNamespaceVariableInput{ID: variableID}).Return(tt.variable, nil)
-
-				if tt.variable != nil {
-					mockVariable.On("UpdateVariable", mock.Anything, &sdktypes.UpdateNamespaceVariableInput{
-						ID:    tt.variable.Metadata.ID,
-						Key:   tt.variable.Key,
-						Value: tt.input.Value,
-					}).Return(&sdktypes.NamespaceVariable{}, nil)
-				} else {
-					mockVariable.On("CreateVariable", mock.Anything, &sdktypes.CreateNamespaceVariableInput{
-						Key:           tt.input.Key,
-						Value:         tt.input.Value,
-						Category:      category,
-						NamespacePath: tt.workspace.FullPath,
-					}).Return(&sdktypes.NamespaceVariable{}, nil)
-				}
-			} else {
-				// For ACL denial, still need to mock getNamespacePath
-				mockClient.On("Workspaces").Return(mockWorkspaces)
-				mockWorkspaces.On("GetWorkspace", mock.Anything, &sdktypes.GetWorkspaceInput{ID: &namespaceID}).Return(tt.workspace, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &variableMocks{
+				variables:  mocks.NewNamespaceVariablesClient(t),
+				groups:     mocks.NewGroupsClient(t),
+				workspaces: mocks.NewWorkspacesClient(t),
+				acl:        acl.NewMockChecker(t),
 			}
-			mockACL.On("Authorize", mock.Anything, mockClient, namespaceID, trn.ResourceTypeWorkspace).Return(tt.aclError)
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					NamespaceVariablesClient: testMocks.variables,
+					WorkspacesClient:         testMocks.workspaces,
+					GroupsClient:             testMocks.groups,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := setVariable(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := setVariable(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
 		})
 	}
 }
 
 func TestDeleteVariable(t *testing.T) {
-	namespaceID := "workspace-id"
-
-	tests := []struct {
+	type testCase struct {
 		name        string
-		input       deleteVariableInput
-		workspace   *sdktypes.Workspace
-		variable    *sdktypes.NamespaceVariable
-		aclError    error
+		input       *deleteVariableInput
+		mockSetup   func(*variableMocks)
 		expectError bool
-		validate    func(*testing.T, deleteVariableOutput)
-	}{
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful variable deletion",
-			input: deleteVariableInput{
-				NamespaceID: namespaceID,
+			name: "delete variable successfully",
+			input: &deleteVariableInput{
+				NamespaceID: "ws1",
 				Key:         "region",
 				Category:    "terraform",
 			},
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
-			},
-			variable: &sdktypes.NamespaceVariable{
-				Metadata: sdktypes.ResourceMetadata{ID: "var-id"},
-				Key:      "region",
-			},
-			validate: func(t *testing.T, output deleteVariableOutput) {
-				assert.True(t, output.Success)
-				assert.Contains(t, output.Message, "region")
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.variables.On("DeleteNamespaceVariable", mock.Anything, &pb.DeleteNamespaceVariableRequest{
+					Id: "trn:variable:group/workspace/terraform/region",
+				}).Return(nil, nil)
 			},
 		},
 		{
-			name: "ACL denial",
-			input: deleteVariableInput{
-				NamespaceID: namespaceID,
+			name: "acl denial",
+			input: &deleteVariableInput{
+				NamespaceID: "ws1",
 				Key:         "region",
 				Category:    "terraform",
 			},
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
-			aclError:    assert.AnError,
+			expectError: true,
+		},
+		{
+			name: "invalid category",
+			input: &deleteVariableInput{
+				NamespaceID: "ws1",
+				Key:         "key",
+				Category:    "INVALID",
+			},
+			expectError: true,
+		},
+		{
+			name: "variable not found",
+			input: &deleteVariableInput{
+				NamespaceID: "ws1",
+				Key:         "nonexistent",
+				Category:    "terraform",
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.variables.On("DeleteNamespaceVariable", mock.Anything, &pb.DeleteNamespaceVariableRequest{
+					Id: "trn:variable:group/workspace/terraform/nonexistent",
+				}).Return(nil, status.Error(codes.NotFound, "not found"))
+			},
+			expectError: true,
+		},
+		{
+			name: "workspace not found, uses group instead",
+			input: &deleteVariableInput{
+				NamespaceID: "group1",
+				Key:         "region",
+				Category:    "terraform",
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "group1"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "group1"}).
+					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.variables.On("DeleteNamespaceVariable", mock.Anything, &pb.DeleteNamespaceVariableRequest{
+					Id: "trn:variable:group1/terraform/region",
+				}).Return(nil, nil)
+			},
+		},
+		{
+			name: "namespace not found",
+			input: &deleteVariableInput{
+				NamespaceID: "nonexistent",
+				Key:         "key",
+				Category:    "terraform",
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockWorkspaces := tharsis.NewWorkspaces(t)
-			mockVariable := tharsis.NewVariable(t)
-			mockACL := acl.NewMockChecker(t)
-
-			if tt.aclError == nil {
-				mockClient.On("Workspaces").Return(mockWorkspaces)
-				mockClient.On("Variables").Return(mockVariable)
-				mockWorkspaces.On("GetWorkspace", mock.Anything, &sdktypes.GetWorkspaceInput{ID: &namespaceID}).Return(tt.workspace, nil)
-
-				category := sdktypes.TerraformVariableCategory
-				if tt.input.Category == "environment" {
-					category = sdktypes.EnvironmentVariableCategory
-				}
-				variableID := fmt.Sprintf("trn:variable:%s/%s/%s", tt.workspace.FullPath, category, tt.input.Key)
-
-				mockVariable.On("GetVariable", mock.Anything, &sdktypes.GetNamespaceVariableInput{ID: variableID}).Return(tt.variable, nil)
-				mockVariable.On("DeleteVariable", mock.Anything, &sdktypes.DeleteNamespaceVariableInput{ID: tt.variable.Metadata.ID}).Return(nil)
-			} else {
-				// For ACL denial, still need to mock getNamespacePath
-				mockClient.On("Workspaces").Return(mockWorkspaces)
-				mockWorkspaces.On("GetWorkspace", mock.Anything, &sdktypes.GetWorkspaceInput{ID: &namespaceID}).Return(tt.workspace, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &variableMocks{
+				variables:  mocks.NewNamespaceVariablesClient(t),
+				workspaces: mocks.NewWorkspacesClient(t),
+				groups:     mocks.NewGroupsClient(t),
+				acl:        acl.NewMockChecker(t),
 			}
-			mockACL.On("Authorize", mock.Anything, mockClient, namespaceID, trn.ResourceTypeWorkspace).Return(tt.aclError)
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					NamespaceVariablesClient: testMocks.variables,
+					WorkspacesClient:         testMocks.workspaces,
+					GroupsClient:             testMocks.groups,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := deleteVariable(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := deleteVariable(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
 		})
 	}
 }
 
 func TestSetTerraformVariablesFromFile(t *testing.T) {
-	namespaceID := "workspace-id"
-
-	tests := []struct {
+	type testCase struct {
 		name        string
-		fileContent string
-		workspace   *sdktypes.Workspace
-		aclError    error
+		setupFile   func() string
+		input       func(string) *setTerraformVariablesFromFileInput
+		mockSetup   func(*variableMocks)
 		expectError bool
-		validate    func(*testing.T, setTerraformVariablesFromFileOutput)
-	}{
+		expectCount int
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful terraform variables from file",
-			fileContent: `region = "us-east-1"
-instance_type = "t2.micro"
-count = 3`,
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
+			name: "set variables from file successfully",
+			setupFile: func() string {
+				file := filepath.Join(t.TempDir(), "terraform.tfvars")
+				_ = os.WriteFile(file, []byte(`region = "us-east-1"
+instance_type = "t2.micro"`), 0600)
+				return file
 			},
-			validate: func(t *testing.T, output setTerraformVariablesFromFileOutput) {
-				assert.True(t, output.Success)
-				assert.Equal(t, 3, output.Count)
-				assert.Contains(t, output.Message, "3 Terraform variables")
+			input: func(file string) *setTerraformVariablesFromFileInput {
+				return &setTerraformVariablesFromFileInput{
+					NamespaceID: "ws1",
+					FilePath:    file,
+				}
 			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
+					return req.NamespacePath == "group/workspace" && req.Category == pb.VariableCategory_terraform && len(req.Variables) == 2
+				})).Return(nil, nil)
+			},
+			expectCount: 2,
 		},
 		{
-			name:        "ACL denial",
-			fileContent: `region = "us-east-1"`,
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
+			name: "acl denial",
+			setupFile: func() string {
+				file := filepath.Join(t.TempDir(), "terraform.tfvars")
+				_ = os.WriteFile(file, []byte(`region = "us-east-1"`), 0600)
+				return file
 			},
-			aclError:    assert.AnError,
+			input: func(file string) *setTerraformVariablesFromFileInput {
+				return &setTerraformVariablesFromFileInput{
+					NamespaceID: "ws1",
+					FilePath:    file,
+				}
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
 			expectError: true,
+		},
+		{
+			name: "file does not exist",
+			setupFile: func() string {
+				return "/nonexistent/file.tfvars"
+			},
+			input: func(file string) *setTerraformVariablesFromFileInput {
+				return &setTerraformVariablesFromFileInput{
+					NamespaceID: "ws1",
+					FilePath:    file,
+				}
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+			},
+			expectError: true,
+		},
+		{
+			name: "workspace not found, uses group instead",
+			setupFile: func() string {
+				file := filepath.Join(t.TempDir(), "terraform.tfvars")
+				_ = os.WriteFile(file, []byte(`region = "us-west-2"`), 0600)
+				return file
+			},
+			input: func(file string) *setTerraformVariablesFromFileInput {
+				return &setTerraformVariablesFromFileInput{
+					NamespaceID: "group1",
+					FilePath:    file,
+				}
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "group1"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "group1"}).
+					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
+					return req.NamespacePath == "group1" && req.Category == pb.VariableCategory_terraform && len(req.Variables) == 1
+				})).Return(nil, nil)
+			},
+			expectCount: 1,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			filePath := fmt.Sprintf("%s/test.tfvars", tmpDir)
-			err := os.WriteFile(filePath, []byte(tt.fileContent), 0600)
-			assert.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			file := tc.setupFile()
+			input := tc.input(file)
 
-			mockClient := tharsis.NewMockClient(t)
-			mockWorkspaces := tharsis.NewWorkspaces(t)
-			mockVariable := tharsis.NewVariable(t)
-			mockACL := acl.NewMockChecker(t)
-
-			if tt.aclError == nil {
-				mockClient.On("Workspaces").Return(mockWorkspaces)
-				mockClient.On("Variables").Return(mockVariable)
-				mockWorkspaces.On("GetWorkspace", mock.Anything, &sdktypes.GetWorkspaceInput{ID: &namespaceID}).Return(tt.workspace, nil)
-				mockVariable.On("SetVariables", mock.Anything, mock.MatchedBy(func(input *sdktypes.SetNamespaceVariablesInput) bool {
-					return input.NamespacePath == tt.workspace.FullPath && input.Category == sdktypes.TerraformVariableCategory
-				})).Return(nil)
-			} else {
-				mockClient.On("Workspaces").Return(mockWorkspaces)
-				mockWorkspaces.On("GetWorkspace", mock.Anything, &sdktypes.GetWorkspaceInput{ID: &namespaceID}).Return(tt.workspace, nil)
+			testMocks := &variableMocks{
+				variables:  mocks.NewNamespaceVariablesClient(t),
+				workspaces: mocks.NewWorkspacesClient(t),
+				groups:     mocks.NewGroupsClient(t),
+				acl:        acl.NewMockChecker(t),
 			}
-			mockACL.On("Authorize", mock.Anything, mockClient, namespaceID, trn.ResourceTypeWorkspace).Return(tt.aclError)
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					NamespaceVariablesClient: testMocks.variables,
+					WorkspacesClient:         testMocks.workspaces,
+					GroupsClient:             testMocks.groups,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := setTerraformVariablesFromFile(tc)
-			_, output, err := handler(t.Context(), nil, setTerraformVariablesFromFileInput{
-				NamespaceID: namespaceID,
-				FilePath:    filePath,
-			})
+			_, handler := setTerraformVariablesFromFile(toolCtx)
+			_, output, err := handler(t.Context(), nil, input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
+			assert.Equal(t, tc.expectCount, output.Count)
 		})
 	}
 }
 
 func TestSetEnvironmentVariablesFromFile(t *testing.T) {
-	namespaceID := "workspace-id"
-
-	tests := []struct {
+	type testCase struct {
 		name        string
-		fileContent string
-		workspace   *sdktypes.Workspace
-		aclError    error
+		setupFile   func() string
+		input       func(string) *setEnvironmentVariablesFromFileInput
+		mockSetup   func(*variableMocks)
 		expectError bool
-		validate    func(*testing.T, setEnvironmentVariablesFromFileOutput)
-	}{
+		expectCount int
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful environment variables from file",
-			fileContent: `ENV=production
-DEBUG=false
-PORT=8080`,
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
+			name: "set environment variables from file successfully",
+			setupFile: func() string {
+				file := filepath.Join(t.TempDir(), ".env")
+				_ = os.WriteFile(file, []byte(`PATH=/usr/bin
+HOME=/home/user`), 0600)
+				return file
 			},
-			validate: func(t *testing.T, output setEnvironmentVariablesFromFileOutput) {
-				assert.True(t, output.Success)
-				assert.Equal(t, 3, output.Count)
-				assert.Contains(t, output.Message, "3 environment variables")
+			input: func(file string) *setEnvironmentVariablesFromFileInput {
+				return &setEnvironmentVariablesFromFileInput{
+					NamespaceID: "ws1",
+					FilePath:    file,
+				}
 			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
+					return req.NamespacePath == "group/workspace" && req.Category == pb.VariableCategory_environment && len(req.Variables) == 2
+				})).Return(nil, nil)
+			},
+			expectCount: 2,
 		},
 		{
-			name:        "ACL denial",
-			fileContent: `ENV=production`,
-			workspace: &sdktypes.Workspace{
-				Metadata: sdktypes.ResourceMetadata{ID: namespaceID},
-				FullPath: "group/workspace",
+			name: "acl denial",
+			setupFile: func() string {
+				file := filepath.Join(t.TempDir(), ".env")
+				_ = os.WriteFile(file, []byte(`PATH=/usr/bin`), 0600)
+				return file
 			},
-			aclError:    assert.AnError,
+			input: func(file string) *setEnvironmentVariablesFromFileInput {
+				return &setEnvironmentVariablesFromFileInput{
+					NamespaceID: "ws1",
+					FilePath:    file,
+				}
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws1"}).Return(&pb.Workspace{
+					Metadata: &pb.ResourceMetadata{Id: "ws1"},
+					FullPath: "group/workspace",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+			},
 			expectError: true,
+		},
+		{
+			name: "workspace not found, uses group instead",
+			setupFile: func() string {
+				file := filepath.Join(t.TempDir(), ".env")
+				_ = os.WriteFile(file, []byte(`PATH=/usr/local/bin`), 0600)
+				return file
+			},
+			input: func(file string) *setEnvironmentVariablesFromFileInput {
+				return &setEnvironmentVariablesFromFileInput{
+					NamespaceID: "group1",
+					FilePath:    file,
+				}
+			},
+			mockSetup: func(m *variableMocks) {
+				m.workspaces.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "group1"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "group1"}).
+					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
+					return req.NamespacePath == "group1" && req.Category == pb.VariableCategory_environment && len(req.Variables) == 1
+				})).Return(nil, nil)
+			},
+			expectCount: 1,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			filePath := fmt.Sprintf("%s/test.env", tmpDir)
-			err := os.WriteFile(filePath, []byte(tt.fileContent), 0600)
-			assert.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			file := tc.setupFile()
+			input := tc.input(file)
 
-			mockClient := tharsis.NewMockClient(t)
-			mockWorkspaces := tharsis.NewWorkspaces(t)
-			mockVariable := tharsis.NewVariable(t)
-			mockACL := acl.NewMockChecker(t)
-
-			if tt.aclError == nil {
-				mockClient.On("Workspaces").Return(mockWorkspaces)
-				mockClient.On("Variables").Return(mockVariable)
-				mockWorkspaces.On("GetWorkspace", mock.Anything, &sdktypes.GetWorkspaceInput{ID: &namespaceID}).Return(tt.workspace, nil)
-				mockVariable.On("SetVariables", mock.Anything, mock.MatchedBy(func(input *sdktypes.SetNamespaceVariablesInput) bool {
-					return input.NamespacePath == tt.workspace.FullPath && input.Category == sdktypes.EnvironmentVariableCategory
-				})).Return(nil)
-			} else {
-				mockClient.On("Workspaces").Return(mockWorkspaces)
-				mockWorkspaces.On("GetWorkspace", mock.Anything, &sdktypes.GetWorkspaceInput{ID: &namespaceID}).Return(tt.workspace, nil)
+			testMocks := &variableMocks{
+				variables:  mocks.NewNamespaceVariablesClient(t),
+				workspaces: mocks.NewWorkspacesClient(t),
+				groups:     mocks.NewGroupsClient(t),
+				acl:        acl.NewMockChecker(t),
 			}
-			mockACL.On("Authorize", mock.Anything, mockClient, namespaceID, trn.ResourceTypeWorkspace).Return(tt.aclError)
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					NamespaceVariablesClient: testMocks.variables,
+					WorkspacesClient:         testMocks.workspaces,
+					GroupsClient:             testMocks.groups,
 				},
-				acl: mockACL,
+				acl: testMocks.acl,
 			}
 
-			_, handler := setEnvironmentVariablesFromFile(tc)
-			_, output, err := handler(t.Context(), nil, setEnvironmentVariablesFromFileInput{
-				NamespaceID: namespaceID,
-				FilePath:    filePath,
-			})
+			_, handler := setEnvironmentVariablesFromFile(toolCtx)
+			_, output, err := handler(t.Context(), nil, input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
+			assert.Equal(t, tc.expectCount, output.Count)
 		})
 	}
 }

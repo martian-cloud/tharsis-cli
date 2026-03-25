@@ -1,163 +1,137 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// moduleGetVersionCommand is the top-level structure for the module get-version command.
 type moduleGetVersionCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	version string
+	toJSON  bool
 }
 
 // NewModuleGetVersionCommandFactory returns a moduleGetVersionCommand struct.
-func NewModuleGetVersionCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleGetVersionCommand{
-			meta: meta,
+func NewModuleGetVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleGetVersionCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (mgc moduleGetVersionCommand) Run(args []string) int {
-	mgc.meta.Logger.Debugf("Starting the 'module get-version' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		mgc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := mgc.meta.GetSDKClient()
-	if err != nil {
-		mgc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return mgc.doModuleGetVersion(ctx, client, args)
+func (c *moduleGetVersionCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (mgc moduleGetVersionCommand) doModuleGetVersion(ctx context.Context, client *tharsis.Client, opts []string) int {
-	mgc.meta.Logger.Debugf("will do module get-version, %d opts", len(opts))
+func (c *moduleGetVersionCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("module get-version"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := mgc.buildModuleGetVersionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(mgc.meta.BinaryName+" module get-version", defs, opts)
+	moduleVersionID := c.arguments[0]
+
+	if c.version != "" {
+		// Handle deprecated version flag and module path arg.
+		moduleVersionID = trn.NewResourceTRN(trn.ResourceTypeTerraformModuleVersion, moduleVersionID, c.version)
+	}
+
+	input := &pb.GetTerraformModuleVersionByIDRequest{
+		Id: moduleVersionID,
+	}
+
+	version, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleVersionByID(c.Context, input)
 	if err != nil {
-		mgc.meta.Logger.Error(output.FormatError("failed to parse module get-version argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		mgc.meta.Logger.Error(output.FormatError("missing module get-version path", nil), mgc.HelpModuleGetVersion())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module get-version arguments: %s", cmdArgs)
-		mgc.meta.Logger.Error(output.FormatError(msg, nil), mgc.HelpModuleGetVersion())
+		c.UI.ErrorWithSummary(err, "failed to get module version")
 		return 1
 	}
 
-	modulePath := cmdArgs[0]
-	versionTag := getOption("version", "", cmdOpts)[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		mgc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	actualPath := trn.ToPath(modulePath)
-	if !isResourcePathValid(mgc.meta, actualPath) {
-		return 1
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.GetTerraformModuleVersionInput{ModulePath: &actualPath} // Use extracted path
-
-	if versionTag != "" {
-		input.Version = &versionTag
-	}
-	mgc.meta.Logger.Debugf("module get-version input: %#v", input)
-
-	// Get the module version.
-	foundModule, err := client.TerraformModuleVersion.GetModuleVersion(ctx, input)
-	if err != nil {
-		mgc.meta.Logger.Error(output.FormatError("failed to get module version", err))
-		return 1
-	}
-
-	return mgc.outputModuleVersion(mgc.meta, toJSON, foundModule)
+	return outputModuleVersion(c.UI, c.toJSON, version)
 }
 
-// outputModuleVersion is the final output for most module version operations.
-func (mgc moduleGetVersionCommand) outputModuleVersion(meta *Metadata, toJSON bool, moduleVersion *sdktypes.TerraformModuleVersion) int {
+func (*moduleGetVersionCommand) Synopsis() string {
+	return "Get a module version by ID or TRN."
+}
+
+func (*moduleGetVersionCommand) Description() string {
+	return `
+   The module get-version command retrieves details about a specific module version.
+`
+}
+
+func (*moduleGetVersionCommand) Usage() string {
+	return "tharsis [global options] module get-version [options] <version-id>"
+}
+
+func (*moduleGetVersionCommand) Example() string {
+	return `
+tharsis module get-version trn:terraform_module_version:<group_path>/<module_name>/<system>/<version>
+`
+}
+
+func (c *moduleGetVersionCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
+	f.StringVar(
+		&c.version,
+		"version",
+		"",
+		"A semver compliant version tag to use as a filter. Deprecated.",
+	)
+	return f
+}
+
+func outputModuleVersion(ui terminal.UI, toJSON bool, version *pb.TerraformModuleVersion) int {
 	if toJSON {
-		buf, err := objectToJSON(moduleVersion)
-		if err != nil {
-			meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+		if err := ui.JSON(version); err != nil {
+			ui.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
 		}
-		meta.UI.Output(string(buf))
 	} else {
-		tableInput := [][]string{
-			{
-				"id",
-				"module id",
-				"version",
-				"shasum",
-				"status",
-				"latest",
-			},
-			{
-				moduleVersion.Metadata.ID,
-				moduleVersion.ModuleID,
-				moduleVersion.Version,
-				moduleVersion.SHASum,
-				moduleVersion.Status,
-				fmt.Sprintf("%t", moduleVersion.Latest),
-			},
+		values := []terminal.NamedValue{
+			{Name: "ID", Value: version.Metadata.Id},
+			{Name: "TRN", Value: version.Metadata.Trn},
+			{Name: "Version", Value: version.SemanticVersion},
+			{Name: "Status", Value: version.Status},
+			{Name: "Latest", Value: version.Latest},
+			{Name: "SHA Sum", Value: version.ShaSum},
+			{Name: "Created By", Value: version.CreatedBy},
+			{Name: "Created At", Value: version.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
 		}
-		meta.UI.Output(tableformatter.FormatTable(tableInput))
+
+		if version.Error != "" {
+			values = append(values, terminal.NamedValue{Name: "Error", Value: version.Error})
+		}
+
+		if len(version.Submodules) > 0 {
+			values = append(values, terminal.NamedValue{Name: "Submodules", Value: strings.Join(version.Submodules, ", ")})
+		}
+
+		ui.NamedValues(values)
 	}
 
 	return 0
-}
-
-// buildModuleGetDefs returns defs used by module get command.
-func (mgc moduleGetVersionCommand) buildModuleGetVersionDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"version": {
-			Arguments: []string{"Version"},
-			Synopsis:  "A semver compliant version tag to use as a filter.",
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-func (mgc moduleGetVersionCommand) Synopsis() string {
-	return "Get a single module version."
-}
-
-func (mgc moduleGetVersionCommand) Help() string {
-	return mgc.HelpModuleGetVersion()
-}
-
-// HelpModuleGetVersion prints the help string for the 'module get-version' command.
-func (mgc moduleGetVersionCommand) HelpModuleGetVersion() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module get-version [options] <module-path>
-
-   The module get-version command prints information
-   about a module's version. Returns latest by default
-   unless --version option is specified.
-
-%s
-
-`, mgc.meta.BinaryName, buildHelpText(mgc.buildModuleGetVersionDefs()))
 }

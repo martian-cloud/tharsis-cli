@@ -17,10 +17,10 @@ build:  ## build the Tharsis CLI binary
 lint: ## run golint on all Go package
 	@echo "Checking go.mod..."
 	@go mod tidy -diff > /dev/null
-	@echo "Running revive..."
+	@echo "Linting Go code..."
 	@revive -set_exit_status $(PACKAGES)
-	@echo "Checking formatting..."
-	@UNFORMATTED=$$(gofmt -l . 2>/dev/null | grep -v vendor | grep -v '/pkg/mod/'); \
+	@echo "Checking Go formatting..."
+	@UNFORMATTED=$$(gofmt -l . 2>/dev/null | grep -v vendor | grep -v testdata | grep -v '/pkg/mod/'); \
 	if [ -n "$$UNFORMATTED" ]; then \
 		echo "Files not formatted:"; \
 		echo "$$UNFORMATTED"; \
@@ -35,13 +35,13 @@ vet: ## run golint on all Go package
 fmt: ## run "go fmt" on all Go packages
 	@go fmt $(PACKAGES)
 
+.PHONY: generate
+generate:
+	go generate -v ./...
+
 .PHONY: test
 test: ## run unit tests
 	go test -v ./...
-
-.PHONY: generate
-generate: ## generate mocks
-	go generate -v ./...
 
 release:
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build ${GCFLAGS} ${LDFLAGS} -a -o ./bin/${BINARY}_${VERSION}_darwin_amd64  $(BUILD_PATH)
@@ -58,5 +58,3 @@ release:
 	CGO_ENABLED=0 GOOS=solaris GOARCH=amd64 go build ${GCFLAGS} ${LDFLAGS} -a -o ./bin/${BINARY}_${VERSION}_solaris_amd64 $(BUILD_PATH)
 	CGO_ENABLED=0 GOOS=windows GOARCH=386   go build ${GCFLAGS} ${LDFLAGS} -a -o ./bin/${BINARY}_${VERSION}_windows_386   $(BUILD_PATH)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ${GCFLAGS} ${LDFLAGS} -a -o ./bin/${BINARY}_${VERSION}_windows_amd64 $(BUILD_PATH)
-
-# The End.

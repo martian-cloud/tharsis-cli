@@ -1,131 +1,115 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 // groupDeleteCommand is the top-level structure for the group delete command.
 type groupDeleteCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	version *int64
+	force   bool
 }
 
-// NewGroupDeleteCommandFactory returns a groupCommandDelete struct.
-func NewGroupDeleteCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupDeleteCommand{
-			meta: meta,
+var _ Command = (*groupDeleteCommand)(nil)
+
+func (c *groupDeleteCommand) validate() error {
+	const message = "group id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
+}
+
+// NewGroupDeleteCommandFactory returns a groupDeleteCommand struct.
+func NewGroupDeleteCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupDeleteCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (gdc groupDeleteCommand) Run(args []string) int {
-	gdc.meta.Logger.Debugf("Starting the 'group update' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		gdc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *groupDeleteCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group delete"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+		WithForcePrompt("Are you sure you want to delete this group?"),
+	); code != 0 {
+		return code
 	}
 
-	client, err := gdc.meta.GetSDKClient()
-	if err != nil {
-		gdc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+	input := &pb.DeleteGroupRequest{
+		Id:      trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		Force:   &c.force,
+		Version: c.version,
+	}
+
+	if _, err := c.grpcClient.GroupsClient.DeleteGroup(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to delete group")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return gdc.doGroupDelete(ctx, client, args)
-}
-
-func (gdc groupDeleteCommand) doGroupDelete(ctx context.Context, client *tharsis.Client, opts []string) int {
-	gdc.meta.Logger.Debugf("will do group delete, %d opts", len(opts))
-
-	// No options to parse.
-	defs := gdc.buildGroupDeleteDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(gdc.meta.BinaryName+" group delete", defs, opts)
-	if err != nil {
-		gdc.meta.Logger.Error(output.FormatError("failed to parse group delete options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		gdc.meta.Logger.Error(output.FormatError("missing group delete full path", nil), gdc.HelpGroupDelete())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group delete arguments: %s", cmdArgs)
-		gdc.meta.Logger.Error(output.FormatError(msg, nil), gdc.HelpGroupDelete())
-		return 1
-	}
-
-	groupPath := cmdArgs[0]
-	force, err := getBoolOptionValue("force", "false", cmdOpts)
-	if err != nil {
-		gdc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(groupPath)
-	if !isNamespacePathValid(gdc.meta, actualPath) {
-		return 1
-	}
-
-	// Prepare the inputs.
-	// Extract path from TRN if needed - GroupPath field expects paths, not TRNs
-	actualPath = trn.ToPath(groupPath)
-
-	input := &sdktypes.DeleteGroupInput{
-		GroupPath: &actualPath,
-		Force:     &force,
-	}
-	gdc.meta.Logger.Debugf("group delete input: %#v", input)
-
-	// Delete the group.
-	err = client.Group.DeleteGroup(ctx, input)
-	if err != nil {
-		gdc.meta.Logger.Error(output.FormatError("failed to delete a group", err))
-		return 1
-	}
-
-	// Cannot show the deleted group, but say something.
-	gdc.meta.UI.Output("group delete succeeded.")
-
+	c.UI.Successf("Group deleted successfully!")
 	return 0
 }
 
-func (groupDeleteCommand) buildGroupDeleteDefs() optparser.OptionDefinitions {
-	return optparser.OptionDefinitions{
-		"force": {
-			Arguments: []string{},
-			Synopsis:  "Force the deletion of a group.",
-		},
-	}
-}
-
-func (gdc groupDeleteCommand) Synopsis() string {
+func (*groupDeleteCommand) Synopsis() string {
 	return "Delete a group."
 }
 
-func (gdc groupDeleteCommand) Help() string {
-	return gdc.HelpGroupDelete()
+func (*groupDeleteCommand) Usage() string {
+	return "tharsis [global options] group delete [options] <id>"
 }
 
-// HelpGroupDelete produces the help string for the 'group delete' command.
-func (gdc groupDeleteCommand) HelpGroupDelete() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group delete [options] <full_path>
+func (*groupDeleteCommand) Description() string {
+	return `
+   The group delete command deletes a group by its ID. Includes
+   a force flag to delete the group even if resources are
+   deployed (dangerous!).
+`
+}
 
-   The group delete command deletes a group.
+func (*groupDeleteCommand) Example() string {
+	return `
+tharsis group delete \
+  --force \
+  trn:group:<group_path>
+`
+}
 
-   Use with caution as deleting a group is irreversible!
+func (c *groupDeleteCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be deleted. "+
+			"In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.force,
+		"force",
+		false,
+		"Force delete the group.",
+	)
 
-%s
-
-`, gdc.meta.BinaryName, buildHelpText(gdc.buildGroupDeleteDefs()))
+	return f
 }

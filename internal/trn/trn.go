@@ -2,6 +2,7 @@
 package trn
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 )
@@ -9,29 +10,30 @@ import (
 // ResourceType represents the type of resource for TRN construction.
 type ResourceType string
 
+// ResourceType constants.
 const (
-	// ResourceTypeWorkspace is the resource type constant for workspace TRNs.
-	ResourceTypeWorkspace ResourceType = "workspace"
-	// ResourceTypeGroup is the resource type constant for group TRNs.
-	ResourceTypeGroup ResourceType = "group"
-	// ResourceTypeManagedIdentity is the resource type constant for managed identity TRNs.
-	ResourceTypeManagedIdentity ResourceType = "managed_identity"
-	// ResourceTypeVariable is the resource type constant for variable TRNs.
-	ResourceTypeVariable ResourceType = "variable"
-	// ResourceTypeRun is the resource type constant for run TRNs.
-	ResourceTypeRun ResourceType = "run"
-	// ResourceTypeConfigurationVersion is the resource type constant for configuration version TRNs.
-	ResourceTypeConfigurationVersion ResourceType = "configuration_version"
-	// ResourceTypeTerraformModule is the resource type constant for Terraform module TRNs.
-	ResourceTypeTerraformModule ResourceType = "terraform_module"
-	// ResourceTypeTerraformModuleVersion is the resource type constant for Terraform module version TRNs.
-	ResourceTypeTerraformModuleVersion ResourceType = "terraform_module_version"
-	// ResourceTypeTerraformProvider is the resource type constant for Terraform provider TRNs.
-	ResourceTypeTerraformProvider ResourceType = "terraform_provider"
-	// ResourceTypeTerraformProviderPlatform is the resource type constant for Terraform provider platform TRNs.
-	ResourceTypeTerraformProviderPlatform ResourceType = "terraform_provider_platform"
-	// ResourceTypeFederatedRegistry is the resource type constant for federated registry TRNs.
-	ResourceTypeFederatedRegistry ResourceType = "federated_registry"
+	ResourceTypeWorkspace                      ResourceType = "workspace"
+	ResourceTypeGroup                          ResourceType = "group"
+	ResourceTypeManagedIdentity                ResourceType = "managed_identity"
+	ResourceTypeVariable                       ResourceType = "variable"
+	ResourceTypeRun                            ResourceType = "run"
+	ResourceTypeConfigurationVersion           ResourceType = "configuration_version"
+	ResourceTypeTerraformModule                ResourceType = "terraform_module"
+	ResourceTypeTerraformModuleVersion         ResourceType = "terraform_module_version"
+	ResourceTypeTerraformProvider              ResourceType = "terraform_provider"
+	ResourceTypeTerraformProviderVersionMirror ResourceType = "terraform_provider_version_mirror"
+	ResourceTypeTerraformProviderPlatform      ResourceType = "terraform_provider_platform"
+	ResourceTypeFederatedRegistry              ResourceType = "federated_registry"
+	ResourceTypeServiceAccount                 ResourceType = "service_account"
+	ResourceTypeTeam                           ResourceType = "team"
+	ResourceTypeUser                           ResourceType = "user"
+	ResourceTypeRole                           ResourceType = "role"
+	ResourceTypeRunner                         ResourceType = "runner"
+)
+
+const (
+	// TRNPrefix is the prefix for a Tharsis resource name.
+	TRNPrefix = "trn:"
 )
 
 // ToPath extracts the path portion from a TRN.
@@ -59,15 +61,20 @@ func ToPathParts(identifier string) []string {
 
 // IsTRN returns true if the identifier is a valid TRN format.
 func IsTRN(identifier string) bool {
-	return strings.HasPrefix(identifier, "trn:")
+	return strings.HasPrefix(identifier, TRNPrefix)
 }
 
 // ToTRN converts a path or TRN to a TRN format.
 // If the input is already a TRN, it returns it unchanged.
 // If the input is a path, it converts it to a TRN with the specified resource type.
-func ToTRN(identifier string, resourceType ResourceType) string {
+func ToTRN(resourceType ResourceType, identifier string) string {
 	// If it's already a TRN, return as-is
-	if strings.HasPrefix(identifier, "trn:") {
+	if IsTRN(identifier) {
+		return identifier
+	}
+
+	// Check if it's a valid GID (base64-encoded "CODE_UUID")
+	if decoded, err := base64.RawURLEncoding.DecodeString(identifier); err == nil && strings.Contains(string(decoded), "_") {
 		return identifier
 	}
 
@@ -78,5 +85,5 @@ func ToTRN(identifier string, resourceType ResourceType) string {
 // NewResourceTRN returns a new TRN string for the given resource and
 // arguments. This is a helper function for creating TRNs.
 func NewResourceTRN(resource ResourceType, a ...string) string {
-	return fmt.Sprintf("trn:%s:%s", resource, strings.Join(a, "/"))
+	return fmt.Sprintf("%s%s:%s", TRNPrefix, resource, strings.Join(a, "/"))
 }

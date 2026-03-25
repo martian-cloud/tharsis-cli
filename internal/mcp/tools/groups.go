@@ -7,8 +7,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 // group represents a Tharsis group in MCP responses.
@@ -20,11 +20,11 @@ type group struct {
 	TRN         string `json:"trn" jsonschema:"Tharsis Resource Name"`
 }
 
-// toGroup converts an SDK group to MCP group.
-func toGroup(g *sdktypes.Group) group {
-	return group{
-		ID:          g.Metadata.ID,
-		TRN:         g.Metadata.TRN,
+// toGroup converts a proto group to MCP group.
+func toGroup(g *pb.Group) *group {
+	return &group{
+		ID:          g.Metadata.Id,
+		TRN:         g.Metadata.Trn,
 		Path:        g.FullPath,
 		Name:        g.Name,
 		Description: g.Description,
@@ -33,20 +33,21 @@ func toGroup(g *sdktypes.Group) group {
 
 // listGroupsInput is the input for listing groups.
 type listGroupsInput struct {
-	ParentPath *string                      `json:"parent_path,omitempty" jsonschema:"Filter groups to this parent path (e.g. parent-group)"`
-	Sort       *sdktypes.GroupSortableField `json:"sort,omitempty" jsonschema:"Sort order: FULL_PATH_ASC or FULL_PATH_DESC"`
-	Limit      *int32                       `json:"limit,omitempty" jsonschema:"Maximum number of groups to return (default: 10, max: 50)"`
-	Cursor     *string                      `json:"cursor,omitempty" jsonschema:"Pagination cursor from previous response"`
+	ParentID *string `json:"parent_id,omitempty" jsonschema:"Filter groups to this parent group ID (e.g. Ul8yZ... or trn:group:parent-group)"`
+	Search   *string `json:"search,omitempty" jsonschema:"Search term to filter by group path"`
+	Sort     *string `json:"sort,omitempty" jsonschema:"Sort order: FULL_PATH_ASC or FULL_PATH_DESC"`
+	Limit    *int32  `json:"limit,omitempty" jsonschema:"Maximum number of groups to return (default: 10, max: 50)"`
+	Cursor   *string `json:"cursor,omitempty" jsonschema:"Pagination cursor from previous response"`
 }
 
 // listGroupsOutput is the output for listing groups.
 type listGroupsOutput struct {
-	Groups   []group  `json:"groups" jsonschema:"List of groups"`
+	Groups   []*group `json:"groups" jsonschema:"List of groups"`
 	PageInfo pageInfo `json:"page_info" jsonschema:"Pagination information"`
 }
 
 // ListGroups returns an MCP tool for listing groups.
-func listGroups(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[listGroupsInput, listGroupsOutput]) {
+func listGroups(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*listGroupsInput, *listGroupsOutput]) {
 	tool := mcp.Tool{
 		Name:        "list_groups",
 		Description: "List Tharsis groups with optional filtering by parent. Supports pagination for large result sets.",
@@ -56,36 +57,27 @@ func listGroups(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[listGroupsInput, 
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input listGroupsInput) (*mcp.CallToolResult, listGroupsOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, listGroupsOutput{}, err
-		}
-
-		sdkInput := &sdktypes.GetGroupsInput{
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *listGroupsInput) (*mcp.CallToolResult, *listGroupsOutput, error) {
+		req := &pb.GetGroupsRequest{
 			PaginationOptions: buildPaginationOptions(input.Limit, input.Cursor),
-			Sort:              input.Sort,
+			ParentId:          input.ParentID,
+			Search:            input.Search,
+			Sort:              toSortEnum[pb.GroupSortableField](input.Sort, pb.GroupSortableField_value),
 		}
 
-		if input.ParentPath != nil {
-			sdkInput.Filter = &sdktypes.GroupFilter{
-				ParentPath: input.ParentPath,
-			}
-		}
-
-		result, err := client.Groups().GetGroups(ctx, sdkInput)
+		resp, err := tc.grpcClient.GroupsClient.GetGroups(ctx, req)
 		if err != nil {
-			return nil, listGroupsOutput{}, fmt.Errorf("failed to list groups: %w", err)
+			return nil, nil, fmt.Errorf("failed to list groups: %w", err)
 		}
 
-		groups := make([]group, len(result.Groups))
-		for i, g := range result.Groups {
-			groups[i] = toGroup(&g)
+		groups := make([]*group, len(resp.Groups))
+		for i, g := range resp.Groups {
+			groups[i] = toGroup(g)
 		}
 
-		return nil, listGroupsOutput{
+		return nil, &listGroupsOutput{
 			Groups:   groups,
-			PageInfo: buildPageInfo(result.PageInfo),
+			PageInfo: buildPageInfo(resp.PageInfo),
 		}, nil
 	}
 
@@ -99,11 +91,11 @@ type getGroupInput struct {
 
 // getGroupOutput is the output for getting a group.
 type getGroupOutput struct {
-	Group group `json:"group" jsonschema:"The group details"`
+	Group *group `json:"group,omitempty" jsonschema:"The group details"`
 }
 
 // GetGroup returns an MCP tool for getting a group.
-func getGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getGroupInput, getGroupOutput]) {
+func getGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getGroupInput, *getGroupOutput]) {
 	tool := mcp.Tool{
 		Name:        "get_group",
 		Description: "Retrieve details about a Tharsis group.",
@@ -113,19 +105,14 @@ func getGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getGroupInput, getG
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input getGroupInput) (*mcp.CallToolResult, getGroupOutput, error) {
-		client, err := tc.clientGetter()
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *getGroupInput) (*mcp.CallToolResult, *getGroupOutput, error) {
+		resp, err := tc.grpcClient.GroupsClient.GetGroupByID(ctx, &pb.GetGroupByIDRequest{Id: input.ID})
 		if err != nil {
-			return nil, getGroupOutput{}, err
+			return nil, nil, fmt.Errorf("failed to get group: %w", err)
 		}
 
-		group, err := client.Groups().GetGroup(ctx, &sdktypes.GetGroupInput{ID: &input.ID})
-		if err != nil {
-			return nil, getGroupOutput{}, fmt.Errorf("failed to get group: %w", err)
-		}
-
-		return nil, getGroupOutput{
-			Group: toGroup(group),
+		return nil, &getGroupOutput{
+			Group: toGroup(resp),
 		}, nil
 	}
 
@@ -134,18 +121,19 @@ func getGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getGroupInput, getG
 
 // createGroupInput is the input for creating a group.
 type createGroupInput struct {
-	Name        string `json:"name" jsonschema:"required,Name of the group"`
-	ParentPath  string `json:"parent_path" jsonschema:"required,Path to the parent group"`
-	Description string `json:"description,omitempty" jsonschema:"Description of the group"`
+	Name        string   `json:"name" jsonschema:"required,Name of the group"`
+	ParentID    string   `json:"parent_id" jsonschema:"required,ID of the parent group (e.g. Ul8yZ... or trn:group:parent-group)"`
+	Description string   `json:"description,omitempty" jsonschema:"Description of the group"`
+	RunnerTags  []string `json:"runner_tags,omitempty" jsonschema:"Runner tags for the group"`
 }
 
 // createGroupOutput is the output for creating a group.
 type createGroupOutput struct {
-	Group group `json:"group" jsonschema:"The created group"`
+	Group *group `json:"group,omitempty" jsonschema:"The created group"`
 }
 
 // CreateGroup returns an MCP tool for creating a group.
-func createGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[createGroupInput, createGroupOutput]) {
+func createGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createGroupInput, *createGroupOutput]) {
 	tool := mcp.Tool{
 		Name:        "create_group",
 		Description: "Create a new Tharsis group under a parent group. Groups organize workspaces and can be nested hierarchically. Note: Cannot create root-level groups.",
@@ -156,29 +144,23 @@ func createGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[createGroupInput
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input createGroupInput) (*mcp.CallToolResult, createGroupOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, createGroupOutput{}, err
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *createGroupInput) (*mcp.CallToolResult, *createGroupOutput, error) {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ParentID, trn.ResourceTypeGroup); err != nil {
+			return nil, nil, err
 		}
 
-		if err = tc.acl.Authorize(ctx, client, trn.ToTRN(input.ParentPath, trn.ResourceTypeGroup), trn.ResourceTypeGroup); err != nil {
-			return nil, createGroupOutput{}, err
-		}
-
-		createInput := &sdktypes.CreateGroupInput{
+		resp, err := tc.grpcClient.GroupsClient.CreateGroup(ctx, &pb.CreateGroupRequest{
 			Name:        input.Name,
-			ParentPath:  &input.ParentPath,
+			ParentId:    &input.ParentID,
 			Description: input.Description,
-		}
-
-		group, err := client.Groups().CreateGroup(ctx, createInput)
+			RunnerTags:  input.RunnerTags,
+		})
 		if err != nil {
-			return nil, createGroupOutput{}, fmt.Errorf("failed to create group: %w", err)
+			return nil, nil, fmt.Errorf("failed to create group: %w", err)
 		}
 
-		return nil, createGroupOutput{
-			Group: toGroup(group),
+		return nil, &createGroupOutput{
+			Group: toGroup(resp),
 		}, nil
 	}
 
@@ -187,17 +169,18 @@ func createGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[createGroupInput
 
 // updateGroupInput is the input for updating a group.
 type updateGroupInput struct {
-	ID          string `json:"id" jsonschema:"required,Group ID or TRN (e.g. Ul8yZ... or trn:group:parent-group/group-name)"`
-	Description string `json:"description,omitempty" jsonschema:"New description for the group"`
+	ID          string   `json:"id" jsonschema:"required,Group ID or TRN (e.g. Ul8yZ... or trn:group:parent-group/group-name)"`
+	Description *string  `json:"description,omitempty" jsonschema:"New description for the group"`
+	RunnerTags  []string `json:"runner_tags,omitempty" jsonschema:"New runner tags for the group"`
 }
 
 // updateGroupOutput is the output for updating a group.
 type updateGroupOutput struct {
-	Group group `json:"group" jsonschema:"The updated group"`
+	Group *group `json:"group,omitempty" jsonschema:"The updated group"`
 }
 
 // UpdateGroup returns an MCP tool for updating a group.
-func updateGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[updateGroupInput, updateGroupOutput]) {
+func updateGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*updateGroupInput, *updateGroupOutput]) {
 	tool := mcp.Tool{
 		Name:        "update_group",
 		Description: "Update an existing Tharsis group's description.",
@@ -208,28 +191,22 @@ func updateGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[updateGroupInput
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input updateGroupInput) (*mcp.CallToolResult, updateGroupOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, updateGroupOutput{}, err
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *updateGroupInput) (*mcp.CallToolResult, *updateGroupOutput, error) {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeGroup); err != nil {
+			return nil, nil, err
 		}
 
-		if err = tc.acl.Authorize(ctx, client, input.ID, trn.ResourceTypeGroup); err != nil {
-			return nil, updateGroupOutput{}, err
-		}
-
-		updateInput := &sdktypes.UpdateGroupInput{
-			ID:          &input.ID,
+		resp, err := tc.grpcClient.GroupsClient.UpdateGroup(ctx, &pb.UpdateGroupRequest{
+			Id:          input.ID,
 			Description: input.Description,
-		}
-
-		updatedGroup, err := client.Groups().UpdateGroup(ctx, updateInput)
+			RunnerTags:  input.RunnerTags,
+		})
 		if err != nil {
-			return nil, updateGroupOutput{}, fmt.Errorf("failed to update group: %w", err)
+			return nil, nil, fmt.Errorf("failed to update group: %w", err)
 		}
 
-		return nil, updateGroupOutput{
-			Group: toGroup(updatedGroup),
+		return nil, &updateGroupOutput{
+			Group: toGroup(resp),
 		}, nil
 	}
 
@@ -250,7 +227,7 @@ type deleteGroupOutput struct {
 }
 
 // DeleteGroup returns an MCP tool for deleting a group.
-func deleteGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[deleteGroupInput, deleteGroupOutput]) {
+func deleteGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteGroupInput, *deleteGroupOutput]) {
 	tool := mcp.Tool{
 		Name:        "delete_group",
 		Description: "Delete a Tharsis group. Use with caution as this operation is irreversible.",
@@ -260,36 +237,25 @@ func deleteGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[deleteGroupInput
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input deleteGroupInput) (*mcp.CallToolResult, deleteGroupOutput, error) {
-		client, err := tc.clientGetter()
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *deleteGroupInput) (*mcp.CallToolResult, *deleteGroupOutput, error) {
+		grp, err := tc.grpcClient.GroupsClient.GetGroupByID(ctx, &pb.GetGroupByIDRequest{Id: input.ID})
 		if err != nil {
-			return nil, deleteGroupOutput{}, err
+			return nil, nil, fmt.Errorf("failed to get group: %w", err)
 		}
 
-		// Get the group to check if it's a top-level group
-		group, err := client.Groups().GetGroup(ctx, &sdktypes.GetGroupInput{ID: &input.ID})
-		if err != nil {
-			return nil, deleteGroupOutput{}, fmt.Errorf("failed to get group: %w", err)
+		if !strings.Contains(grp.FullPath, "/") {
+			return nil, nil, fmt.Errorf("cannot delete top-level group %q: top-level groups cannot be deleted via MCP for safety", grp.FullPath)
 		}
 
-		// Prevent deletion of top-level groups since they're rarely deleted and this protects against accidental LLM actions.
-		if !strings.Contains(group.FullPath, "/") {
-			return nil, deleteGroupOutput{}, fmt.Errorf("cannot delete top-level group %q: top-level groups cannot be deleted via MCP for safety", group.FullPath)
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeGroup); err != nil {
+			return nil, nil, err
 		}
 
-		if err = tc.acl.Authorize(ctx, client, input.ID, trn.ResourceTypeGroup); err != nil {
-			return nil, deleteGroupOutput{}, err
+		if _, err := tc.grpcClient.GroupsClient.DeleteGroup(ctx, &pb.DeleteGroupRequest{Id: input.ID}); err != nil {
+			return nil, nil, fmt.Errorf("failed to delete group: %w", err)
 		}
 
-		deleteInput := &sdktypes.DeleteGroupInput{
-			ID: &input.ID,
-		}
-
-		if err := client.Groups().DeleteGroup(ctx, deleteInput); err != nil {
-			return nil, deleteGroupOutput{}, fmt.Errorf("failed to delete group: %w", err)
-		}
-
-		return nil, deleteGroupOutput{
+		return nil, &deleteGroupOutput{
 			Message: fmt.Sprintf("Group %s deleted successfully", input.ID),
 			Success: true,
 		}, nil
