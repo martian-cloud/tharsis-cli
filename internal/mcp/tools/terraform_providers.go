@@ -5,30 +5,30 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
 // terraformProvider is the output type for Terraform providers.
 type terraformProvider struct {
-	ID                string `json:"id" jsonschema:"Unique identifier for the provider"`
-	TRN               string `json:"trn" jsonschema:"Tharsis Resource Name (TRN) for the provider"`
-	Name              string `json:"name" jsonschema:"Provider name"`
-	GroupPath         string `json:"group_path" jsonschema:"Path to the group containing this provider"`
-	RegistryNamespace string `json:"registry_namespace" jsonschema:"Registry namespace for the provider"`
-	RepositoryURL     string `json:"repository_url" jsonschema:"URL to the provider's source repository"`
-	Private           bool   `json:"private" jsonschema:"Whether the provider is private"`
+	ID            string `json:"id" jsonschema:"Unique identifier for the provider"`
+	TRN           string `json:"trn" jsonschema:"Tharsis Resource Name (TRN) for the provider"`
+	Name          string `json:"name" jsonschema:"Provider name"`
+	GroupID       string `json:"group_id" jsonschema:"ID of the group containing this provider"`
+	RepositoryURL string `json:"repository_url" jsonschema:"URL to the provider's source repository"`
+	Private       bool   `json:"private" jsonschema:"Whether the provider is private"`
+	CreatedBy     string `json:"created_by" jsonschema:"Username or service account that created this provider"`
 }
 
-// toTerraformProvider converts an SDK TerraformProvider to the MCP output type.
-func toTerraformProvider(p *sdktypes.TerraformProvider) terraformProvider {
+// toTerraformProvider converts a proto TerraformProvider to the MCP output type.
+func toTerraformProvider(p *pb.TerraformProvider) terraformProvider {
 	return terraformProvider{
-		ID:                p.Metadata.ID,
-		TRN:               p.Metadata.TRN,
-		Name:              p.Name,
-		GroupPath:         p.GroupPath,
-		RegistryNamespace: p.RegistryNamespace,
-		RepositoryURL:     p.RepositoryURL,
-		Private:           p.Private,
+		ID:            p.Metadata.Id,
+		TRN:           p.Metadata.Trn,
+		Name:          p.Name,
+		GroupID:       p.GroupId,
+		RepositoryURL: p.RepositoryUrl,
+		Private:       p.Private,
+		CreatedBy:     p.CreatedBy,
 	}
 }
 
@@ -43,7 +43,7 @@ type getTerraformProviderOutput struct {
 }
 
 // GetTerraformProvider returns an MCP tool for getting a Terraform provider.
-func getTerraformProvider(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getTerraformProviderInput, getTerraformProviderOutput]) {
+func getTerraformProvider(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getTerraformProviderInput, *getTerraformProviderOutput]) {
 	tool := mcp.Tool{
 		Name:        "get_terraform_provider",
 		Description: "Get details of a specific Terraform provider by ID.",
@@ -53,21 +53,16 @@ func getTerraformProvider(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getTerr
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input getTerraformProviderInput) (*mcp.CallToolResult, getTerraformProviderOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, getTerraformProviderOutput{}, err
-		}
-
-		provider, err := client.TerraformProviders().GetProvider(ctx, &sdktypes.GetTerraformProviderInput{
-			ID: input.ID,
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *getTerraformProviderInput) (*mcp.CallToolResult, *getTerraformProviderOutput, error) {
+		resp, err := tc.grpcClient.TerraformProvidersClient.GetTerraformProviderByID(ctx, &pb.GetTerraformProviderByIDRequest{
+			Id: input.ID,
 		})
 		if err != nil {
-			return nil, getTerraformProviderOutput{}, fmt.Errorf("failed to get provider: %w", err)
+			return nil, nil, fmt.Errorf("failed to get provider: %w", err)
 		}
 
-		return nil, getTerraformProviderOutput{
-			Provider: toTerraformProvider(provider),
+		return nil, &getTerraformProviderOutput{
+			Provider: toTerraformProvider(resp),
 		}, nil
 	}
 

@@ -1,223 +1,238 @@
 package command
 
 import (
-	"context"
+	"flag"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tableformatter"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// moduleListVersionsCommand is the top-level structure for the module list-versions command.
 type moduleListVersionsCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	limit           int
+	sortOrder       *string
+	cursor          *string
+	search          *string
+	latest          *bool
+	semanticVersion *string
+	sortBy          *string
+	toJSON          bool
 }
 
 // NewModuleListVersionsCommandFactory returns a moduleListVersionsCommand struct.
-func NewModuleListVersionsCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return moduleListVersionsCommand{
-			meta: meta,
+func NewModuleListVersionsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &moduleListVersionsCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (mlc moduleListVersionsCommand) Run(args []string) int {
-	mlc.meta.Logger.Debugf("Starting the 'module list-versions' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		mlc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := mlc.meta.GetSDKClient()
-	if err != nil {
-		mlc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return mlc.doModuleListVersions(ctx, client, args)
+func (c *moduleListVersionsCommand) validate() error {
+	const message = "module-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
+	)
 }
 
-func (mlc moduleListVersionsCommand) doModuleListVersions(ctx context.Context, client *tharsis.Client, opts []string) int {
-	mlc.meta.Logger.Debugf("will do module list-versions, %d opts: %#v", len(opts), opts)
+func (c *moduleListVersionsCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("module list-versions"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := mlc.buildModuleListVersionsDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(mlc.meta.BinaryName+" module list-versions", defs, opts)
+	sortByEnum, err := parseSortField[pb.TerraformModuleVersionSortableField](
+		c.sortBy,
+		c.sortOrder,
+		pb.TerraformModuleVersionSortableField_value,
+	)
 	if err != nil {
-		mlc.meta.Logger.Error(output.FormatError("failed to parse module list-versions options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		mlc.meta.Logger.Error(output.FormatError("missing module list-versions module path", nil), mlc.HelpModuleListVersions())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive module list-versions arguments: %s", cmdArgs)
-		mlc.meta.Logger.Error(output.FormatError(msg, nil), mlc.HelpModuleListVersions())
+		c.UI.ErrorWithSummary(err, "failed to parse sort field")
 		return 1
 	}
 
-	// Extract option values.
-	modulePath := cmdArgs[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		mlc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	cursor := getOption("cursor", "", cmdOpts)[0]
-	limit, err := strconv.ParseInt(getOption("limit", "100", cmdOpts)[0], 10, 64) // 100 is the maximum allowed by GraphQL
-	if err != nil {
-		msg := fmt.Sprintf("invalid limit option value: %s", cmdOpts["limit"])
-		mlc.meta.Logger.Error(output.FormatError(msg, nil))
-		return 1
-	}
-	limit32 := int32(limit)
-	sortByOption := strings.ToLower(getOption("sort-by", "", cmdOpts)[0])
-	sortOrderOption := strings.ToLower(getOption("sort-order", "", cmdOpts)[0])
-
-	actualPath := trn.ToPath(modulePath)
-	if !isResourcePathValid(mlc.meta, actualPath) {
-		return 1
-	}
-
-	// Get the module so, we can find it's ID.
-	module, err := client.TerraformModule.GetModule(ctx, &sdktypes.GetTerraformModuleInput{Path: &actualPath}) // Use extracted path
-	if err != nil {
-		mlc.meta.Logger.Error(output.FormatError("failed to get module", err))
-		return 1
-	}
-
-	// Leniently default to by created unless instructed otherwise.
-	sortBy := "created"
-	if strings.ToLower(sortByOption) == "updated" {
-		sortBy = sortByOption
-	}
-
-	// Leniently default to ascending order unless instructed otherwise.
-	sortOrder := "asc"
-	if strings.HasSuffix(sortOrderOption, "desc") {
-		sortOrder = sortOrderOption
-	}
-
-	// Decode from 2x2 to 1 of 4.
-	var sortable sdktypes.TerraformModuleVersionSortableField
-	if sortBy == "created" {
-		if sortOrder == "asc" {
-			sortable = sdktypes.TerraformModuleVersionSortableFieldCreatedAtAsc
-		} else {
-			sortable = sdktypes.TerraformModuleVersionSortableFieldCreatedAtDesc
-		}
-	} else {
-		if sortOrder == "asc" {
-			sortable = sdktypes.TerraformModuleVersionSortableFieldUpdatedAtAsc
-		} else {
-			sortable = sdktypes.TerraformModuleVersionSortableFieldUpdatedAtDesc
-		}
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.GetTerraformModuleVersionsInput{
-		Sort: &sortable,
-		PaginationOptions: &sdktypes.PaginationOptions{
-			Cursor: &cursor,
-			Limit:  &limit32,
+	input := &pb.GetTerraformModuleVersionsRequest{
+		ModuleId: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Sort:     sortByEnum,
+		PaginationOptions: &pb.PaginationOptions{
+			First: ptr.Int32(int32(c.limit)),
+			After: c.cursor,
 		},
-		TerraformModuleID: module.Metadata.ID,
-	}
-	if cursor == "" {
-		input.PaginationOptions.Cursor = nil
+		Search:          c.search,
+		Latest:          c.latest,
+		SemanticVersion: c.semanticVersion,
 	}
 
-	mlc.meta.Logger.Debugf("module list-versions input: %#v", input)
-
-	// Get the module versions.
-	versionsOutput, err := client.TerraformModuleVersion.GetModuleVersions(ctx, input)
+	result, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleVersions(c.Context, input)
 	if err != nil {
-		mlc.meta.Logger.Error(output.FormatError("failed to get a list of module versions", err))
+		c.UI.ErrorWithSummary(err, "failed to get a list of module versions")
 		return 1
 	}
 
-	if toJSON {
-		buf, err := objectToJSON(versionsOutput)
-		if err != nil {
-			mlc.meta.Logger.Error(output.FormatError("failed to get JSON output", err))
+	if c.toJSON {
+		if err := c.UI.JSON(result); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
 		}
-		mlc.meta.UI.Output(string(buf))
 	} else {
-		// Format the output.
-		tableInput := make([][]string, len(versionsOutput.ModuleVersions)+1)
-		tableInput[0] = []string{"id", "module id", "version", "shasum", "status", "latest"}
-		for ix, moduleVersion := range versionsOutput.ModuleVersions {
-			tableInput[ix+1] = []string{
-				moduleVersion.Metadata.ID, moduleVersion.ModuleID, moduleVersion.Version,
-				moduleVersion.SHASum, moduleVersion.Status, fmt.Sprintf("%t", moduleVersion.Latest),
-			}
+		t := terminal.NewTable("id", "version", "status", "latest", "sha_sum")
+
+		for _, version := range result.Versions {
+			t.Rich([]string{
+				version.Metadata.Id,
+				version.SemanticVersion,
+				version.Status,
+				fmt.Sprintf("%t", version.Latest),
+				version.ShaSum,
+			}, nil)
 		}
-		mlc.meta.UI.Output(tableformatter.FormatTable(tableInput))
-		//
-		// Must return the new cursor at the end of the list of module versions.
-		mlc.meta.UI.Output(fmt.Sprintf("has next page: %v", versionsOutput.PageInfo.HasNextPage))
-		if versionsOutput.PageInfo.HasNextPage {
-			// Show the next cursor _ONLY_ if there is a next page.
-			mlc.meta.UI.Output(fmt.Sprintf("next cursor: %s", versionsOutput.PageInfo.Cursor))
+
+		c.UI.Table(t)
+		namedValues := []terminal.NamedValue{
+			{Name: "Total count", Value: result.GetPageInfo().TotalCount},
+			{Name: "Has Next Page", Value: result.GetPageInfo().HasNextPage},
 		}
+		if result.GetPageInfo().EndCursor != nil {
+			namedValues = append(namedValues, terminal.NamedValue{
+				Name:  "Next cursor",
+				Value: result.GetPageInfo().GetEndCursor(),
+			})
+		}
+
+		c.UI.NamedValues(namedValues)
 	}
 
 	return 0
 }
 
-func (mlc moduleListVersionsCommand) buildModuleListVersionsDefs() optparser.OptionDefinitions {
-	defs := buildPaginationOptionDefs()
-
-	defs["sort-by"] = &optparser.OptionDefinition{
-		Arguments: []string{"Sort_By"},
-		Synopsis:  "Sort by this field: CREATED or UPDATED.",
-	}
-
-	return buildJSONOptionDefs(defs)
+func (*moduleListVersionsCommand) Synopsis() string {
+	return "Retrieve a paginated list of module versions."
 }
 
-func (mlc moduleListVersionsCommand) Synopsis() string {
-	return "List module versions."
+func (*moduleListVersionsCommand) Description() string {
+	return `
+   The module list-versions command prints information about versions
+   of a specific module. Supports pagination, filtering and sorting.
+`
 }
 
-func (mlc moduleListVersionsCommand) Help() string {
-	return mlc.HelpModuleListVersions()
+func (*moduleListVersionsCommand) Usage() string {
+	return "tharsis [global options] module list-versions [options] <module-id>"
 }
 
-// HelpModuleListVersions returns the help string for the 'module list-versions' command.
-func (mlc moduleListVersionsCommand) HelpModuleListVersions() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] module list-versions [options] <module-path>
+func (*moduleListVersionsCommand) Example() string {
+	return `
+tharsis module list-versions \
+  --search 1.0 \
+  --sort-by CREATED_AT_DESC \
+  --limit 10 \
+  trn:terraform_module:<group_path>/<module_name>/<system>
+`
+}
 
-   The module list-versions command prints information
-   about (likely multiple) module versions. Supports
-   pagination, filtering and sorting the output.
-
-   Example:
-
-   %s module list-versions \
-      --limit 5 \
-      --json \
-      some/module/aws
-
-   Above command will only show five module versions
-   in JSON format.
-
-%s
-
-`,
-		mlc.meta.BinaryName,
-		mlc.meta.BinaryName,
-		buildHelpText(mlc.buildModuleListVersionsDefs()),
+func (c *moduleListVersionsCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"cursor",
+		"The cursor string for manual pagination.",
+		func(s string) error {
+			c.cursor = &s
+			return nil
+		},
 	)
+	f.IntVar(
+		&c.limit,
+		"limit",
+		maxPaginationLimit,
+		"Maximum number of result elements to return.",
+	)
+	f.Func(
+		"sort-by",
+		"Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).",
+		func(s string) error {
+			// TODO: Update to use PB types and validate with PB map once deprecation is done.
+			switch v := strings.ToUpper(s); v {
+			case pb.TerraformModuleVersionSortableField_CREATED_AT_ASC.String(),
+				pb.TerraformModuleVersionSortableField_CREATED_AT_DESC.String(),
+				pb.TerraformModuleVersionSortableField_UPDATED_AT_ASC.String(),
+				pb.TerraformModuleVersionSortableField_UPDATED_AT_DESC.String():
+				c.sortBy = &v
+			case "UPDATED": // Deprecated
+				c.sortBy = ptr.String("UPDATED_AT")
+			case "CREATED": // Deprecated
+				c.sortBy = ptr.String("CREATED_AT")
+			default:
+				return fmt.Errorf("unknown sort by option %s", s)
+			}
+
+			return nil
+		},
+	)
+	f.Func(
+		"search",
+		"Filter to versions containing this substring.",
+		func(s string) error {
+			c.search = &s
+			return nil
+		},
+	)
+	f.BoolFunc(
+		"latest",
+		"Filter to only the latest version.",
+		func(s string) error {
+			b, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+
+			c.latest = &b
+			return nil
+		},
+	)
+	f.Func(
+		"semantic-version",
+		"Filter to a specific semantic version.",
+		func(s string) error {
+			c.semanticVersion = &s
+			return nil
+		},
+	)
+	f.Func(
+		"sort-order",
+		"Sort in this direction, ASC or DESC. Deprecated",
+		func(s string) error {
+			switch v := strings.ToUpper(s); v {
+			case "ASC", "DESC":
+				c.sortOrder = &v
+			default:
+				return fmt.Errorf("invalid sort-order value: %s", s)
+			}
+
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
 }

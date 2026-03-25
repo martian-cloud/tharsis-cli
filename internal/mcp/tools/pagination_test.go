@@ -5,82 +5,47 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/stretchr/testify/assert"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
-func TestBuildPaginationOptions(t *testing.T) {
+func TestToSortEnum(t *testing.T) {
+	enumMap := map[string]int32{
+		"name_asc":  1,
+		"name_desc": 2,
+		"date_asc":  3,
+	}
+
 	type testCase struct {
-		name           string
-		limit          *int32
-		cursor         *string
-		expectedLimit  int32
-		expectedCursor *string
+		name     string
+		sortStr  *string
+		expected *int32
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name:           "with both limit and cursor",
-			limit:          ptr.Int32(50),
-			cursor:         ptr.String("abc123"),
-			expectedLimit:  50,
-			expectedCursor: ptr.String("abc123"),
+			name:     "nil input",
+			sortStr:  nil,
+			expected: nil,
 		},
 		{
-			name:           "with only limit",
-			limit:          ptr.Int32(25),
-			cursor:         nil,
-			expectedLimit:  25,
-			expectedCursor: nil,
+			name:     "valid enum value",
+			sortStr:  ptr.String("name_asc"),
+			expected: ptr.Int32(1),
 		},
 		{
-			name:           "with only cursor",
-			limit:          nil,
-			cursor:         ptr.String("xyz789"),
-			expectedLimit:  defaultPageLimit,
-			expectedCursor: ptr.String("xyz789"),
-		},
-		{
-			name:           "with no parameters - uses defaults",
-			limit:          nil,
-			cursor:         nil,
-			expectedLimit:  defaultPageLimit,
-			expectedCursor: nil,
-		},
-		{
-			name:           "with limit exceeding max - capped at maxPageLimit",
-			limit:          ptr.Int32(200),
-			cursor:         nil,
-			expectedLimit:  maxPageLimit,
-			expectedCursor: nil,
-		},
-		{
-			name:           "with limit below 1 - uses default",
-			limit:          ptr.Int32(0),
-			cursor:         nil,
-			expectedLimit:  defaultPageLimit,
-			expectedCursor: nil,
-		},
-		{
-			name:           "with negative limit - uses default",
-			limit:          ptr.Int32(-5),
-			cursor:         nil,
-			expectedLimit:  defaultPageLimit,
-			expectedCursor: nil,
+			name:     "invalid enum value",
+			sortStr:  ptr.String("invalid"),
+			expected: nil,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := buildPaginationOptions(tt.limit, tt.cursor)
-
-			assert.NotNil(t, result.Limit)
-			assert.Equal(t, tt.expectedLimit, *result.Limit)
-
-			if tt.expectedCursor != nil {
-				assert.NotNil(t, result.Cursor)
-				assert.Equal(t, *tt.expectedCursor, *result.Cursor)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := toSortEnum[int32](tc.sortStr, enumMap)
+			if tc.expected == nil {
+				assert.Nil(t, result)
 			} else {
-				assert.Nil(t, result.Cursor)
+				assert.Equal(t, *tc.expected, *result)
 			}
 		})
 	}
@@ -89,51 +54,106 @@ func TestBuildPaginationOptions(t *testing.T) {
 func TestBuildPageInfo(t *testing.T) {
 	type testCase struct {
 		name     string
-		input    sdktypes.PageInfo
+		input    *pb.PageInfo
 		expected pageInfo
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "with next page",
-			input: sdktypes.PageInfo{
+			name: "with cursor",
+			input: &pb.PageInfo{
 				HasNextPage: true,
-				Cursor:      "next-cursor-123",
+				TotalCount:  100,
+				EndCursor:   ptr.String("cursor123"),
 			},
 			expected: pageInfo{
 				HasNextPage: true,
-				Cursor:      "next-cursor-123",
+				TotalCount:  100,
+				Cursor:      ptr.String("cursor123"),
 			},
 		},
 		{
-			name: "without next page",
-			input: sdktypes.PageInfo{
+			name: "without cursor",
+			input: &pb.PageInfo{
 				HasNextPage: false,
-				Cursor:      "",
+				TotalCount:  10,
 			},
 			expected: pageInfo{
 				HasNextPage: false,
-				Cursor:      "",
-			},
-		},
-		{
-			name: "last page with cursor",
-			input: sdktypes.PageInfo{
-				HasNextPage: false,
-				Cursor:      "last-cursor",
-			},
-			expected: pageInfo{
-				HasNextPage: false,
-				Cursor:      "last-cursor",
+				TotalCount:  10,
+				Cursor:      nil,
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := buildPageInfo(&tt.input)
-			assert.Equal(t, tt.expected.HasNextPage, result.HasNextPage)
-			assert.Equal(t, tt.expected.Cursor, result.Cursor)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := buildPageInfo(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestBuildPaginationOptions(t *testing.T) {
+	type testCase struct {
+		name     string
+		limit    *int32
+		cursor   *string
+		expected *pb.PaginationOptions
+	}
+
+	testCases := []testCase{
+		{
+			name:   "nil limit uses default",
+			limit:  nil,
+			cursor: nil,
+			expected: &pb.PaginationOptions{
+				First: ptr.Int32(10),
+				After: nil,
+			},
+		},
+		{
+			name:   "valid limit",
+			limit:  ptr.Int32(25),
+			cursor: ptr.String("cursor123"),
+			expected: &pb.PaginationOptions{
+				First: ptr.Int32(25),
+				After: ptr.String("cursor123"),
+			},
+		},
+		{
+			name:   "limit exceeds max",
+			limit:  ptr.Int32(100),
+			cursor: nil,
+			expected: &pb.PaginationOptions{
+				First: ptr.Int32(50),
+				After: nil,
+			},
+		},
+		{
+			name:   "zero limit uses default",
+			limit:  ptr.Int32(0),
+			cursor: nil,
+			expected: &pb.PaginationOptions{
+				First: ptr.Int32(10),
+				After: nil,
+			},
+		},
+		{
+			name:   "negative limit uses default",
+			limit:  ptr.Int32(-5),
+			cursor: nil,
+			expected: &pb.PaginationOptions{
+				First: ptr.Int32(10),
+				After: nil,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := buildPaginationOptions(tc.limit, tc.cursor)
+			assert.Equal(t, tc.expected, result)
 		})
 	}
 }

@@ -1,156 +1,132 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"errors"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// groupMigrateCommand is the top-level structure for the group migrate command.
 type groupMigrateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	toTopLevel  *bool
+	newParentID *string
+	toJSON      bool
 }
 
 // NewGroupMigrateCommandFactory returns a groupMigrateCommand struct.
-func NewGroupMigrateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupMigrateCommand{
-			meta: meta,
+func NewGroupMigrateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupMigrateCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (gmc groupMigrateCommand) Run(args []string) int {
-	gmc.meta.Logger.Debugf("Starting the 'group migrate' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		gmc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *groupMigrateCommand) validate() error {
+	if c.newParentID != nil && c.toTopLevel != nil {
+		return errors.New("must supply only one of --new-parent-path and --to-top-level")
 	}
 
-	client, err := gmc.meta.GetSDKClient()
-	if err != nil {
-		gmc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return gmc.doGroupMigrate(ctx, client, args)
+	const message = "group-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
-func (gmc groupMigrateCommand) doGroupMigrate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	gmc.meta.Logger.Debugf("will do group migrate, %d opts", len(opts))
+func (c *groupMigrateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group migrate"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := gmc.buildGroupMigrateOptionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(gmc.meta.BinaryName+" group migrate", defs, opts)
+	input := &pb.MigrateGroupRequest{
+		GroupId:     trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		NewParentId: c.newParentID,
+	}
+
+	group, err := c.grpcClient.GroupsClient.MigrateGroup(c.Context, input)
 	if err != nil {
-		gmc.meta.Logger.Error(output.FormatError("failed to parse group migrate options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		gmc.meta.Logger.Error(output.FormatError("missing group migrate full path", nil), gmc.HelpGroupMigrate())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group migrate arguments: %s", cmdArgs)
-		gmc.meta.Logger.Error(output.FormatError(msg, nil), gmc.HelpGroupMigrate())
+		c.UI.ErrorWithSummary(err, "failed to migrate group")
 		return 1
 	}
 
-	path := cmdArgs[0]
-	newParent := getOption("new-parent-path", "", cmdOpts)[0]
-	toTopLevel, err := getBoolOptionValue("to-top-level", "false", cmdOpts)
-	if err != nil {
-		gmc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		gmc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Extract path from TRN if needed, then validate path (error is already logged by validation function)
-	actualPath := trn.ToPath(path)
-	if !isNamespacePathValid(gmc.meta, actualPath) {
-		return 1
-	}
-
-	// Check that options are consistent.
-	if (newParent == "") && !toTopLevel {
-		gmc.meta.Logger.Error(output.FormatError("Must supply either --new-parent-path or --to-top-level", nil))
-		return 1
-	}
-	if (newParent != "") && toTopLevel {
-		gmc.meta.Logger.Error(output.FormatError("Must supply only one of --new-parent-path and --to-top-level", nil))
-		return 1
-	}
-
-	// Prepare the inputs.
-	// Extract path from TRN if needed - GroupPath field expects paths, not TRNs
-	actualPath = trn.ToPath(path)
-
-	var newParentPath *string
-	if newParent != "" {
-		// Also extract path from TRN for new parent if needed
-		actualNewParent := trn.ToPath(newParent)
-		newParentPath = &actualNewParent
-	}
-	input := &sdktypes.MigrateGroupInput{
-		GroupPath:     actualPath,
-		NewParentPath: newParentPath,
-	}
-	gmc.meta.Logger.Debugf("group migrate input: %#v", input)
-
-	// Migrate the group.
-	migratedGroup, err := client.Group.MigrateGroup(ctx, input)
-	if err != nil {
-		gmc.meta.Logger.Error(output.FormatError("failed to migrate a group", err))
-		return 1
-	}
-
-	return outputGroup(gmc.meta, toJSON, migratedGroup)
+	return outputGroup(c.UI, c.toJSON, group)
 }
 
-// buildGroupMigrateOptionDefs returns the defs used by
-// group migrate command.
-func (gmc groupMigrateCommand) buildGroupMigrateOptionDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"new-parent-path": {
-			Arguments: []string{"New_Parent"},
-			Synopsis:  "New parent path for the group.",
+func (*groupMigrateCommand) Synopsis() string {
+	return "Migrate a group to a new parent or to top-level."
+}
+
+func (*groupMigrateCommand) Description() string {
+	return `
+   The group migrate command migrates a group to another parent group or to top-level.
+   Omit --new-parent-id to migrate to top-level.
+`
+}
+
+func (*groupMigrateCommand) Usage() string {
+	return "tharsis [global options] group migrate [options] <group-id>"
+}
+
+func (*groupMigrateCommand) Example() string {
+	return `
+tharsis group migrate \
+  --new-parent-id trn:group:<parent_group_path> \
+  trn:group:<group_path>
+`
+}
+
+func (c *groupMigrateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.Func(
+		"new-parent-id",
+		"New parent group ID. Omit to migrate to top-level.",
+		func(s string) error {
+			c.newParentID = &s
+			return nil
 		},
-		"to-top-level": {
-			Arguments: []string{}, // zero arguments means it's a bool with no argument
-			Synopsis:  "Migrate group to top-level.",
+	)
+	f.Func(
+		"new-parent-path",
+		"New parent path for the group. Deprecated",
+		func(s string) error {
+			c.newParentID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, s))
+			return nil
 		},
-	}
+	)
+	f.BoolFunc(
+		"to-top-level",
+		"Migrate group to top level. Deprecated.",
+		func(s string) error {
+			b, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
 
-	return buildJSONOptionDefs(defs)
-}
+			c.toTopLevel = &b
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-func (gmc groupMigrateCommand) Synopsis() string {
-	return "Migrate a group."
-}
-
-func (gmc groupMigrateCommand) Help() string {
-	return gmc.HelpGroupMigrate()
-}
-
-// HelpGroupMigrate produces the help string for the 'group migrate' command.
-func (gmc groupMigrateCommand) HelpGroupMigrate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group migrate [options] <full_path>
-
-   The group migrate command migrates a group to another parent group
-	 or to top-level.
-
-%s
-
-`, gmc.meta.BinaryName, buildHelpText(gmc.buildGroupMigrateOptionDefs()))
+	return f
 }

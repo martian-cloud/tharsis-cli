@@ -6,445 +6,452 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+type groupMocks struct {
+	groups *mocks.GroupsClient
+	acl    *acl.MockChecker
+}
 
 func TestListGroups(t *testing.T) {
 	type testCase struct {
-		name     string
-		input    listGroupsInput
-		groups   []sdktypes.Group
-		pageInfo sdktypes.PageInfo
-		validate func(*testing.T, listGroupsOutput)
+		name          string
+		input         *listGroupsInput
+		mockSetup     func(*groupMocks)
+		expectError   bool
+		expectResults int
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name:  "list groups without filter",
-			input: listGroupsInput{},
-			groups: []sdktypes.Group{
-				{
-					Metadata:    sdktypes.ResourceMetadata{ID: "group-1"},
-					Name:        "group-1",
-					FullPath:    "parent/group-1",
-					Description: "First group",
-				},
-				{
-					Metadata:    sdktypes.ResourceMetadata{ID: "group-2"},
-					Name:        "group-2",
-					FullPath:    "parent/group-2",
-					Description: "Second group",
-				},
-			},
-			pageInfo: sdktypes.PageInfo{
-				HasNextPage: false,
-				Cursor:      "",
-			},
-			validate: func(t *testing.T, output listGroupsOutput) {
-				assert.Len(t, output.Groups, 2)
-				assert.Equal(t, "group-1", output.Groups[0].ID)
-				assert.Equal(t, "parent/group-1", output.Groups[0].Path)
-				assert.False(t, output.PageInfo.HasNextPage)
-			},
-		},
-		{
-			name: "list groups with parent filter",
-			input: listGroupsInput{
-				ParentPath: ptr.String("parent"),
-			},
-			groups: []sdktypes.Group{
-				{
-					Metadata: sdktypes.ResourceMetadata{ID: "group-1"},
-					Name:     "group-1",
-					FullPath: "parent/group-1",
-				},
-			},
-			pageInfo: sdktypes.PageInfo{
-				HasNextPage: false,
-				Cursor:      "",
-			},
-			validate: func(t *testing.T, output listGroupsOutput) {
-				assert.Len(t, output.Groups, 1)
-			},
-		},
-		{
-			name: "list groups with pagination",
-			input: listGroupsInput{
-				Limit:  ptr.Int32(10),
-				Cursor: ptr.String("cursor-123"),
-			},
-			groups: []sdktypes.Group{
-				{
-					Metadata: sdktypes.ResourceMetadata{ID: "group-3"},
-					Name:     "group-3",
-					FullPath: "parent/group-3",
-				},
-			},
-			pageInfo: sdktypes.PageInfo{
-				HasNextPage: true,
-				Cursor:      "cursor-456",
-			},
-			validate: func(t *testing.T, output listGroupsOutput) {
-				assert.Len(t, output.Groups, 1)
-				assert.True(t, output.PageInfo.HasNextPage)
-				assert.Equal(t, "cursor-456", output.PageInfo.Cursor)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockGroup := tharsis.NewGroup(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockClient.On("Groups").Return(mockGroup)
-			mockGroup.On("GetGroups", mock.Anything, mock.Anything).Return(
-				&sdktypes.GetGroupsOutput{
-					Groups:   tt.groups,
-					PageInfo: &tt.pageInfo,
+			name:  "list groups successfully",
+			input: &listGroupsInput{Limit: ptr.Int32(10)},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroups", mock.Anything, &pb.GetGroupsRequest{
+					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
+				}).Return(&pb.GetGroupsResponse{
+					Groups: []*pb.Group{
+						{Metadata: &pb.ResourceMetadata{
+							Id:  "g1",
+							Trn: "trn:group:group1",
+						},
+							Name:     "group1",
+							FullPath: "group1",
+						},
+					},
+					PageInfo: &pb.PageInfo{HasNextPage: false},
 				}, nil)
+			},
+			expectResults: 1,
+		},
+		{
+			name:  "list groups with parent filter",
+			input: &listGroupsInput{ParentID: ptr.String("parent1"), Limit: ptr.Int32(10)},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroups", mock.Anything, &pb.GetGroupsRequest{
+					ParentId:          ptr.String("parent1"),
+					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
+				}).Return(&pb.GetGroupsResponse{
+					Groups: []*pb.Group{
+						{Metadata: &pb.ResourceMetadata{
+							Id:  "g1",
+							Trn: "trn:group:parent1/child1",
+						},
+							Name:     "child1",
+							FullPath: "parent1/child1",
+						},
+					},
+					PageInfo: &pb.PageInfo{HasNextPage: false},
+				}, nil)
+			},
+			expectResults: 1,
+		},
+		{
+			name:  "grpc error",
+			input: &listGroupsInput{Limit: ptr.Int32(10)},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroups", mock.Anything, &pb.GetGroupsRequest{
+					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
+				}).Return(nil, status.Error(codes.Internal, "internal error"))
+			},
+			expectError: true,
+		},
+	}
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &groupMocks{
+				groups: mocks.NewGroupsClient(t),
+			}
+
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					GroupsClient: testMocks.groups,
 				},
-				acl: mockACL,
 			}
 
-			_, handler := listGroups(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := listGroups(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			assert.NoError(t, err)
-			if tt.validate != nil {
-				tt.validate(t, output)
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Len(t, output.Groups, tc.expectResults)
 		})
 	}
 }
 
 func TestGetGroup(t *testing.T) {
-	groupID := "test-group-id"
-
 	type testCase struct {
 		name        string
-		group       *sdktypes.Group
-		aclError    error
+		input       *getGroupInput
+		mockSetup   func(*groupMocks)
 		expectError bool
-		validate    func(*testing.T, getGroupOutput)
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "successful group retrieval",
-			group: &sdktypes.Group{
-				Metadata: sdktypes.ResourceMetadata{
-					ID: groupID,
-				},
-				FullPath:    "parent/test-group",
-				Name:        "test-group",
-				Description: "Test group description",
-			},
-			validate: func(t *testing.T, output getGroupOutput) {
-				assert.Equal(t, groupID, output.Group.ID)
-				assert.Equal(t, "parent/test-group", output.Group.Path)
-				assert.Equal(t, "test-group", output.Group.Name)
-				assert.Equal(t, "Test group description", output.Group.Description)
+			name:  "get group successfully",
+			input: &getGroupInput{ID: "g1"},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "g1"}).Return(&pb.Group{
+					Metadata: &pb.ResourceMetadata{
+						Id:  "g1",
+						Trn: "trn:group:group1",
+					},
+					Name:        "group1",
+					FullPath:    "group1",
+					Description: "test group",
+				}, nil)
 			},
 		},
 		{
-			name: "group with empty description",
-			group: &sdktypes.Group{
-				Metadata: sdktypes.ResourceMetadata{
-					ID: groupID,
-				},
-				FullPath: "org/team",
-				Name:     "team",
+			name:  "group not found",
+			input: &getGroupInput{ID: "nonexistent"},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
 			},
-			validate: func(t *testing.T, output getGroupOutput) {
-				assert.Equal(t, "team", output.Group.Name)
-				assert.Equal(t, "", output.Group.Description)
-			},
+			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockGroup := tharsis.NewGroup(t)
-			mockACL := acl.NewMockChecker(t)
-
-			if tt.aclError == nil {
-				mockClient.On("Groups").Return(mockGroup)
-				mockGroup.On("GetGroup", mock.Anything, &sdktypes.GetGroupInput{ID: &groupID}).Return(tt.group, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &groupMocks{
+				groups: mocks.NewGroupsClient(t),
 			}
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{
+					GroupsClient: testMocks.groups,
 				},
-				acl: mockACL,
 			}
 
-			_, handler := getGroup(tc)
-			_, output, err := handler(t.Context(), nil, getGroupInput{ID: groupID})
+			_, handler := getGroup(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, output.Group)
 		})
 	}
 }
 
 func TestCreateGroup(t *testing.T) {
-	tests := []struct {
+	type testCase struct {
 		name        string
-		input       createGroupInput
-		group       *sdktypes.Group
-		aclError    error
+		input       *createGroupInput
+		mockSetup   func(*groupMocks)
 		expectError bool
-		validate    func(*testing.T, createGroupOutput)
-	}{
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful group creation",
-			input: createGroupInput{
-				Name:       "new-group",
-				ParentPath: "parent",
+			name: "create child group successfully",
+			input: &createGroupInput{
+				ParentID:    "trn:group:parent1",
+				Name:        "child-group",
+				Description: "test child group",
 			},
-			group: &sdktypes.Group{
-				Metadata: sdktypes.ResourceMetadata{ID: "group-id"},
-				FullPath: "parent/new-group",
-				Name:     "new-group",
-			},
-			validate: func(t *testing.T, output createGroupOutput) {
-				assert.Equal(t, "group-id", output.Group.ID)
-				assert.Equal(t, "parent/new-group", output.Group.Path)
-				assert.Equal(t, "new-group", output.Group.Name)
+			mockSetup: func(m *groupMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:parent1", trn.ResourceTypeGroup).Return(nil)
+				m.groups.On("CreateGroup", mock.Anything, &pb.CreateGroupRequest{
+					ParentId:    ptr.String("trn:group:parent1"),
+					Name:        "child-group",
+					Description: "test child group",
+				}).Return(&pb.Group{
+					Metadata: &pb.ResourceMetadata{Id: "g2", Trn: "trn:group:parent1/child-group"},
+					Name:     "child-group",
+					FullPath: "parent1/child-group",
+				}, nil)
 			},
 		},
 		{
-			name: "ACL denial",
-			input: createGroupInput{
-				Name:       "new-group",
-				ParentPath: "parent",
+			name: "create failed",
+			input: &createGroupInput{
+				ParentID:    "trn:group:parent1",
+				Name:        "child-group",
+				Description: "test child group",
 			},
-			aclError:    assert.AnError,
+			mockSetup: func(m *groupMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:parent1", trn.ResourceTypeGroup).Return(nil)
+				m.groups.On("CreateGroup", mock.Anything, &pb.CreateGroupRequest{
+					ParentId:    ptr.String("trn:group:parent1"),
+					Name:        "child-group",
+					Description: "test child group",
+				}).Return(nil, status.Error(codes.NotFound, "not found"))
+			},
+			expectError: true,
+		},
+		{
+			name: "acl denial",
+			input: &createGroupInput{
+				ParentID: "p1",
+				Name:     "child-group",
+			},
+			mockSetup: func(m *groupMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "p1", trn.ResourceTypeGroup).Return(assert.AnError)
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockGroup := tharsis.NewGroup(t)
-			mockACL := acl.NewMockChecker(t)
-
-			if tt.aclError == nil {
-				mockClient.On("Groups").Return(mockGroup)
-				mockGroup.On("CreateGroup", mock.Anything, &sdktypes.CreateGroupInput{
-					Name:        tt.input.Name,
-					ParentPath:  &tt.input.ParentPath,
-					Description: tt.input.Description,
-				}).Return(tt.group, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &groupMocks{
+				groups: mocks.NewGroupsClient(t),
+				acl:    acl.NewMockChecker(t),
 			}
-			mockACL.On("Authorize", mock.Anything, mockClient, "trn:group:"+tt.input.ParentPath, trn.ResourceTypeGroup).Return(tt.aclError)
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				acl: testMocks.acl,
+				grpcClient: &client.Client{
+					GroupsClient: testMocks.groups,
 				},
-				acl: mockACL,
 			}
 
-			_, handler := createGroup(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := createGroup(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, output.Group)
 		})
 	}
 }
 
 func TestUpdateGroup(t *testing.T) {
-	groupID := "group-id"
-
-	tests := []struct {
+	type testCase struct {
 		name        string
-		input       updateGroupInput
-		group       *sdktypes.Group
-		aclError    error
+		input       *updateGroupInput
+		mockSetup   func(*groupMocks)
 		expectError bool
-		validate    func(*testing.T, updateGroupOutput)
-	}{
+	}
+
+	testCases := []testCase{
 		{
-			name: "successful group update",
-			input: updateGroupInput{
-				ID:          groupID,
-				Description: "Updated description",
+			name: "update group successfully",
+			input: &updateGroupInput{
+				ID:          "trn:group:g1/g2",
+				Description: ptr.String("updated description"),
 			},
-			group: &sdktypes.Group{
-				Metadata:    sdktypes.ResourceMetadata{ID: groupID},
-				FullPath:    "parent/group",
-				Name:        "group",
-				Description: "Updated description",
-			},
-			validate: func(t *testing.T, output updateGroupOutput) {
-				assert.Equal(t, groupID, output.Group.ID)
-				assert.Equal(t, "Updated description", output.Group.Description)
+			mockSetup: func(m *groupMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(nil)
+				m.groups.On("UpdateGroup", mock.Anything, &pb.UpdateGroupRequest{
+					Id:          "trn:group:g1/g2",
+					Description: ptr.String("updated description"),
+				}).Return(&pb.Group{
+					Metadata:    &pb.ResourceMetadata{Id: "g2", Trn: "trn:group:g1/g2"},
+					Name:        "group1",
+					Description: "updated description",
+				}, nil)
 			},
 		},
 		{
-			name: "ACL denial",
-			input: updateGroupInput{
-				ID:          groupID,
-				Description: "Updated description",
+			name: "update failed",
+			input: &updateGroupInput{
+				ID:          "trn:group:g1/g2",
+				Description: ptr.String("updated"),
 			},
-			aclError:    assert.AnError,
+			mockSetup: func(m *groupMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(nil)
+				m.groups.On("UpdateGroup", mock.Anything, &pb.UpdateGroupRequest{
+					Id:          "trn:group:g1/g2",
+					Description: ptr.String("updated"),
+				}).Return(nil, status.Error(codes.NotFound, "not found"))
+			},
+			expectError: true,
+		},
+		{
+			name: "acl denial",
+			input: &updateGroupInput{
+				ID:          "trn:group:g1/g2",
+				Description: ptr.String("updated"),
+			},
+			mockSetup: func(m *groupMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(assert.AnError)
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockGroup := tharsis.NewGroup(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockACL.On("Authorize", mock.Anything, mockClient, groupID, trn.ResourceTypeGroup).Return(tt.aclError)
-
-			if tt.aclError == nil {
-				mockClient.On("Groups").Return(mockGroup)
-				mockGroup.On("UpdateGroup", mock.Anything, &sdktypes.UpdateGroupInput{
-					ID:          &tt.input.ID,
-					Description: tt.input.Description,
-				}).Return(tt.group, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &groupMocks{
+				groups: mocks.NewGroupsClient(t),
+				acl:    acl.NewMockChecker(t),
 			}
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				acl: testMocks.acl,
+				grpcClient: &client.Client{
+					GroupsClient: testMocks.groups,
 				},
-				acl: mockACL,
 			}
 
-			_, handler := updateGroup(tc)
-			_, output, err := handler(t.Context(), nil, tt.input)
+			_, handler := updateGroup(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, output.Group)
+			assert.Equal(t, output.Group.Description, *tc.input.Description)
 		})
 	}
 }
 
 func TestDeleteGroup(t *testing.T) {
-	groupID := "test-group-id"
-
 	type testCase struct {
 		name        string
-		topLevel    bool
-		aclError    error
+		input       *deleteGroupInput
+		mockSetup   func(*groupMocks)
 		expectError bool
-		validate    func(*testing.T, deleteGroupOutput)
 	}
 
-	tests := []testCase{
+	testCases := []testCase{
 		{
-			name: "successful group deletion",
-			validate: func(t *testing.T, output deleteGroupOutput) {
-				assert.True(t, output.Success)
-				assert.Contains(t, output.Message, "deleted successfully")
+			name:  "delete group successfully",
+			input: &deleteGroupInput{ID: "trn:group:g1/g2"},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:g1/g2"}).Return(&pb.Group{
+					Metadata: &pb.ResourceMetadata{
+						Id:  "g2",
+						Trn: "trn:group:g1/g2",
+					},
+					FullPath: "g1/g2",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(nil)
+				m.groups.On("DeleteGroup", mock.Anything, &pb.DeleteGroupRequest{Id: "trn:group:g1/g2"}).Return(nil, nil)
 			},
 		},
 		{
-			name:        "prevent top-level group deletion",
-			topLevel:    true,
+			name:  "denies root group deletion",
+			input: &deleteGroupInput{ID: "trn:group:g1"},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:g1"}).Return(&pb.Group{
+					Metadata: &pb.ResourceMetadata{
+						Id:  "g1",
+						Trn: "trn:group:g1",
+					},
+					FullPath: "g1",
+				}, nil)
+			},
 			expectError: true,
 		},
 		{
-			name:        "ACL denial",
-			aclError:    assert.AnError,
+			name:  "group not found",
+			input: &deleteGroupInput{ID: "nonexistent"},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
+			},
+			expectError: true,
+		},
+		{
+			name:  "acl denial",
+			input: &deleteGroupInput{ID: "trn:group:g1/g2"},
+			mockSetup: func(m *groupMocks) {
+				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:g1/g2"}).Return(&pb.Group{
+					Metadata: &pb.ResourceMetadata{
+						Id:  "g2",
+						Trn: "trn:group:g1/g2",
+					},
+					FullPath: "g1/g2",
+				}, nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(assert.AnError)
+			},
 			expectError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockGroup := tharsis.NewGroup(t)
-			mockACL := acl.NewMockChecker(t)
-
-			mockClient.On("Groups").Return(mockGroup)
-
-			// Mock GetGroup with appropriate path (always called first)
-			groupPath := "parent/child"
-			if tt.topLevel {
-				groupPath = "toplevel"
-			}
-			mockGroup.On("GetGroup", mock.Anything, &sdktypes.GetGroupInput{ID: &groupID}).
-				Return(&sdktypes.Group{
-					Metadata: sdktypes.ResourceMetadata{ID: groupID},
-					FullPath: groupPath,
-					Name:     "child",
-				}, nil)
-
-			// Only expect ACL and DeleteGroup calls if not top-level and no ACL error
-			if !tt.topLevel {
-				mockACL.On("Authorize", mock.Anything, mockClient, groupID, trn.ResourceTypeGroup).Return(tt.aclError)
-
-				if tt.aclError == nil {
-					mockGroup.On("DeleteGroup", mock.Anything, &sdktypes.DeleteGroupInput{ID: &groupID}).
-						Return(nil)
-				}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testMocks := &groupMocks{
+				groups: mocks.NewGroupsClient(t),
+				acl:    acl.NewMockChecker(t),
 			}
 
-			tc := &ToolContext{
-				tharsisURL:  "https://test.tharsis.io",
-				profileName: "test",
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
+			if tc.mockSetup != nil {
+				tc.mockSetup(testMocks)
+			}
+
+			toolCtx := &ToolContext{
+				acl: testMocks.acl,
+				grpcClient: &client.Client{
+					GroupsClient: testMocks.groups,
 				},
-				acl: mockACL,
 			}
 
-			_, handler := deleteGroup(tc)
-			_, output, err := handler(t.Context(), nil, deleteGroupInput{ID: groupID})
+			_, handler := deleteGroup(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				if tt.validate != nil {
-					tt.validate(t, output)
-				}
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.True(t, output.Success)
 		})
 	}
 }

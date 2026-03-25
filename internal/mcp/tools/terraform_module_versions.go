@@ -9,9 +9,10 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
 // terraformModuleVersion is the output type for Terraform module versions.
@@ -25,33 +26,36 @@ type terraformModuleVersion struct {
 	Error       string   `json:"error,omitempty" jsonschema:"Error message if upload or processing failed"`
 	Diagnostics string   `json:"diagnostics,omitempty" jsonschema:"Diagnostic information from module processing"`
 	Submodules  []string `json:"submodules" jsonschema:"List of submodule paths found in the module"`
-	Examples    []string `json:"examples" jsonschema:"List of example paths found in the module"`
 	Latest      bool     `json:"latest" jsonschema:"Whether this is the latest version of the module"`
+	CreatedBy   string   `json:"created_by" jsonschema:"Username or service account that created this version"`
 }
 
-// toTerraformModuleVersion converts an SDK TerraformModuleVersion to the MCP output type.
-func toTerraformModuleVersion(v *sdktypes.TerraformModuleVersion) terraformModuleVersion {
+// toTerraformModuleVersion converts a proto TerraformModuleVersion to the MCP output type.
+func toTerraformModuleVersion(v *pb.TerraformModuleVersion) terraformModuleVersion {
 	return terraformModuleVersion{
-		ID:          v.Metadata.ID,
-		TRN:         v.Metadata.TRN,
-		ModuleID:    v.ModuleID,
-		Version:     v.Version,
-		SHASum:      v.SHASum,
+		ID:          v.Metadata.Id,
+		TRN:         v.Metadata.Trn,
+		ModuleID:    v.ModuleId,
+		Version:     v.SemanticVersion,
+		SHASum:      v.ShaSum,
 		Status:      v.Status,
 		Error:       v.Error,
 		Diagnostics: v.Diagnostics,
 		Submodules:  v.Submodules,
-		Examples:    v.Examples,
 		Latest:      v.Latest,
+		CreatedBy:   v.CreatedBy,
 	}
 }
 
 // listTerraformModuleVersionsInput is the input for listing Terraform module versions.
 type listTerraformModuleVersionsInput struct {
-	ModuleID string                                        `json:"module_id" jsonschema:"required,ID or TRN of the Terraform module (e.g. trn:terraform_module:group/module-name/system)"`
-	Sort     *sdktypes.TerraformModuleVersionSortableField `json:"sort,omitempty" jsonschema:"Sort field (CREATED_AT_ASC, CREATED_AT_DESC, UPDATED_AT_ASC, UPDATED_AT_DESC)"`
-	Limit    *int32                                        `json:"limit,omitempty" jsonschema:"Maximum number of versions to return"`
-	Cursor   *string                                       `json:"cursor,omitempty" jsonschema:"Pagination cursor for next page"`
+	ModuleID        string  `json:"module_id" jsonschema:"required,ID or TRN of the Terraform module (e.g. Ul8yZ... or trn:terraform_module:group/module-name/system)"`
+	Sort            *string `json:"sort,omitempty" jsonschema:"Sort field (CREATED_AT_ASC, CREATED_AT_DESC, UPDATED_AT_ASC, UPDATED_AT_DESC)"`
+	Search          *string `json:"search,omitempty" jsonschema:"Search term to filter by module path"`
+	Latest          *bool   `json:"latest,omitempty" jsonschema:"Filter to only latest version"`
+	SemanticVersion *string `json:"semantic_version,omitempty" jsonschema:"Filter by specific semantic version"`
+	Limit           *int32  `json:"limit,omitempty" jsonschema:"Maximum number of versions to return"`
+	Cursor          *string `json:"cursor,omitempty" jsonschema:"Pagination cursor for next page"`
 }
 
 // listTerraformModuleVersionsOutput is the output for listing Terraform module versions.
@@ -61,7 +65,7 @@ type listTerraformModuleVersionsOutput struct {
 }
 
 // ListTerraformModuleVersions returns an MCP tool for listing Terraform module versions.
-func listTerraformModuleVersions(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[listTerraformModuleVersionsInput, listTerraformModuleVersionsOutput]) {
+func listTerraformModuleVersions(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*listTerraformModuleVersionsInput, *listTerraformModuleVersionsOutput]) {
 	tool := mcp.Tool{
 		Name:        "list_terraform_module_versions",
 		Description: "List versions of a Terraform module. Supports sorting and pagination.",
@@ -71,30 +75,25 @@ func listTerraformModuleVersions(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input listTerraformModuleVersionsInput) (*mcp.CallToolResult, listTerraformModuleVersionsOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, listTerraformModuleVersionsOutput{}, err
-		}
-
-		resp, err := client.TerraformModuleVersions().GetModuleVersions(ctx, &sdktypes.GetTerraformModuleVersionsInput{
-			TerraformModuleID: input.ModuleID,
-			Sort:              input.Sort,
-			PaginationOptions: &sdktypes.PaginationOptions{
-				Limit:  input.Limit,
-				Cursor: input.Cursor,
-			},
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *listTerraformModuleVersionsInput) (*mcp.CallToolResult, *listTerraformModuleVersionsOutput, error) {
+		resp, err := tc.grpcClient.TerraformModulesClient.GetTerraformModuleVersions(ctx, &pb.GetTerraformModuleVersionsRequest{
+			ModuleId:          input.ModuleID,
+			Sort:              toSortEnum[pb.TerraformModuleVersionSortableField](input.Sort, pb.TerraformModuleVersionSortableField_value),
+			Search:            input.Search,
+			Latest:            input.Latest,
+			SemanticVersion:   input.SemanticVersion,
+			PaginationOptions: buildPaginationOptions(input.Limit, input.Cursor),
 		})
 		if err != nil {
-			return nil, listTerraformModuleVersionsOutput{}, fmt.Errorf("failed to list module versions: %w", err)
+			return nil, nil, fmt.Errorf("failed to list module versions: %w", err)
 		}
 
-		versions := make([]terraformModuleVersion, len(resp.ModuleVersions))
-		for i, v := range resp.ModuleVersions {
-			versions[i] = toTerraformModuleVersion(&v)
+		versions := make([]terraformModuleVersion, len(resp.Versions))
+		for i, v := range resp.Versions {
+			versions[i] = toTerraformModuleVersion(v)
 		}
 
-		return nil, listTerraformModuleVersionsOutput{
+		return nil, &listTerraformModuleVersionsOutput{
 			ModuleVersions: versions,
 			PageInfo:       buildPageInfo(resp.PageInfo),
 		}, nil
@@ -105,7 +104,7 @@ func listTerraformModuleVersions(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[
 
 // getTerraformModuleVersionInput is the input for getting a Terraform module version.
 type getTerraformModuleVersionInput struct {
-	ID string `json:"id" jsonschema:"required,Module version ID or TRN (e.g. trn:terraform_module_version:group/module-name/system/1.0.0)"`
+	ID string `json:"id" jsonschema:"required,Module version ID or TRN (e.g. Ul8yZ... or trn:terraform_module_version:group/module-name/system/1.0.0)"`
 }
 
 // getTerraformModuleVersionOutput is the output for getting a Terraform module version.
@@ -114,7 +113,7 @@ type getTerraformModuleVersionOutput struct {
 }
 
 // GetTerraformModuleVersion returns an MCP tool for getting a Terraform module version.
-func getTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[getTerraformModuleVersionInput, getTerraformModuleVersionOutput]) {
+func getTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getTerraformModuleVersionInput, *getTerraformModuleVersionOutput]) {
 	tool := mcp.Tool{
 		Name:        "get_terraform_module_version",
 		Description: "Get details of a specific Terraform module version by ID or TRN.",
@@ -124,21 +123,16 @@ func getTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[ge
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input getTerraformModuleVersionInput) (*mcp.CallToolResult, getTerraformModuleVersionOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, getTerraformModuleVersionOutput{}, err
-		}
-
-		version, err := client.TerraformModuleVersions().GetModuleVersion(ctx, &sdktypes.GetTerraformModuleVersionInput{
-			ID: &input.ID,
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *getTerraformModuleVersionInput) (*mcp.CallToolResult, *getTerraformModuleVersionOutput, error) {
+		resp, err := tc.grpcClient.TerraformModulesClient.GetTerraformModuleVersionByID(ctx, &pb.GetTerraformModuleVersionByIDRequest{
+			Id: input.ID,
 		})
 		if err != nil {
-			return nil, getTerraformModuleVersionOutput{}, fmt.Errorf("failed to get module version: %w", err)
+			return nil, nil, fmt.Errorf("failed to get module version: %w", err)
 		}
 
-		return nil, getTerraformModuleVersionOutput{
-			ModuleVersion: toTerraformModuleVersion(version),
+		return nil, &getTerraformModuleVersionOutput{
+			ModuleVersion: toTerraformModuleVersion(resp),
 		}, nil
 	}
 
@@ -147,7 +141,7 @@ func getTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[ge
 
 // deleteTerraformModuleVersionInput is the input for deleting a Terraform module version.
 type deleteTerraformModuleVersionInput struct {
-	ID string `json:"id" jsonschema:"required,Module version ID or TRN (e.g. trn:terraform_module_version:group/module-name/system/1.0.0)"`
+	ID string `json:"id" jsonschema:"required,Module version ID or TRN (e.g. Ul8yZ... or trn:terraform_module_version:group/module-name/system/1.0.0)"`
 }
 
 // deleteTerraformModuleVersionOutput is the output for deleting a Terraform module version.
@@ -157,7 +151,7 @@ type deleteTerraformModuleVersionOutput struct {
 }
 
 // DeleteTerraformModuleVersion returns an MCP tool for deleting a Terraform module version.
-func deleteTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[deleteTerraformModuleVersionInput, deleteTerraformModuleVersionOutput]) {
+func deleteTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteTerraformModuleVersionInput, *deleteTerraformModuleVersionOutput]) {
 	tool := mcp.Tool{
 		Name:        "delete_terraform_module_version",
 		Description: "Delete a Terraform module version. Use with caution as this operation is irreversible.",
@@ -167,23 +161,18 @@ func deleteTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input deleteTerraformModuleVersionInput) (*mcp.CallToolResult, deleteTerraformModuleVersionOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, deleteTerraformModuleVersionOutput{}, err
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *deleteTerraformModuleVersionInput) (*mcp.CallToolResult, *deleteTerraformModuleVersionOutput, error) {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeTerraformModuleVersion); err != nil {
+			return nil, nil, err
 		}
 
-		if err = tc.acl.Authorize(ctx, client, input.ID, trn.ResourceTypeTerraformModuleVersion); err != nil {
-			return nil, deleteTerraformModuleVersionOutput{}, err
-		}
-
-		if err := client.TerraformModuleVersions().DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{
-			ID: input.ID,
+		if _, err := tc.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(ctx, &pb.DeleteTerraformModuleVersionRequest{
+			Id: input.ID,
 		}); err != nil {
-			return nil, deleteTerraformModuleVersionOutput{}, fmt.Errorf("failed to delete module version: %w", err)
+			return nil, nil, fmt.Errorf("failed to delete module version: %w", err)
 		}
 
-		return nil, deleteTerraformModuleVersionOutput{
+		return nil, &deleteTerraformModuleVersionOutput{
 			Message: fmt.Sprintf("Module version %s deleted successfully", input.ID),
 			Success: true,
 		}, nil
@@ -194,7 +183,7 @@ func deleteTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor
 
 // uploadModuleVersionInput is the input for uploading a module version package.
 type uploadModuleVersionInput struct {
-	ModuleID      string `json:"module_id" jsonschema:"required,Module ID or TRN (e.g. trn:terraform_module:group/module-name/system)"`
+	ModuleID      string `json:"module_id" jsonschema:"required,Module ID or TRN (e.g. Ul8yZ... or trn:terraform_module:group/module-name/system)"`
 	Version       string `json:"version" jsonschema:"required,Version string (e.g. 1.0.0)"`
 	DirectoryPath string `json:"directory_path" jsonschema:"required,Local path to the module directory to package and upload"`
 }
@@ -206,7 +195,7 @@ type uploadModuleVersionOutput struct {
 }
 
 // UploadModuleVersion returns an MCP tool for uploading a module version package.
-func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[uploadModuleVersionInput, uploadModuleVersionOutput]) {
+func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*uploadModuleVersionInput, *uploadModuleVersionOutput]) {
 	tool := mcp.Tool{
 		Name:        "upload_module_version",
 		Description: "Create and upload a new Terraform module version. Automatically packages the directory, calculates SHA sum, creates the version, and initiates the upload.",
@@ -216,14 +205,9 @@ func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[uploadMo
 		},
 	}
 
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input uploadModuleVersionInput) (*mcp.CallToolResult, uploadModuleVersionOutput, error) {
-		client, err := tc.clientGetter()
-		if err != nil {
-			return nil, uploadModuleVersionOutput{}, err
-		}
-
-		if err = tc.acl.Authorize(ctx, client, input.ModuleID, trn.ResourceTypeTerraformModule); err != nil {
-			return nil, uploadModuleVersionOutput{}, err
+	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *uploadModuleVersionInput) (*mcp.CallToolResult, *uploadModuleVersionOutput, error) {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ModuleID, trn.ResourceTypeTerraformModule); err != nil {
+			return nil, nil, err
 		}
 
 		// Validate and sanitize the directory path
@@ -232,53 +216,47 @@ func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[uploadMo
 		// Check if directory exists and is a directory
 		dirInfo, err := os.Stat(directoryPath)
 		if err != nil {
-			return nil, uploadModuleVersionOutput{}, fmt.Errorf("failed to stat directory: %w", err)
+			return nil, nil, fmt.Errorf("failed to stat directory: %w", err)
 		}
 
 		if !dirInfo.IsDir() {
-			return nil, uploadModuleVersionOutput{}, fmt.Errorf("path is not a directory: %s", directoryPath)
+			return nil, nil, fmt.Errorf("path is not a directory: %s", directoryPath)
 		}
 
 		// Create temporary slug file
 		slugFile, err := os.CreateTemp("", "terraform-slug.tgz")
 		if err != nil {
-			return nil, uploadModuleVersionOutput{}, fmt.Errorf("failed to create temporary package file: %w", err)
+			return nil, nil, fmt.Errorf("failed to create temporary package file: %w", err)
 		}
 		defer os.Remove(slugFile.Name())
 
 		// Create the module package
 		moduleSlug, err := slug.NewSlug(directoryPath, slugFile.Name())
 		if err != nil {
-			return nil, uploadModuleVersionOutput{}, fmt.Errorf("failed to create module package: %w", err)
+			return nil, nil, fmt.Errorf("failed to create module package: %w", err)
 		}
 
 		// Create module version with SHA sum
-		version, err := client.TerraformModuleVersions().CreateModuleVersion(ctx, &sdktypes.CreateTerraformModuleVersionInput{
-			ModulePath: trn.ToPath(input.ModuleID),
-			Version:    input.Version,
-			SHASum:     hex.EncodeToString(moduleSlug.SHASum),
+		version, err := tc.grpcClient.TerraformModulesClient.CreateTerraformModuleVersion(ctx, &pb.CreateTerraformModuleVersionRequest{
+			ModuleId: input.ModuleID,
+			Version:  input.Version,
+			ShaSum:   hex.EncodeToString(moduleSlug.SHASum),
 		})
 		if err != nil {
-			return nil, uploadModuleVersionOutput{}, fmt.Errorf("failed to create module version: %w", err)
+			return nil, nil, fmt.Errorf("failed to create module version: %w", err)
 		}
-
-		// Open the package for reading
-		reader, err := moduleSlug.Open()
-		if err != nil {
-			// Delete the version we just created
-			_ = client.TerraformModuleVersions().DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{ID: version.Metadata.ID})
-			return nil, uploadModuleVersionOutput{}, fmt.Errorf("failed to open module package: %w", err)
-		}
-		defer reader.Close()
 
 		// Upload the module version
-		if err := client.TerraformModuleVersions().UploadModuleVersion(ctx, version.Metadata.ID, reader); err != nil {
+		if err := tc.tfeClient.UploadModuleVersion(ctx, &tfe.UploadModuleVersionInput{
+			ModuleVersionID: version.Metadata.Id,
+			PackagePath:     slugFile.Name(),
+		}); err != nil {
 			// Delete the version on upload failure
-			_ = client.TerraformModuleVersions().DeleteModuleVersion(ctx, &sdktypes.DeleteTerraformModuleVersionInput{ID: version.Metadata.ID})
-			return nil, uploadModuleVersionOutput{}, fmt.Errorf("failed to upload module version: %w", err)
+			_, _ = tc.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(ctx, &pb.DeleteTerraformModuleVersionRequest{Id: version.Metadata.Id})
+			return nil, nil, fmt.Errorf("failed to upload module version: %w", err)
 		}
 
-		return nil, uploadModuleVersionOutput{
+		return nil, &uploadModuleVersionOutput{
 			ModuleVersion: toTerraformModuleVersion(version),
 			Message:       fmt.Sprintf("Module version %s upload initiated. Use get_terraform_module_version to check the status (pending, upload_in_progress, uploaded, or errored).", input.Version),
 		}, nil

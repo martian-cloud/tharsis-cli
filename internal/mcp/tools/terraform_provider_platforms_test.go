@@ -1,83 +1,77 @@
 package tools
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tharsis"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestGetTerraformProviderPlatform(t *testing.T) {
 	type testCase struct {
-		name           string
-		input          getTerraformProviderPlatformInput
-		setupMocks     func(*tharsis.MockClient, *tharsis.TerraformProviderPlatform)
-		expectedOutput getTerraformProviderPlatformOutput
-		expectError    bool
+		name        string
+		input       *getTerraformProviderPlatformInput
+		mockSetup   func(*mocks.TerraformProvidersClient)
+		expectError bool
+		expectID    string
 	}
 
 	testCases := []testCase{
 		{
-			name: "successful get",
-			input: getTerraformProviderPlatformInput{
-				ID: "platform-123",
-			},
-			setupMocks: func(client *tharsis.MockClient, platforms *tharsis.TerraformProviderPlatform) {
-				client.On("TerraformProviderPlatforms").Return(platforms)
-				platforms.On("GetProviderPlatform", mock.Anything, &sdktypes.GetTerraformProviderPlatformInput{
-					ID: "platform-123",
-				}).Return(&sdktypes.TerraformProviderPlatform{
-					Metadata: sdktypes.ResourceMetadata{
-						ID:  "platform-123",
-						TRN: "trn:terraform_provider_platform:group/provider/1.0.0/platform-123",
-					},
-					ProviderVersionID: "version-456",
+			name:  "get provider platform successfully",
+			input: &getTerraformProviderPlatformInput{ID: "pp1"},
+			mockSetup: func(tpc *mocks.TerraformProvidersClient) {
+				tpc.On("GetTerraformProviderPlatformByID", mock.Anything, &pb.GetTerraformProviderPlatformByIDRequest{Id: "pp1"}).Return(&pb.TerraformProviderPlatform{
+					Metadata:          &pb.ResourceMetadata{Id: "pp1", Trn: "trn:terraform_provider_platform:group/provider/version/platform"},
+					ProviderVersionId: "pv1",
 					OperatingSystem:   "linux",
 					Architecture:      "amd64",
-					SHASum:            "abc123",
-					Filename:          "terraform-provider-test_1.0.0_linux_amd64.zip",
+					ShaSum:            "abc123",
+					Filename:          "terraform-provider-aws_v1.0.0_linux_amd64.zip",
 					BinaryUploaded:    true,
 				}, nil)
 			},
-			expectedOutput: getTerraformProviderPlatformOutput{
-				Platform: terraformProviderPlatform{
-					ID:                "platform-123",
-					TRN:               "trn:terraform_provider_platform:group/provider/1.0.0/platform-123",
-					ProviderVersionID: "version-456",
-					OperatingSystem:   "linux",
-					Architecture:      "amd64",
-					SHASum:            "abc123",
-					Filename:          "terraform-provider-test_1.0.0_linux_amd64.zip",
-					BinaryUploaded:    true,
-				},
+			expectID: "pp1",
+		},
+		{
+			name:  "provider platform not found",
+			input: &getTerraformProviderPlatformInput{ID: "nonexistent"},
+			mockSetup: func(tpc *mocks.TerraformProvidersClient) {
+				tpc.On("GetTerraformProviderPlatformByID", mock.Anything, &pb.GetTerraformProviderPlatformByIDRequest{Id: "nonexistent"}).
+					Return(nil, status.Error(codes.NotFound, "not found"))
 			},
+			expectError: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockClient := tharsis.NewMockClient(t)
-			mockPlatforms := tharsis.NewTerraformProviderPlatform(t)
-			tc.setupMocks(mockClient, mockPlatforms)
+			mockProviders := mocks.NewTerraformProvidersClient(t)
 
-			toolContext := &ToolContext{
-				clientGetter: func() (tharsis.Client, error) {
-					return mockClient, nil
-				},
+			if tc.mockSetup != nil {
+				tc.mockSetup(mockProviders)
 			}
 
-			_, handler := getTerraformProviderPlatform(toolContext)
-			_, output, err := handler(context.Background(), nil, tc.input)
+			toolCtx := &ToolContext{
+				grpcClient: &client.Client{TerraformProvidersClient: mockProviders},
+			}
+
+			_, handler := getTerraformProviderPlatform(toolCtx)
+			_, output, err := handler(t.Context(), nil, tc.input)
 
 			if tc.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedOutput, output)
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectID, output.Platform.ID)
 		})
 	}
 }

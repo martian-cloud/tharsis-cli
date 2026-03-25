@@ -1,148 +1,173 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"errors"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// runnerAgentCreateCommand is the top-level structure for the runner-agent create command.
+// runnerAgentCreateCommand is the top-level structure for the runner agent create command.
 type runnerAgentCreateCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	disabled        *bool
+	runnerName      string
+	groupID         string
+	description     string
+	tags            []string
+	runUntaggedJobs bool
+	toJSON          bool
+}
+
+var _ Command = (*runnerAgentCreateCommand)(nil)
+
+func (c *runnerAgentCreateCommand) validate() error {
+	if len(c.arguments) > 0 && c.runnerName != "" {
+		return errors.New("must supply only one of runner name argument or option, not both")
+	}
+
+	if len(c.arguments) == 0 && c.runnerName == "" {
+		return errors.New("runner name argument or option is required")
+	}
+
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments, validation.Length(0, 1)),
+		validation.Field(&c.groupID, validation.Required),
+	)
 }
 
 // NewRunnerAgentCreateCommandFactory returns a runnerAgentCreateCommand struct.
-func NewRunnerAgentCreateCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return runnerAgentCreateCommand{
-			meta: meta,
+func NewRunnerAgentCreateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &runnerAgentCreateCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (rcc runnerAgentCreateCommand) Run(args []string) int {
-	rcc.meta.Logger.Debugf("Starting the 'runner-agent create' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		rcc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *runnerAgentCreateCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("runner-agent create"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
 	}
 
-	client, err := rcc.meta.GetSDKClient()
+	if c.runnerName != "" {
+		c.arguments = append(c.arguments, c.runnerName)
+	}
+
+	input := &pb.CreateRunnerRequest{
+		Name:            c.arguments[0],
+		Description:     c.description,
+		GroupId:         c.groupID,
+		RunUntaggedJobs: c.runUntaggedJobs,
+		Tags:            c.tags,
+		Disabled:        c.disabled,
+	}
+
+	createdRunner, err := c.grpcClient.RunnersClient.CreateRunner(c.Context, input)
 	if err != nil {
-		rcc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+		c.UI.ErrorWithSummary(err, "failed to create a runner agent")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return rcc.doRunnerAgentCreate(ctx, client, args)
+	return outputRunnerAgent(c.UI, c.toJSON, createdRunner)
 }
 
-func (rcc runnerAgentCreateCommand) doRunnerAgentCreate(ctx context.Context, client *tharsis.Client, opts []string) int {
-	rcc.meta.Logger.Debugf("will do runner-agent create, %d opts", len(opts))
-
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(rcc.meta.BinaryName+" runner-agent create", rcc.buildRunnerAgentCreateDefs(), opts)
-	if err != nil {
-		rcc.meta.Logger.Error(output.FormatError("failed to parse runner-agent create options", err))
-		return 1
-	}
-	if len(cmdArgs) > 0 {
-		msg := fmt.Sprintf("excessive runner-agent create arguments: %s", cmdArgs)
-		rcc.meta.Logger.Error(output.FormatError(msg, nil), rcc.HelpRunnerAgentCreate())
-		return 1
-	}
-
-	runnerAgentName := getOption("runner-name", "", cmdOpts)[0]
-	groupPath := getOption("group-path", "", cmdOpts)[0]
-	description := getOption("description", "", cmdOpts)[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		rcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	runUntaggedJobs, err := getBoolOptionValue("run-untagged-jobs", "false", cmdOpts)
-	if err != nil {
-		rcc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-	tags := getOptionSlice("tag", cmdOpts)
-
-	actualPath := trn.ToPath(groupPath)
-	if !isNamespacePathValid(rcc.meta, actualPath) {
-		return 1
-	}
-
-	input := &sdktypes.CreateRunnerInput{
-		Name:            runnerAgentName,
-		GroupPath:       groupPath,
-		Description:     description,
-		RunUntaggedJobs: runUntaggedJobs,
-		Tags:            tags,
-	}
-
-	rcc.meta.Logger.Debugf("runner-agent create input: %#v", input)
-
-	// Create the runner agent.
-	createdRunnerAgent, err := client.RunnerAgent.CreateRunnerAgent(ctx, input)
-	if err != nil {
-		rcc.meta.Logger.Error(output.FormatError("failed to create runner agent", err))
-		return 1
-	}
-
-	return outputRunnerAgent(rcc.meta, toJSON, createdRunnerAgent)
-}
-
-func (rcc runnerAgentCreateCommand) buildRunnerAgentCreateDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"description": {
-			Arguments: []string{"Description"},
-			Synopsis:  "Description for the runner agent.",
-		},
-		"group-path": {
-			Arguments: []string{"Group_Path"},
-			Synopsis:  "Full path of group where runner will be created.",
-			Required:  true,
-		},
-		"runner-name": {
-			Arguments: []string{"Runner_Name"},
-			Synopsis:  "Name of the new runner agent.",
-			Required:  true,
-		},
-		"run-untagged-jobs": {
-			Arguments: []string{},
-			Synopsis:  "Run untagged jobs.",
-		},
-		"tag": {
-			Arguments: []string{"Runner_Tag"},
-			Synopsis:  "Runner tag to assign to the runner agent. (This flag may be repeated).",
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-func (rcc runnerAgentCreateCommand) Synopsis() string {
+func (*runnerAgentCreateCommand) Synopsis() string {
 	return "Create a new runner agent."
 }
 
-func (rcc runnerAgentCreateCommand) Help() string {
-	return rcc.HelpRunnerAgentCreate()
+func (*runnerAgentCreateCommand) Usage() string {
+	return "tharsis [global options] runner-agent create [options] <name>"
 }
 
-// HelpRunnerAgentCreate prints the help string for the 'runner-agent create' command.
-func (rcc runnerAgentCreateCommand) HelpRunnerAgentCreate() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] runner-agent create [options]
-
+func (*runnerAgentCreateCommand) Description() string {
+	return `
    The runner-agent create command creates a new runner agent.
-   Shows final output as JSON, if specified.
+`
+}
 
-%s
+func (*runnerAgentCreateCommand) Example() string {
+	return `
+tharsis runner-agent create \
+  --group-id trn:group:<group_path> \
+  --description "Production runner" \
+  --run-untagged-jobs \
+  --tag prod \
+  --tag us-east-1 \
+  prod-runner
+`
+}
 
-`, rcc.meta.BinaryName, buildHelpText(rcc.buildRunnerAgentCreateDefs()))
+func (c *runnerAgentCreateCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.groupID,
+		"group-id",
+		"",
+		"Group ID or TRN where the runner agent will be created.",
+	)
+	f.Func(
+		"group-path",
+		"Full path of group where runner will be created. Deprecated.",
+		func(s string) error {
+			c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return nil
+		},
+	)
+	f.BoolFunc(
+		"disabled",
+		"Whether the runner is disabled.",
+		func(s string) error {
+			v, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+
+			c.disabled = &v
+			return nil
+		})
+	f.StringVar(
+		&c.runnerName,
+		"runner-name",
+		"",
+		"Name of the new runner agent. Deprecated.",
+	)
+	f.StringVar(
+		&c.description,
+		"description",
+		"",
+		"Description for the runner agent.",
+	)
+	f.BoolVar(
+		&c.runUntaggedJobs,
+		"run-untagged-jobs",
+		false,
+		"Allow the runner agent to execute jobs without tags.",
+	)
+	f.Func(
+		"tag",
+		"Tag for the runner agent. (This flag may be repeated)",
+		func(s string) error {
+			c.tags = append(c.tags, s)
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Show final output as JSON.",
+	)
+
+	return f
 }

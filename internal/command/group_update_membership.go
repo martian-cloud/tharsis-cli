@@ -1,121 +1,124 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
+	"strconv"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
-// groupUpdateMembershipCommand is the top-level structure for the group update-membership command.
 type groupUpdateMembershipCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	roleID  string
+	version *int64
+	toJSON  bool
 }
 
 // NewGroupUpdateMembershipCommandFactory returns a groupUpdateMembershipCommand struct.
-func NewGroupUpdateMembershipCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return groupUpdateMembershipCommand{
-			meta: meta,
+func NewGroupUpdateMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &groupUpdateMembershipCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (ggc groupUpdateMembershipCommand) Run(args []string) int {
-	ggc.meta.Logger.Debugf("Starting the 'group update-membership' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		ggc.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := ggc.meta.GetSDKClient()
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return ggc.doGroupUpdateMembership(ctx, client, args)
+func (c *groupUpdateMembershipCommand) validate() error {
+	const message = "membership-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.roleID, validation.Required),
+	)
 }
 
-func (ggc groupUpdateMembershipCommand) doGroupUpdateMembership(ctx context.Context, client *tharsis.Client, opts []string) int {
-	ggc.meta.Logger.Debugf("will do group update-membership, %d opts", len(opts))
+func (c *groupUpdateMembershipCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("group update-membership"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := ggc.buildGroupUpdateMembershipOptionDefs()
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(ggc.meta.BinaryName+" group update-membership", defs, opts)
+	input := &pb.UpdateNamespaceMembershipRequest{
+		Id:      c.arguments[0],
+		RoleId:  c.roleID,
+		Version: c.version,
+	}
+
+	membership, err := c.grpcClient.NamespaceMembershipsClient.UpdateNamespaceMembership(c.Context, input)
 	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to parse group update-membership argument", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		ggc.meta.Logger.Error(output.FormatError("missing group update-membership ID", nil), ggc.HelpGroupUpdateMembership())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive group update-membership arguments: %s", cmdArgs)
-		ggc.meta.Logger.Error(output.FormatError(msg, nil), ggc.HelpGroupUpdateMembership())
+		c.UI.ErrorWithSummary(err, "failed to update group membership")
 		return 1
 	}
 
-	membershipID := cmdArgs[0]
-	role := getOption("role", "", cmdOpts)[0]
-	toJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		ggc.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.UpdateNamespaceMembershipInput{
-		ID:   membershipID,
-		Role: role,
-	}
-	ggc.meta.Logger.Debugf("group update-membership input: %#v", input)
-
-	// Update the membership.
-	updatedMembership, err := client.NamespaceMembership.UpdateMembership(ctx, input)
-	if err != nil {
-		ggc.meta.Logger.Error(output.FormatError("failed to update membership", err))
-		return 1
-	}
-
-	return outputNamespaceMembership(ggc.meta, toJSON, updatedMembership)
+	return outputMembership(c.UI, c.toJSON, membership)
 }
 
-// buildGroupUpdateMembershipOptionDefs returns the defs used by
-// group update-membership command.
-func (ggc groupUpdateMembershipCommand) buildGroupUpdateMembershipOptionDefs() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"role": {
-			Arguments: []string{"Role"},
-			Synopsis:  "New role for the membership.",
-			Required:  true,
-		},
-	}
-
-	return buildJSONOptionDefs(defs)
-}
-
-func (ggc groupUpdateMembershipCommand) Synopsis() string {
+func (*groupUpdateMembershipCommand) Synopsis() string {
 	return "Update a group membership."
 }
 
-func (ggc groupUpdateMembershipCommand) Help() string {
-	return ggc.HelpGroupUpdateMembership()
+func (*groupUpdateMembershipCommand) Description() string {
+	return `
+   The group update-membership command updates a group membership's role.
+`
 }
 
-// HelpGroupUpdateMembership prints the help string for the 'group update-membership' command.
-func (ggc groupUpdateMembershipCommand) HelpGroupUpdateMembership() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] group update-membership [options] <id>
+func (*groupUpdateMembershipCommand) Usage() string {
+	return "tharsis [global options] group update-membership [options] <membership-id>"
+}
 
-   The group update-membership command updates a group membership.
+func (*groupUpdateMembershipCommand) Example() string {
+	return `
+tharsis group update-membership \
+  --role-id trn:role:<role_name> \
+  <id>
+`
+}
 
-%s
+func (c *groupUpdateMembershipCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.roleID,
+		"role-id",
+		"",
+		"The role ID for the membership.",
+	)
+	f.Func(
+		"role",
+		"New role for the membership. Deprecated.",
+		func(s string) error {
+			c.roleID = trn.NewResourceTRN(trn.ResourceTypeRole, s)
+			return nil
+		},
+	)
+	f.Func(
+		"version",
+		"Metadata version of the resource to be updated. In most cases, this is not required.",
+		func(s string) error {
+			v, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			c.version = &v
+			return nil
+		},
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-`, ggc.meta.BinaryName, buildHelpText(ggc.buildGroupUpdateMembershipOptionDefs()))
+	return f
 }

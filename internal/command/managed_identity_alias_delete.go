@@ -1,114 +1,96 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// managedIdentityAliasDeleteCommand is the top-level structure for the managed-identity-alias delete command.
+// managedIdentityAliasDeleteCommand is the top-level structure for the managed identity alias delete command.
 type managedIdentityAliasDeleteCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	force bool
+}
+
+var _ Command = (*managedIdentityAliasDeleteCommand)(nil)
+
+func (c *managedIdentityAliasDeleteCommand) validate() error {
+	const message = "id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+	)
 }
 
 // NewManagedIdentityAliasDeleteCommandFactory returns a managedIdentityAliasDeleteCommand struct.
-func NewManagedIdentityAliasDeleteCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return managedIdentityAliasDeleteCommand{
-			meta: meta,
+func NewManagedIdentityAliasDeleteCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &managedIdentityAliasDeleteCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (m managedIdentityAliasDeleteCommand) Run(args []string) int {
-	m.meta.Logger.Debugf("Starting the 'managed-identity-alias delete' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		m.meta.Logger.Debugf("    argument %d: %s", ix, arg)
+func (c *managedIdentityAliasDeleteCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("managed-identity-alias delete"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+		WithForcePrompt("Are you sure you want to delete this managed identity alias?"),
+	); code != 0 {
+		return code
 	}
 
-	client, err := m.meta.GetSDKClient()
-	if err != nil {
-		m.meta.UI.Error(output.FormatError("failed to get SDK client", err))
+	input := &pb.DeleteManagedIdentityAliasRequest{
+		Id:    trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
+		Force: &c.force,
+	}
+
+	if _, err := c.grpcClient.ManagedIdentitiesClient.DeleteManagedIdentityAlias(c.Context, input); err != nil {
+		c.UI.ErrorWithSummary(err, "failed to delete managed identity alias")
 		return 1
 	}
 
-	ctx := context.Background()
-
-	return m.doManagedIdentityAliasDelete(ctx, client, args)
-}
-
-func (m managedIdentityAliasDeleteCommand) doManagedIdentityAliasDelete(ctx context.Context, client *tharsis.Client, opts []string) int {
-	m.meta.Logger.Debugf("will do managed-identity-alias delete, %d opts", len(opts))
-
-	// No options to parse.
-	_, cmdArgs, err := optparser.ParseCommandOptions(m.meta.BinaryName+" managed-identity-alias delete", optparser.OptionDefinitions{}, opts)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to parse managed-identity-alias delete options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		m.meta.Logger.Error(output.FormatError("missing managed-identity-alias delete path", nil), m.HelpManagedIdentityAliasDelete())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive managed-identity-alias delete arguments: %s", cmdArgs)
-		m.meta.Logger.Error(output.FormatError(msg, nil), m.HelpManagedIdentityAliasDelete())
-		return 1
-	}
-
-	managedIdentityAliasPath := cmdArgs[0]
-	actualPath := trn.ToPath(managedIdentityAliasPath)
-	if !isResourcePathValid(m.meta, actualPath) {
-		return 1
-	}
-
-	managedIdentityAlias, err := client.ManagedIdentity.GetManagedIdentity(ctx, &sdktypes.GetManagedIdentityInput{
-		Path: &actualPath, // Use extracted path, not original managedIdentityAliasPath
-	})
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to get managed identity alias", err))
-		return 1
-	}
-
-	// Prepare the inputs.
-	input := &sdktypes.DeleteManagedIdentityAliasInput{ID: managedIdentityAlias.Metadata.ID}
-	m.meta.Logger.Debugf("managed-identity-alias delete input: %#v", input)
-
-	// Delete the managed identity alias.
-	err = client.ManagedIdentity.DeleteManagedIdentityAlias(ctx, input)
-	if err != nil {
-		m.meta.Logger.Error(output.FormatError("failed to delete managed identity alias", err))
-		return 1
-	}
-
-	// Cannot show the deleted managed identity alias, but say something.
-	m.meta.UI.Output("managed-identity-alias delete succeeded.")
+	c.UI.Successf("Managed identity alias deleted successfully!")
 
 	return 0
 }
 
-func (m managedIdentityAliasDeleteCommand) Synopsis() string {
+func (*managedIdentityAliasDeleteCommand) Synopsis() string {
 	return "Delete a managed identity alias."
 }
 
-func (m managedIdentityAliasDeleteCommand) Help() string {
-	return m.HelpManagedIdentityAliasDelete()
+func (*managedIdentityAliasDeleteCommand) Usage() string {
+	return "tharsis [global options] managed-identity-alias delete [options] <id>"
 }
 
-// HelpManagedIdentityAliasDelete produces the help string for the 'managed-identity-alias delete' command.
-func (m managedIdentityAliasDeleteCommand) HelpManagedIdentityAliasDelete() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] managed-identity-alias delete <managed-identity-alias-path>
-
+func (*managedIdentityAliasDeleteCommand) Description() string {
+	return `
    The managed-identity-alias delete command deletes a managed identity alias.
+`
+}
 
-   Use with caution as deleting a managed identity alias is irreversible!
+func (*managedIdentityAliasDeleteCommand) Example() string {
+	return `
+tharsis managed-identity-alias delete trn:managed_identity:<group_path>/<managed_identity_name>
+`
+}
 
-`, m.meta.BinaryName)
+func (c *managedIdentityAliasDeleteCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.BoolVar(
+		&c.force,
+		"force",
+		false,
+		"Force delete the managed identity alias.",
+	)
+
+	return f
 }

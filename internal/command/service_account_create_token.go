@@ -1,155 +1,112 @@
 package command
 
 import (
-	"context"
-	"fmt"
+	"flag"
 
-	"github.com/mitchellh/cli"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/optparser"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
-	tharsis "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
 )
 
-// serviceAccountCreateTokenCommand is the top-level structure for the service-account create-token command.
 type serviceAccountCreateTokenCommand struct {
-	meta *Metadata
+	*BaseCommand
+
+	token  string
+	toJSON bool
 }
 
 // NewServiceAccountCreateTokenCommandFactory returns a serviceAccountCreateTokenCommand struct.
-func NewServiceAccountCreateTokenCommandFactory(meta *Metadata) func() (cli.Command, error) {
-	return func() (cli.Command, error) {
-		return serviceAccountCreateTokenCommand{
-			meta: meta,
+func NewServiceAccountCreateTokenCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
+	return func() (Command, error) {
+		return &serviceAccountCreateTokenCommand{
+			BaseCommand: baseCommand,
 		}, nil
 	}
 }
 
-func (sal serviceAccountCreateTokenCommand) Run(args []string) int {
-	sal.meta.Logger.Debugf("Starting the 'service-account create-token' command with %d arguments:", len(args))
-	for ix, arg := range args {
-		sal.meta.Logger.Debugf("    argument %d: %s", ix, arg)
-	}
-
-	client, err := sal.meta.GetSDKClient()
-	if err != nil {
-		sal.meta.UI.Error(output.FormatError("failed to get SDK client", err))
-		return 1
-	}
-
-	ctx := context.Background()
-
-	return sal.doServiceAccountCreateToken(ctx, client, args)
+func (c *serviceAccountCreateTokenCommand) validate() error {
+	const message = "service-account-id is required"
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments,
+			validation.Required.Error(message),
+			validation.Length(1, 1).Error(message),
+		),
+		validation.Field(&c.token, validation.Required),
+	)
 }
 
-func (sal serviceAccountCreateTokenCommand) doServiceAccountCreateToken(ctx context.Context,
-	client *tharsis.Client, opts []string,
-) int {
-	sal.meta.Logger.Debugf("will do service-account create-token, %d opts", len(opts))
+func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
+	if code := c.initialize(
+		WithArguments(args),
+		WithFlags(c.Flags()),
+		WithCommandName("service-account create-token"),
+		WithInputValidator(c.validate),
+		WithClient(true),
+	); code != 0 {
+		return code
+	}
 
-	defs := sal.buildOptions()
+	input := &pb.CreateOIDCTokenRequest{
+		ServiceAccountId: trn.ToTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
+		Token:            c.token,
+	}
 
-	cmdOpts, cmdArgs, err := optparser.ParseCommandOptions(sal.meta.BinaryName+" service-account create-token",
-		defs, opts)
+	result, err := c.grpcClient.ServiceAccountsClient.CreateOIDCToken(c.Context, input)
 	if err != nil {
-		sal.meta.Logger.Error(output.FormatError("failed to parse service-account create-token options", err))
-		return 1
-	}
-	if len(cmdArgs) < 1 {
-		sal.meta.Logger.Error(output.FormatError("missing service account path", nil),
-			sal.HelpServiceAccountCreateToken())
-		return 1
-	}
-	if len(cmdArgs) > 1 {
-		msg := fmt.Sprintf("excessive service-account create-token arguments: %s", cmdArgs)
-		sal.meta.Logger.Error(output.FormatError(msg, nil), sal.HelpServiceAccountCreateToken())
+		c.UI.ErrorWithSummary(err, "failed to create token for service account")
 		return 1
 	}
 
-	serviceAccountPath := cmdArgs[0]
-	token := getOption("token", "", cmdOpts)[0] // required; see help message
-	asJSON, err := getBoolOptionValue("json", "false", cmdOpts)
-	if err != nil {
-		sal.meta.UI.Error(output.FormatError("failed to parse boolean value", err))
-		return 1
-	}
-
-	// Make sure the service account path has a slash and get the parent group path.
-	actualPath := trn.ToPath(serviceAccountPath)
-	if !isResourcePathValid(sal.meta, actualPath) {
-		return 1
-	}
-
-	input := &sdktypes.ServiceAccountCreateTokenInput{
-		ServiceAccountPath: serviceAccountPath,
-		Token:              token,
-	}
-
-	resp, err := client.ServiceAccount.CreateToken(ctx, input)
-	if err != nil {
-		sal.meta.Logger.Error(output.FormatError("failed to create token for service account", err))
-		return 1
-	}
-
-	if asJSON {
-
-		// Marshal and indent the JSON output.
-		marshalled, err := objectToJSON(resp)
-		if err != nil {
-			sal.meta.Logger.Error(output.FormatError("failed to marshal create-token response", err))
+	if c.toJSON {
+		if err := c.UI.JSON(result); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to output JSON")
 			return 1
 		}
-
-		sal.meta.UI.Output(marshalled)
-	} else {
-		// Just print the token (and not the expiration).
-		sal.meta.UI.Output(resp.Token)
+		return 0
 	}
 
+	c.UI.Output(result.Token)
 	return 0
 }
 
-func (sal serviceAccountCreateTokenCommand) Synopsis() string {
+func (*serviceAccountCreateTokenCommand) Synopsis() string {
 	return "Create a token for a service account."
 }
 
-func (sal serviceAccountCreateTokenCommand) Help() string {
-	return sal.HelpServiceAccountCreateToken()
+func (*serviceAccountCreateTokenCommand) Description() string {
+	return `
+   The service-account create-token command creates a token for a service account using OIDC authentication.
+   The input token is issued by an identity provider specified in the service account's trust policy.
+   The output token can be used to authenticate with the API.
+`
 }
 
-// buildOptions builds the option definitions for the service account create-token command.
-func (sal serviceAccountCreateTokenCommand) buildOptions() optparser.OptionDefinitions {
-	defs := optparser.OptionDefinitions{
-		"token": {
-			Arguments: []string{"Token"},
-			Synopsis:  "Initial authentication token.",
-			Required:  true,
-		},
-		"json": {
-			Arguments: []string{},
-			Synopsis:  "Show output as JSON.",
-		},
-	}
-	return buildJSONOptionDefs(defs)
+func (*serviceAccountCreateTokenCommand) Usage() string {
+	return "tharsis [global options] service-account create-token [options] <service-account-id>"
 }
 
-// HelpServiceAccountCreateToken produces the help string for the 'service-account create-token' command.
-func (sal serviceAccountCreateTokenCommand) HelpServiceAccountCreateToken() string {
-	return fmt.Sprintf(`
-Usage: %s [global options] service-account create-token [options] <service_account_path>
+func (*serviceAccountCreateTokenCommand) Example() string {
+	return `
+tharsis service-account create-token \
+  --token <oidc-token> \
+  trn:service_account:<group_path>/<service_account_name>
+`
+}
 
-   The service-account create-token command creates a token for a service account.
-	 It uses the supplied token to authenticate.
-	 It prints an output token.
+func (c *serviceAccountCreateTokenCommand) Flags() *flag.FlagSet {
+	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+	f.StringVar(
+		&c.token,
+		"token",
+		"",
+		"Initial authentication token from identity provider.",
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		false,
+		"Output in JSON format.",
+	)
 
-	 The input token is used for the OIDC federated login that is issued by an
-	 identity provider specified in the service account's trust policy.
-
-	 The output token is the service account token that can be used to
-	 authenticate with the API.
-
-%s
-
-`, sal.meta.BinaryName, buildHelpText(sal.buildOptions()))
+	return f
 }
