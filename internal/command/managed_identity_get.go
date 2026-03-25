@@ -2,10 +2,10 @@ package command
 
 import (
 	"encoding/base64"
-	"flag"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -14,7 +14,7 @@ import (
 type managedIdentityGetCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*managedIdentityGetCommand)(nil)
@@ -59,7 +59,7 @@ func (c *managedIdentityGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentity(c.UI, c.toJSON, identity)
+	return outputManagedIdentity(c.UI, *c.toJSON, identity)
 }
 
 func (*managedIdentityGetCommand) Synopsis() string {
@@ -83,13 +83,13 @@ tharsis managed-identity get trn:managed_identity:<group_path>/<managed_identity
 `
 }
 
-func (c *managedIdentityGetCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *managedIdentityGetCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f
@@ -102,7 +102,7 @@ func outputManagedIdentity(ui terminal.UI, toJSON bool, identity *pb.ManagedIden
 			return 1
 		}
 	} else {
-		// Decode base64 data
+		// Decode base64 data.
 		decoded, err := base64.StdEncoding.DecodeString(identity.Data)
 		if err != nil {
 			ui.ErrorWithSummary(err, "failed to decode identity data")

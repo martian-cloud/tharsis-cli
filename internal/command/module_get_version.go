@@ -1,11 +1,11 @@
 package command
 
 import (
-	"flag"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -13,8 +13,8 @@ import (
 type moduleGetVersionCommand struct {
 	*BaseCommand
 
-	version string
-	toJSON  bool
+	version *string
+	toJSON  *bool
 }
 
 // NewModuleGetVersionCommandFactory returns a moduleGetVersionCommand struct.
@@ -49,9 +49,9 @@ func (c *moduleGetVersionCommand) Run(args []string) int {
 
 	moduleVersionID := c.arguments[0]
 
-	if c.version != "" {
-		// Handle deprecated version flag and module path arg.
-		moduleVersionID = trn.NewResourceTRN(trn.ResourceTypeTerraformModuleVersion, moduleVersionID, c.version)
+	// Handle deprecated -version flag and module path arg.
+	if c.version != nil {
+		moduleVersionID = trn.NewResourceTRN(trn.ResourceTypeTerraformModuleVersion, moduleVersionID, *c.version)
 	}
 
 	input := &pb.GetTerraformModuleVersionByIDRequest{
@@ -64,7 +64,7 @@ func (c *moduleGetVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModuleVersion(c.UI, c.toJSON, version)
+	return outputModuleVersion(c.UI, *c.toJSON, version)
 }
 
 func (*moduleGetVersionCommand) Synopsis() string {
@@ -87,20 +87,21 @@ tharsis module get-version trn:terraform_module_version:<group_path>/<module_nam
 `
 }
 
-func (c *moduleGetVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *moduleGetVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 	f.StringVar(
 		&c.version,
 		"version",
-		"",
-		"A semver compliant version tag to use as a filter. Deprecated.",
+		"A semver compliant version tag to use as a filter.",
+		flag.Deprecated("pass version TRN as argument"),
 	)
+
 	return f
 }
 

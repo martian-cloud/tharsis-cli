@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 // moduleDeleteAttestationCommand is the top-level structure for the module delete attestation command.
@@ -77,6 +76,6 @@ tharsis module delete-attestation trn:terraform_module_attestation:<group_path>/
 `
 }
 
-func (c *moduleDeleteAttestationCommand) Flags() *flag.FlagSet {
+func (c *moduleDeleteAttestationCommand) Flags() *flag.Set {
 	return nil
 }

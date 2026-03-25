@@ -1,11 +1,9 @@
 package command
 
 import (
-	"flag"
-	"strconv"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type moduleDeleteVersionCommand struct {
@@ -78,20 +76,13 @@ tharsis module delete-version trn:terraform_module_version:<group_path>/<module_
 `
 }
 
-func (c *moduleDeleteVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *moduleDeleteVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be deleted. "+
-			"In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Metadata version of the resource to be deleted. In most cases, this is not required.",
 	)
+
 	return f
 }

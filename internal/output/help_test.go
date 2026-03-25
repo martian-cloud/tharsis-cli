@@ -1,11 +1,11 @@
 package output
 
 import (
-	"flag"
-	"strings"
 	"testing"
 
 	"github.com/fatih/color"
+	"github.com/stretchr/testify/assert"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 func init() {
@@ -14,134 +14,187 @@ func init() {
 }
 
 func TestCommandHelp(t *testing.T) {
-	t.Run("highlights product name in usage", func(t *testing.T) {
-		info := CommandHelpInfo{
+	t.Run("renders usage", func(t *testing.T) {
+		result := CommandHelp(CommandHelpInfo{
 			ProductName: "mycli",
 			Usage:       "mycli [options] command",
-		}
-		result := CommandHelp(info)
-		// With color disabled, just check product name appears
-		if !strings.Contains(result, "mycli") {
-			t.Error("expected product name in usage line")
-		}
+		})
+		assert.Contains(t, result, "mycli [options] command")
 	})
 
 	t.Run("renders description", func(t *testing.T) {
-		info := CommandHelpInfo{
+		result := CommandHelp(CommandHelpInfo{
 			ProductName: "mycli",
 			Usage:       "mycli run",
 			Description: "Run the application with specified config.",
-		}
-		result := CommandHelp(info)
-		if !strings.Contains(result, "Run the application") {
-			t.Error("expected description in output")
-		}
+		})
+		assert.Contains(t, result, "Run the application")
 	})
 
 	t.Run("renders flags with defaults", func(t *testing.T) {
-		flags := flag.NewFlagSet("test", flag.ContinueOnError)
-		flags.String("config", "/etc/app.conf", "Path to config file")
-		flags.Int("port", 8080, "Port to listen on")
-		flags.Bool("debug", false, "Enable debug mode")
+		fs := flag.NewSet("Command options")
+		var config *string
+		var port *int
+		var debug *bool
+		fs.StringVar(&config, "config", "Path to config file", flag.Default("/etc/app.conf"))
+		fs.IntVar(&port, "port", "Port to listen on", flag.Default(8080))
+		fs.BoolVar(&debug, "debug", "Enable debug mode", flag.Default(false))
 
-		info := CommandHelpInfo{
-			ProductName: "mycli",
-			Usage:       "mycli serve",
-			Flags:       flags,
-		}
-		result := CommandHelp(info)
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli serve",
+			Flags: fs,
+		})
 
-		if !strings.Contains(result, "-config") {
-			t.Error("expected -config flag")
-		}
-		if !strings.Contains(result, "/etc/app.conf") {
-			t.Error("expected default value for config")
-		}
-		if !strings.Contains(result, "-port") {
-			t.Error("expected -port flag")
-		}
-		if !strings.Contains(result, "Command options:") {
-			t.Error("expected Command options header")
-		}
+		assert.Contains(t, result, "Command options:")
+		assert.Contains(t, result, "-config")
+		assert.Contains(t, result, "Default: /etc/app.conf")
+		assert.Contains(t, result, "-port")
+		assert.Contains(t, result, "Default: 8080")
+		assert.Contains(t, result, "-debug")
+		assert.Contains(t, result, "Default: false")
+	})
+
+	t.Run("renders flag aliases", func(t *testing.T) {
+		fs := flag.NewSet("Options")
+		var name *string
+		fs.StringVar(&name, "name", "Resource name", flag.Aliases("n"))
+
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli create",
+			Flags: fs,
+		})
+
+		assert.Contains(t, result, "-name, -n")
+	})
+
+	t.Run("renders required flag with asterisk", func(t *testing.T) {
+		fs := flag.NewSet("Options")
+		var id *string
+		fs.StringVar(&id, "id", "Resource ID", flag.Required())
+
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli get",
+			Flags: fs,
+		})
+
+		assert.Contains(t, result, "-id *")
+	})
+
+	t.Run("renders env var", func(t *testing.T) {
+		fs := flag.NewSet("Options")
+		var token *string
+		fs.StringVar(&token, "token", "Auth token", flag.EnvVar("MY_TOKEN"))
+
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli auth",
+			Flags: fs,
+		})
+
+		assert.Contains(t, result, "Env: MY_TOKEN")
+	})
+
+	t.Run("renders combined metadata", func(t *testing.T) {
+		fs := flag.NewSet("Options")
+		var name *string
+		fs.StringVar(&name, "name", "Resource name",
+			flag.Default("default"), flag.EnvVar("NAME"), flag.Aliases("n"),
+		)
+
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli create",
+			Flags: fs,
+		})
+
+		assert.Contains(t, result, "-name, -n")
+		assert.Contains(t, result, "Default: default")
+		assert.Contains(t, result, "Env: NAME")
+	})
+
+	t.Run("shows deprecated flags with message", func(t *testing.T) {
+		fs := flag.NewSet("Options")
+		var old *string
+		var current *string
+		fs.StringVar(&old, "old-flag", "Deprecated flag", flag.Deprecated("use --current-flag"))
+		fs.StringVar(&current, "current-flag", "Current flag")
+
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli run",
+			Flags: fs,
+		})
+
+		assert.Contains(t, result, "-old-flag")
+		assert.Contains(t, result, "use --current-flag")
+		assert.Contains(t, result, "-current-flag")
+	})
+
+	t.Run("uses flag set name as title", func(t *testing.T) {
+		fs := flag.NewSet("Global options")
+		var verbose *bool
+		fs.BoolVar(&verbose, "verbose", "Enable verbose output")
+
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli",
+			Flags: fs,
+		})
+
+		assert.Contains(t, result, "Global options:")
 	})
 
 	t.Run("renders example section", func(t *testing.T) {
-		info := CommandHelpInfo{
+		result := CommandHelp(CommandHelpInfo{
 			ProductName: "mycli",
 			Usage:       "mycli deploy",
 			Example:     "mycli deploy --env production",
-		}
-		result := CommandHelp(info)
+		})
 
-		if !strings.Contains(result, "Example:") {
-			t.Error("expected Example header")
-		}
-		if !strings.Contains(result, "--env production") {
-			t.Error("expected example content")
-		}
+		assert.Contains(t, result, "Example:")
+		assert.Contains(t, result, "--env production")
 	})
 
 	t.Run("highlights JSON code blocks", func(t *testing.T) {
-		info := CommandHelpInfo{
-			ProductName: "mycli",
+		result := CommandHelp(CommandHelpInfo{
 			Usage:       "mycli config",
-			Description: "Config format:\n```json\n{\"key\": \"value\", \"count\": 42}\n```",
-		}
-		result := CommandHelp(info)
+			Description: "Config format:\n```json\n{\"key\": \"value\"}\n```",
+		})
 
-		// Code block markers should be stripped
-		if strings.Contains(result, "```") {
-			t.Error("code block markers should be removed")
-		}
-		// Content should remain
-		if !strings.Contains(result, "key") {
-			t.Error("expected JSON content to remain")
-		}
+		assert.NotContains(t, result, "```")
+		assert.Contains(t, result, "key")
 	})
 
 	t.Run("highlights HCL code blocks", func(t *testing.T) {
-		info := CommandHelpInfo{
-			ProductName: "mycli",
+		result := CommandHelp(CommandHelpInfo{
 			Usage:       "mycli init",
-			Description: "Example config:\n```hcl\nresource \"test\" {\n  name = \"example\"\n}\n```",
-		}
-		result := CommandHelp(info)
+			Description: "Example:\n```hcl\nresource \"test\" {\n  name = \"example\"\n}\n```",
+		})
 
-		if strings.Contains(result, "```") {
-			t.Error("code block markers should be removed")
-		}
-		if !strings.Contains(result, "resource") {
-			t.Error("expected HCL content to remain")
-		}
+		assert.NotContains(t, result, "```")
+		assert.Contains(t, result, "resource")
 	})
 
-	t.Run("auto-highlights shell examples", func(t *testing.T) {
-		info := CommandHelpInfo{
-			ProductName: "mycli",
-			Usage:       "mycli run",
-			Example:     "mycli run --verbose",
-		}
-		result := CommandHelp(info)
+	t.Run("handles nil flags", func(t *testing.T) {
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli version",
+		})
 
-		// Example should be present (highlighting tested via color codes when enabled)
-		if !strings.Contains(result, "mycli run --verbose") {
-			t.Error("expected shell example in output")
-		}
+		assert.Contains(t, result, "mycli version")
+		assert.NotContains(t, result, "options:")
 	})
 
-	t.Run("handles empty optional fields", func(t *testing.T) {
-		info := CommandHelpInfo{
-			ProductName: "mycli",
-			Usage:       "mycli version",
-		}
-		result := CommandHelp(info)
+	t.Run("omits empty sections", func(t *testing.T) {
+		result := CommandHelp(CommandHelpInfo{
+			Usage: "mycli version",
+		})
 
-		if !strings.Contains(result, "mycli version") {
-			t.Error("expected usage in output")
-		}
-		// Should not have Example or Command options sections
-		if strings.Contains(result, "Example:") {
-			t.Error("should not have Example section when empty")
-		}
+		assert.NotContains(t, result, "Example:")
+	})
+
+	t.Run("highlights quoted command references in description", func(t *testing.T) {
+		result := CommandHelp(CommandHelpInfo{
+			ProductName: "mycli",
+			Usage:       "mycli help",
+			Description: `Use "mycli run" to execute.`,
+		})
+
+		assert.Contains(t, result, "mycli run")
 	})
 }

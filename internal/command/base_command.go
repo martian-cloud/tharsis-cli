@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,13 +16,14 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
 const (
 	// maxPaginationLimit is the default (and max) limit for paginated list commands.
-	maxPaginationLimit = 100
+	maxPaginationLimit int32 = 100
 
 	// humanTimeFormat is the format used for displaying timestamps in human-readable output.
 	humanTimeFormat = "January 2 2006, 3:04:05 PM MST"
@@ -31,7 +31,8 @@ const (
 
 // baseOptions contains the different ways to configure the behavior of BaseCommand.
 type baseOptions struct {
-	flags          *flag.FlagSet
+	flags          *flag.Set
+	force          *bool
 	inputValidator func() error
 	commandName    string
 	args           []string
@@ -40,21 +41,12 @@ type baseOptions struct {
 	confirmPrompt  string
 }
 
-// isForceFlagSet checks if the --force flag is set in the parsed flags.
-func (o *baseOptions) isForceFlagSet() bool {
-	if o.flags == nil {
-		return false
-	}
-	f := o.flags.Lookup("force")
-	return f != nil && f.Value.String() == "true"
-}
-
 // BaseOptionsFunc is an alias that allows setting baseOptions.
 type BaseOptionsFunc func(*baseOptions) error
 
 // WithFlags sets the FlagSet that needs to be parsed. Return
 // values are often set as fields on the caller command's struct.
-func WithFlags(flags *flag.FlagSet) BaseOptionsFunc {
+func WithFlags(flags *flag.Set) BaseOptionsFunc {
 	return func(o *baseOptions) error {
 		o.flags = flags
 		return nil
@@ -105,8 +97,9 @@ func WithClient(withAuth bool) BaseOptionsFunc {
 // WithForcePrompt prompts for confirmation in interactive mode when
 // --force option is used to prevent accidental deletions for forceful
 // actions. The prompt parameter is the confirmation message shown to the user.
-func WithForcePrompt(prompt string) BaseOptionsFunc {
+func WithForcePrompt(force *bool, prompt string) BaseOptionsFunc {
 	return func(o *baseOptions) error {
+		o.force = force
 		o.confirmPrompt = prompt
 		return nil
 	}
@@ -181,7 +174,7 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 
 	// Prompt for confirmation if destructive operation in interactive mode.
 	// Only prompt when --force is used.
-	if o.confirmPrompt != "" && c.UI.Interactive() && o.isForceFlagSet() {
+	if o.confirmPrompt != "" && c.UI.Interactive() && o.force != nil && *o.force {
 		confirmed, err := c.UI.Confirm(o.confirmPrompt)
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to confirm")
@@ -377,19 +370,31 @@ func parseSortField[T ~int32](sortBy, sortOrder *string, enumValues map[string]i
 		return nil, nil
 	}
 
-	// Try direct lookup first (new format: FIELD_ORDER)
-	sort, ok := enumValues[*sortBy]
+	// Normalize deprecated short names.
+	deprecatedAliases := map[string]string{
+		"CREATED": "CREATED_AT",
+		"UPDATED": "UPDATED_AT",
+		"PATH":    "FULL_PATH",
+	}
+
+	key := *sortBy
+	if alias, ok := deprecatedAliases[key]; ok {
+		key = alias
+	}
+
+	// Try direct lookup first (new format: FIELD_ORDER).
+	sort, ok := enumValues[key]
 	if ok {
 		enumVal := T(sort)
 		return &enumVal, nil
 	}
 
-	// Handle deprecated separate sort-by and sort-order flags
+	// Handle deprecated separate sort-by and sort-order flags.
 	if sortOrder == nil {
 		return nil, fmt.Errorf("sort order must be specified if using deprecated sort-by value %s", *sortBy)
 	}
 
-	sortValue := fmt.Sprintf("%s_%s", *sortBy, *sortOrder)
+	sortValue := fmt.Sprintf("%s_%s", key, *sortOrder)
 	sort, ok = enumValues[sortValue]
 	if !ok {
 		return nil, fmt.Errorf("unknown sort value %s", sortValue)

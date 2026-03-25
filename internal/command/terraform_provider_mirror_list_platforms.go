@@ -1,27 +1,25 @@
 package command
 
 import (
-	"flag"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
-	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
 type terraformProviderMirrorListPlatformsCommand struct {
 	*BaseCommand
 
-	limit        int
+	limit        *int32
 	cursor       *string
 	os           *string
 	architecture *string
-	sortBy       *pb.TerraformProviderPlatformMirrorSortableField
-	toJSON       bool
+	sortBy       *string
+	toJSON       *bool
 }
 
 // NewTerraformProviderMirrorListPlatformsCommandFactory returns a terraformProviderMirrorListPlatformsCommand struct.
@@ -40,7 +38,6 @@ func (c *terraformProviderMirrorListPlatformsCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
 	)
 }
 
@@ -55,11 +52,17 @@ func (c *terraformProviderMirrorListPlatformsCommand) Run(args []string) int {
 		return code
 	}
 
+	var sortEnum *pb.TerraformProviderPlatformMirrorSortableField
+	if c.sortBy != nil {
+		v := pb.TerraformProviderPlatformMirrorSortableField(pb.TerraformProviderPlatformMirrorSortableField_value[strings.ToUpper(*c.sortBy)])
+		sortEnum = &v
+	}
+
 	input := &pb.GetTerraformProviderPlatformMirrorsRequest{
 		VersionMirrorId: c.arguments[0],
-		Sort:            c.sortBy,
+		Sort:            sortEnum,
 		PaginationOptions: &pb.PaginationOptions{
-			First: ptr.Int32(int32(c.limit)),
+			First: c.limit,
 			After: c.cursor,
 		},
 		Os:           c.os,
@@ -72,7 +75,7 @@ func (c *terraformProviderMirrorListPlatformsCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(result); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
@@ -125,62 +128,51 @@ func (*terraformProviderMirrorListPlatformsCommand) Usage() string {
 func (*terraformProviderMirrorListPlatformsCommand) Example() string {
 	return `
 tharsis terraform-provider-mirror list-platforms \
-  --os linux \
-  --architecture amd64 \
-  --sort-by CREATED_AT_DESC \
+  -os linux \
+  -architecture amd64 \
+  -sort-by CREATED_AT_DESC \
   trn:terraform_provider_version_mirror:<group_path>/<provider_namespace>/<provider_name>/<semantic_version>
 `
 }
 
-func (c *terraformProviderMirrorListPlatformsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *terraformProviderMirrorListPlatformsCommand) Flags() *flag.Set {
+	sortValues := slices.Collect(maps.Keys(pb.TerraformProviderPlatformMirrorSortableField_value))
+
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.cursor,
 		"cursor",
 		"The cursor string for manual pagination.",
-		func(s string) error {
-			c.cursor = &s
-			return nil
-		},
 	)
-	f.IntVar(
+	f.Int32Var(
 		&c.limit,
 		"limit",
-		maxPaginationLimit,
 		"Maximum number of result elements to return.",
+		flag.Default(maxPaginationLimit),
+		flag.ValidRange(0, int(maxPaginationLimit)),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortBy,
 		"sort-by",
-		"Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).",
-		func(s string) error {
-			value, ok := pb.TerraformProviderPlatformMirrorSortableField_value[strings.ToUpper(s)]
-			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, slices.Collect(maps.Keys(pb.TerraformProviderPlatformMirrorSortableField_value)))
-			}
-			c.sortBy = pb.TerraformProviderPlatformMirrorSortableField(value).Enum()
-			return nil
-		},
+		"Sort by this field.",
+		flag.ValidValues(sortValues...),
+		flag.PredictValues(sortValues...),
 	)
-	f.Func(
+	f.StringVar(
+		&c.os,
 		"os",
 		"Filter to platforms with this OS.",
-		func(s string) error {
-			c.os = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.architecture,
 		"architecture",
 		"Filter to platforms with this architecture.",
-		func(s string) error {
-			c.architecture = &s
-			return nil
-		},
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

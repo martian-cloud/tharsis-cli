@@ -8,10 +8,10 @@
 package command
 
 import (
-	"flag"
 	"strings"
 
 	"github.com/mitchellh/cli"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 )
 
@@ -67,7 +67,7 @@ func (c *helpCommand) Example() string {
 	return ""
 }
 
-func (c *helpCommand) Flags() *flag.FlagSet {
+func (c *helpCommand) Flags() *flag.Set {
 	return nil
 }
 

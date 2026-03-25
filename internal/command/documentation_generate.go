@@ -1,135 +1,17 @@
 package command
 
-//go:generate go run ../../cmd/tharsis/tharsis.go documentation generate -output ../../docs/commands.md
+//go:generate go run ../../cmd/tharsis/... documentation generate -output ../../docs/commands.md
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"sort"
 	"strings"
-	"text/template"
+
+	md "github.com/nao1215/markdown"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
-
-// Go templates for markdown generation.
-const markdownTemplateForCommandList = `---
-title: Commands
-description: "An introduction to the CLI commands"
----
-
-## Available Commands
-
-Currently, the CLI supports the following commands:
-
-` + "```" + `
-{{block "list" .}}{{range .}}{{printf "%s   %s\n" .Name .Synopsis}}{{end}}{{end}}` + "```" + `{{"\n"}}
-
-:::tip
-` + "`tharsis [command]`" + ` or ` + "`tharsis [command] -h`" + ` will output the help menu for that specific command.
-:::
-
-:::info
-Commands and options may evolve between major versions. Options **must** come before any arguments.
-:::
-
-:::tip Have a question?
-Check the [FAQ](#frequently-asked-questions-faq) to see if there's already an answer.
-:::
-`
-
-// For readability, newlines in this string are removed before it is parsed.
-const markdownTemplateForCommandDetails = `
-{{define "DetailElement"}}
-{{"\n"}}{{if .IsSubcommand}}---{{"\n"}}{{"\n"}}#### {{.Name}} subcommand
-{{else}}---{{"\n"}}{{"\n"}}## {{.Name}} command{{end}}{{"\n"}}{{"\n"}}
-
-{{.Synopsis}}{{"\n"}}{{"\n"}}
-
-{{if .HasSubcommands}}
-**Subcommands:**{{"\n"}}{{"\n"}}
-{{range .Subcommands}}` + "- [`" + `{{.Name}}` + "`](#" + `{{.Anchor}}` + ")" + ` - {{.Synopsis}}{{"\n"}}{{end}}
-{{"\n"}}
-{{end}}
-
-{{if .UsageLine}}
-` + "```shell" + ` title="Usage"{{"\n"}}
-{{.UsageLine}}{{"\n"}}
-` + "```" + `{{"\n"}}
-{{"\n"}}{{end}}
-
-{{with .Description}}{{.}}{{"\n"}}{{"\n"}}{{end}}
-
-{{if .Example}}
-` + "```shell" + ` title="Example"{{"\n"}}
-{{.Example}}{{"\n"}}
-` + "```" + `{{"\n"}}
-{{"\n"}}{{end}}
-
-{{if .Flags}}
-{{with .Flags}}
-<details>{{"\n"}}
-<summary>Options</summary>{{"\n"}}{{"\n"}}
-{{range .}}` + "- `" + `--{{.Name}}` + "`" + ` - {{.Description}}{{"\n\n"}}{{end}}{{end}}
-</details>
-{{"\n"}}{{"\n"}}
-{{end}}
-
-{{end}}
-
-{{block "details" .}}{{range .}}{{template "DetailElement" .}}{{end}}{{end}}
-`
-
-const markdownTemplateForFAQ = `
-## Frequently asked questions (FAQ)
-
-### Is configuring a profile necessary?
-
-By default, the CLI will use the default Tharsis endpoint passed in at build-time. Unless a different endpoint is needed, no profile configuration is necessary. Simply run ` + "`tharsis sso login`" + ` and the ` + "`default`" + ` profile will be created and stored in the settings file.
-
-### How do I use profiles?
-
-The profile can be specified using the ` + "`-p`" + ` global flag or the ` + "`THARSIS_PROFILE`" + ` environment variable. The flag **must** come before a command name. For example, ` + "`tharsis -p local group list`" + ` will list all the groups using the Tharsis endpoint in the ` + "`local`" + ` profile. Service accounts can use profiles in the same manner as human users.
-
-### Where are the settings and credentials files located?
-
-The settings file is located at ` + "`~/.tharsis/settings.json`" + ` and contains profile configuration (endpoints, options). Credentials are stored separately in ` + "`~/.tharsis/credentials.json`" + ` so they can have stricter permissions.
-
-:::caution
-**Never** share the credentials file as it contains sensitive data like the authentication token from SSO!
-:::
-
-### How do I disable colored output?
-
-Set the ` + "`NO_COLOR`" + ` environment variable to any value to disable colored output. For example, ` + "`NO_COLOR=1 tharsis group list`" + `.
-
-### Can I use Terraform variables from the CLI's environment inside a run?
-
-Yes, environment variables with the ` + "`TF_VAR_`" + ` prefix are passed as Terraform variables with the prefix stripped. For example, ` + "`TF_VAR_region=us-east-1`" + ` sets a Terraform variable named ` + "`region`" + ` to ` + "`us-east-1`" + `.
-`
-
-type markdownCommandListElem struct {
-	Name     string
-	Anchor   string
-	Synopsis string
-}
-
-type markdownCommandDetail struct {
-	Name           string
-	Synopsis       string
-	UsageLine      string
-	Description    string
-	Example        string
-	Flags          []markdownFlag
-	IsSubcommand   bool
-	HasSubcommands bool
-	Subcommands    []markdownCommandListElem
-}
-
-type markdownFlag struct {
-	Name        string
-	Description string
-}
 
 var _ Command = (*documentationGenerateCommand)(nil)
 
@@ -168,12 +50,6 @@ func (c *documentationGenerateCommand) Run(args []string) int {
 		return code
 	}
 
-	generator, err := newMarkdownGenerator()
-	if err != nil {
-		c.Logger.Error(fmt.Sprintf("Failed to create generator: %s", err))
-		return 1
-	}
-
 	writer := os.Stdout
 	if c.outputFilename != nil {
 		file, err := os.Create(*c.outputFilename)
@@ -185,7 +61,7 @@ func (c *documentationGenerateCommand) Run(args []string) int {
 		writer = file
 	}
 
-	if err := generator.Generate(writer, c.allCommands); err != nil {
+	if err := generateDocumentation(writer, c.allCommands); err != nil {
 		c.Logger.Error(fmt.Sprintf("Failed to generate documentation: %s", err))
 		return 1
 	}
@@ -214,173 +90,202 @@ tharsis documentation generate
 `
 }
 
-func (c *documentationGenerateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("command options", flag.ContinueOnError)
-	f.Func(
+func (c *documentationGenerateCommand) Flags() *flag.Set {
+	f := flag.NewSet("command options")
+	f.StringVar(
+		&c.outputFilename,
 		"output",
 		"The output filename.",
-		func(s string) error {
-			c.outputFilename = &s
-			return nil
-		},
 	)
 
 	return f
 }
 
-// markdownGenerator handles markdown documentation generation
-type markdownGenerator struct {
-	listTemplate   *template.Template
-	detailTemplate *template.Template
-	faqTemplate    *template.Template
-}
-
-func newMarkdownGenerator() (*markdownGenerator, error) {
-	listTmpl, err := template.New("command-list").Parse(strings.TrimSpace(markdownTemplateForCommandList))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse command list template: %w", err)
-	}
-
-	detailTmpl, err := template.New("command-detail").Parse(strings.ReplaceAll(markdownTemplateForCommandDetails, "\n", ""))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse command details template: %w", err)
-	}
-
-	faqTmpl, err := template.New("faq").Parse(strings.TrimSpace(markdownTemplateForFAQ))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse FAQ template: %w", err)
-	}
-
-	return &markdownGenerator{
-		listTemplate:   listTmpl,
-		detailTemplate: detailTmpl,
-		faqTemplate:    faqTmpl,
-	}, nil
-}
-
-func (g *markdownGenerator) Generate(writer io.Writer, allCommands map[string]Factory) error {
-	commands, err := g.instantiateCommands(allCommands)
+func generateDocumentation(writer io.Writer, allCommands map[string]Factory) error {
+	commands, err := instantiateCommands(allCommands)
 	if err != nil {
 		return err
 	}
 
-	list := g.buildCommandList(commands)
-	if err := g.listTemplate.Execute(writer, list); err != nil {
-		return fmt.Errorf("failed to execute command list template: %w", err)
+	names := sortedCommandNames(commands)
+	isSubcommand, subCommands := analyzeSubcommands(commands, names)
+
+	m := md.NewMarkdown(writer)
+
+	// Frontmatter + command list.
+	writeFrontmatter(m)
+	writeCommandList(m, commands, names)
+
+	// Command details.
+	for _, name := range names {
+		// Skip the documentation commands from public docs.
+		if strings.HasPrefix(name, "documentation") {
+			continue
+		}
+
+		cmd := commands[name]
+		if isSubcommand[name] {
+			m.HorizontalRule().H3f("%s subcommand", name)
+		} else {
+			m.HorizontalRule().H2f("%s command", name)
+		}
+
+		m.PlainTextf("**%s**", ensurePeriod(cmd.Synopsis())).LF()
+
+		if subs, ok := subCommands[name]; ok {
+			m.PlainText("**Subcommands:**").LF()
+			items := make([]string, 0, len(subs))
+			for _, sub := range subs {
+				items = append(items, fmt.Sprintf("[`%s`](#%s) - %s", sub.name, sub.anchor, sub.synopsis))
+			}
+			m.BulletList(items...)
+			m.LF()
+		}
+
+		if desc := sanitizeForMarkdown(cmd.Description()); desc != "" {
+			m.PlainText(desc).LF()
+		}
+
+		if example := strings.TrimSpace(cmd.Example()); example != "" {
+			m.CodeBlocks(md.SyntaxHighlightShell, example).LF()
+		}
+
+		writeFlagsTable(m, cmd)
 	}
 
-	details := g.buildCommandDetails(commands)
-	if err := g.detailTemplate.Execute(writer, details); err != nil {
-		return fmt.Errorf("failed to execute command details template: %w", err)
-	}
+	// FAQ.
+	m.HorizontalRule()
+	writeFAQ(m)
 
-	if err := g.faqTemplate.Execute(writer, nil); err != nil {
-		return fmt.Errorf("failed to execute FAQ template: %w", err)
-	}
-
-	return nil
+	return m.Build()
 }
 
-func (g *markdownGenerator) instantiateCommands(allCommands map[string]Factory) (map[string]Command, error) {
-	commandNames := make([]string, 0, len(allCommands))
-	for name := range allCommands {
-		commandNames = append(commandNames, name)
-	}
-	sort.Strings(commandNames)
+func writeFrontmatter(m *md.Markdown) {
+	m.PlainText("---").
+		PlainText("title: Commands").
+		PlainText(`description: "An introduction to the CLI commands"`).
+		PlainText("---").LF()
+}
 
+func writeCommandList(m *md.Markdown, commands map[string]Command, names []string) {
+	m.H2("Available Commands").
+		PlainText("Currently, the CLI supports the following commands:").LF()
+
+	items := make([]string, 0, len(names))
+	for _, name := range names {
+		if !strings.Contains(name, " ") && name != "documentation" {
+			anchor := name + "-command"
+			items = append(items, fmt.Sprintf("[%s](#%s) — %s", name, anchor, ensurePeriod(commands[name].Synopsis())))
+		}
+	}
+
+	m.BulletList(items...).LF()
+
+	m.PlainText(":::tip\n`tharsis [command]` or `tharsis [command] -h` will output the help menu for that specific command.\n:::")
+	m.PlainText(":::info\nCommands and options may evolve between major versions. Options **must** come before any arguments.\n:::")
+	m.PlainText(":::tip Have a question?\nCheck the [FAQ](#frequently-asked-questions-faq) to see if there's already an answer.\n:::")
+	m.PlainText(":::info Legend\n" +
+		"- <span style={{color:'red'}}>\\*&nbsp;&nbsp;</span> required\n" +
+		"- <span style={{color:'orange'}}>!&nbsp;&nbsp;</span> deprecated\n" +
+		"- <span style={{color:'green'}}>...</span> repeatable\n" +
+		":::")
+	m.LF()
+}
+
+func writeFlagsTable(m *md.Markdown, cmd Command) {
+	flagSet := cmd.Flags()
+	if flagSet == nil {
+		return
+	}
+
+	var buf strings.Builder
+	flagSet.VisitAll(func(f *flag.Flag) {
+		var name strings.Builder
+		name.WriteString(f.FormattedName())
+		for _, m := range f.Markers() {
+			name.WriteString(" ")
+			name.WriteString(coloredMarker(m))
+		}
+
+		buf.WriteString("#### " + name.String() + "\n\n")
+
+		var meta []string
+		if vals := f.ValidValues(); len(vals) > 0 {
+			meta = append(meta, "**Values:** `"+strings.Join(vals, "`, `")+"`")
+		}
+
+		if f.DefValue() != "" {
+			meta = append(meta, "**Default:** `"+f.DefValue()+"`")
+		}
+
+		if f.IsDeprecated() {
+			msg := "**Deprecated**"
+			if f.DeprecationMessage() != "" {
+				msg += ": " + f.DeprecationMessage()
+			}
+			meta = append(meta, msg)
+		}
+
+		if f.EnvVar() != "" {
+			meta = append(meta, "**Env:** `"+f.EnvVar()+"`")
+		}
+
+		if len(meta) > 0 {
+			buf.WriteString(f.Usage + "\\\n")
+			buf.WriteString(strings.Join(meta, "\\\n"))
+		} else {
+			buf.WriteString(f.Usage)
+		}
+
+		buf.WriteString("\n\n")
+	})
+
+	if buf.Len() > 0 {
+		m.H4("Options").LF()
+		m.PlainText(buf.String())
+	}
+}
+
+func writeFAQ(m *md.Markdown) {
+	m.H2("Frequently asked questions (FAQ)")
+
+	m.H3("Is configuring a profile necessary?")
+	m.PlainText("By default, the CLI will use the default Tharsis endpoint passed in at build-time. Unless a different endpoint is needed, no profile configuration is necessary. Simply run `tharsis sso login` and the `default` profile will be created and stored in the settings file.")
+
+	m.H3("How do I use profiles?")
+	m.PlainText("The profile can be specified using the `-p` global flag or the `THARSIS_PROFILE` environment variable. The flag **must** come before a command name. For example, `tharsis -p local group list` will list all the groups using the Tharsis endpoint in the `local` profile. Service accounts can use profiles in the same manner as human users.")
+
+	m.H3("Where are the settings and credentials files located?")
+	m.PlainText("The settings file is located at `~/.tharsis/settings.json` and contains profile configuration (endpoints, options). Credentials are stored separately in `~/.tharsis/credentials.json` so they can have stricter permissions.")
+	m.PlainText(":::caution\n**Never** share the credentials file as it contains sensitive data like the authentication token from SSO!\n:::")
+
+	m.H3("How do I disable colored output?")
+	m.PlainText("Set the `NO_COLOR` environment variable to any value to disable colored output. For example, `NO_COLOR=1 tharsis group list`.")
+
+	m.H3("Can I use Terraform variables from the CLI's environment inside a run?")
+	m.PlainText("Yes, environment variables with the `TF_VAR_` prefix are passed as Terraform variables with the prefix stripped. For example, `TF_VAR_region=us-east-1` sets a Terraform variable named `region` to `us-east-1`.")
+}
+
+type subcommandInfo struct {
+	name     string
+	anchor   string
+	synopsis string
+}
+
+func instantiateCommands(allCommands map[string]Factory) (map[string]Command, error) {
 	commands := make(map[string]Command, len(allCommands))
-	for _, name := range commandNames {
-		command, err := allCommands[name]()
+	for name, factory := range allCommands {
+		cmd, err := factory()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create command %s: %w", name, err)
 		}
-		commands[name] = command
+		commands[name] = cmd
 	}
 
 	return commands, nil
 }
 
-func (g *markdownGenerator) buildCommandList(commands map[string]Command) []markdownCommandListElem {
-	commandNames := g.getSortedCommandNames(commands)
-	longestName := g.getLongestNameLength(commandNames)
-	formatString := fmt.Sprintf("%%-%ds", longestName)
-
-	list := make([]markdownCommandListElem, 0)
-	for _, name := range commandNames {
-		// Don't add subcommands to the summary list
-		if !strings.Contains(name, " ") {
-			list = append(list, markdownCommandListElem{
-				Name:     fmt.Sprintf(formatString, name),
-				Synopsis: commands[name].Synopsis(),
-			})
-		}
-	}
-
-	return list
-}
-
-func (g *markdownGenerator) buildCommandDetails(commands map[string]Command) []markdownCommandDetail {
-	commandNames := g.getSortedCommandNames(commands)
-
-	isSubcommand, hasSubcommands, subCommands := g.analyzeSubcommands(commands, commandNames)
-
-	details := make([]markdownCommandDetail, 0, len(commandNames))
-	for _, name := range commandNames {
-		command := commands[name]
-		detail := markdownCommandDetail{
-			Name:           name,
-			Synopsis:       command.Synopsis(),
-			UsageLine:      strings.TrimSpace(command.Usage()),
-			Description:    sanitizeForMarkdown(strings.TrimSuffix(strings.TrimPrefix(command.Description(), "\n"), "\n")),
-			Example:        strings.TrimSpace(command.Example()),
-			Flags:          extractFlags(command),
-			IsSubcommand:   isSubcommand[name],
-			HasSubcommands: hasSubcommands[name],
-			Subcommands:    subCommands[name],
-		}
-		details = append(details, detail)
-	}
-
-	return details
-}
-
-func (g *markdownGenerator) analyzeSubcommands(commands map[string]Command, commandNames []string) (
-	map[string]bool,
-	map[string]bool,
-	map[string][]markdownCommandListElem,
-) {
-	isSubcommand := make(map[string]bool)
-	hasSubcommands := make(map[string]bool)
-	subCommands := make(map[string][]markdownCommandListElem)
-
-	for _, name := range commandNames {
-		idx := strings.LastIndex(name, " ")
-		if idx == -1 {
-			continue
-		}
-
-		isSubcommand[name] = true
-		parentName := name[:idx]
-		subName := name[idx+1:]
-
-		if _, exists := commands[parentName]; exists {
-			hasSubcommands[parentName] = true
-		}
-
-		if _, ok := subCommands[parentName]; !ok {
-			subCommands[parentName] = make([]markdownCommandListElem, 0)
-		}
-		subCommands[parentName] = append(subCommands[parentName], markdownCommandListElem{
-			Name:     subName,
-			Anchor:   strings.ReplaceAll(name, " ", "-") + "-subcommand",
-			Synopsis: commands[name].Synopsis(),
-		})
-	}
-
-	return isSubcommand, hasSubcommands, subCommands
-}
-
-func (g *markdownGenerator) getSortedCommandNames(commands map[string]Command) []string {
+func sortedCommandNames(commands map[string]Command) []string {
 	names := make([]string, 0, len(commands))
 	for name := range commands {
 		names = append(names, name)
@@ -389,36 +294,59 @@ func (g *markdownGenerator) getSortedCommandNames(commands map[string]Command) [
 	return names
 }
 
-func (g *markdownGenerator) getLongestNameLength(names []string) int {
-	longest := 0
+func analyzeSubcommands(commands map[string]Command, names []string) (map[string]bool, map[string][]subcommandInfo) {
+	isSubcommand := make(map[string]bool)
+	subCommands := make(map[string][]subcommandInfo)
+
 	for _, name := range names {
-		if len(name) > longest {
-			longest = len(name)
+		idx := strings.LastIndex(name, " ")
+		if idx == -1 {
+			continue
+		}
+
+		isSubcommand[name] = true
+		parentName := name[:idx]
+
+		if _, exists := commands[parentName]; exists {
+			subCommands[parentName] = append(subCommands[parentName], subcommandInfo{
+				name:     name[idx+1:],
+				anchor:   strings.ReplaceAll(name, " ", "-") + "-subcommand",
+				synopsis: commands[name].Synopsis(),
+			})
 		}
 	}
-	return longest
-}
 
-func extractFlags(command Command) []markdownFlag {
-	flags := make([]markdownFlag, 0)
-	flagSet := command.Flags()
-	if flagSet != nil {
-		flagSet.VisitAll(func(f *flag.Flag) {
-			flags = append(flags, markdownFlag{
-				Name:        f.Name,
-				Description: f.Usage,
-			})
-		})
-	}
-	return flags
+	return isSubcommand, subCommands
 }
 
 func sanitizeForMarkdown(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimSpace(line)
+	}
+
+	s = strings.Join(lines, "\n")
 	s = strings.ReplaceAll(s, "[", "\\[")
 	s = strings.ReplaceAll(s, "]", "\\]")
 	s = strings.ReplaceAll(s, "<", "\\<")
 	s = strings.ReplaceAll(s, ">", "\\>")
 	s = strings.ReplaceAll(s, "{", "\\{")
 	s = strings.ReplaceAll(s, "}", "\\}")
+	return s
+}
+
+func coloredMarker(m flag.Marker) string {
+	if c := m.Color(); c != "" {
+		return fmt.Sprintf("<span style={{color:'%s'}}>%s</span>", c, m)
+	}
+
+	return m.String()
+}
+
+func ensurePeriod(s string) string {
+	s = strings.TrimSpace(s)
+	if s != "" && !strings.HasSuffix(s, ".") {
+		s += "."
+	}
 	return s
 }

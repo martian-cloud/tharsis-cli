@@ -1,22 +1,20 @@
 package command
 
 import (
-	"flag"
-
-	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupAddMembershipCommand struct {
 	*BaseCommand
 
-	roleID           string
+	roleID           *string
 	userID           *string
 	serviceAccountID *string
 	teamID           *string
-	toJSON           bool
+	toJSON           *bool
 }
 
 // NewGroupAddMembershipCommandFactory returns a groupAddMembershipCommand struct.
@@ -35,7 +33,6 @@ func (c *groupAddMembershipCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.roleID, validation.Required),
 	)
 }
 
@@ -58,7 +55,7 @@ func (c *groupAddMembershipCommand) Run(args []string) int {
 
 	input := &pb.CreateNamespaceMembershipRequest{
 		NamespacePath:    group.FullPath,
-		RoleId:           c.roleID,
+		RoleId:           *c.roleID,
 		UserId:           c.userID,
 		ServiceAccountId: c.serviceAccountID,
 		TeamId:           c.teamID,
@@ -70,7 +67,7 @@ func (c *groupAddMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputMembership(c.UI, c.toJSON, membership)
+	return outputMembership(c.UI, *c.toJSON, membership)
 }
 
 func (*groupAddMembershipCommand) Synopsis() string {
@@ -91,73 +88,67 @@ func (*groupAddMembershipCommand) Usage() string {
 func (*groupAddMembershipCommand) Example() string {
 	return `
 tharsis group add-membership \
-  --role-id trn:role:<role_name> \
-  --user-id trn:user:<username> \
+  -role-id trn:role:<role_name> \
+  -user-id trn:user:<username> \
   trn:group:<group_path>
 `
 }
 
-func (c *groupAddMembershipCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupAddMembershipCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.roleID,
 		"role-id",
-		"",
 		"The role ID for the membership.",
+		flag.Required(),
 	)
-	f.Func(
+	f.StringVar(
+		&c.userID,
 		"user-id",
 		"The user ID for the membership.",
-		func(s string) error {
-			c.userID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.serviceAccountID,
 		"service-account-id",
 		"The service account ID for the membership.",
-		func(s string) error {
-			c.serviceAccountID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.teamID,
 		"team-id",
 		"The team ID for the membership.",
-		func(s string) error {
-			c.teamID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.teamID,
 		"team-name",
-		"The team name for the membership. Deprecated.",
-		func(s string) error {
-			c.teamID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeTeam, s))
-			return nil
-		},
+		"The team name for the membership.",
+		flag.Deprecated("use -team-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeTeam, s)
+		}),
 	)
-	f.Func(
+	f.StringVar(
+		&c.userID,
 		"username",
-		"The username for the membership. Deprecated.",
-		func(s string) error {
-			c.userID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeUser, s))
-			return nil
-		},
+		"The username for the membership.",
+		flag.Deprecated("use -user-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeUser, s)
+		}),
 	)
-	f.Func(
+	f.StringVar(
+		&c.roleID,
 		"role",
-		"The role for the membership. Deprecated.",
-		func(s string) error {
-			c.roleID = trn.NewResourceTRN(trn.ResourceTypeRole, s)
-			return nil
-		},
+		"The role for the membership.",
+		flag.Deprecated("use -role-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeRole, s)
+		}),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

@@ -1,19 +1,19 @@
 package command
 
 import (
-	"flag"
 	"time"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type workspaceListEnvironmentVarsCommand struct {
 	*BaseCommand
 
-	showSensitive bool
-	toJSON        bool
+	showSensitive *bool
+	toJSON        *bool
 }
 
 // NewWorkspaceListEnvironmentVarsCommandFactory returns a workspaceListEnvironmentVarsCommand struct.
@@ -52,21 +52,19 @@ func (c *workspaceListEnvironmentVarsCommand) Run(args []string) int {
 		return 1
 	}
 
-	input := &pb.GetNamespaceVariablesRequest{
+	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, &pb.GetNamespaceVariablesRequest{
 		NamespacePath: workspace.FullPath,
-	}
-
-	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
+	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to list environment variables")
 		return 1
 	}
 
-	// Filter to only environment variables
+	// Filter to only environment variables.
 	var environmentVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
 		if v.Category == pb.VariableCategory_environment.String() {
-			if v.Sensitive && !c.showSensitive {
+			if v.Sensitive && !*c.showSensitive {
 				v.Value = ptr.String("[SENSITIVE]")
 			}
 
@@ -74,29 +72,27 @@ func (c *workspaceListEnvironmentVarsCommand) Run(args []string) int {
 		}
 	}
 
-	// Fetch sensitive values if requested
-	if c.showSensitive {
+	// Fetch sensitive values if requested.
+	if *c.showSensitive {
 		for _, v := range environmentVars {
 			if v.Sensitive && v.LatestVersionId != "" {
-				versionInput := &pb.GetNamespaceVariableVersionByIDRequest{
+				version, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, &pb.GetNamespaceVariableVersionByIDRequest{
 					Id:                    v.LatestVersionId,
 					IncludeSensitiveValue: true,
-				}
-
-				version, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
+				})
 				if err != nil {
 					c.UI.ErrorWithSummary(err, "failed to get variable version")
 					return 1
 				}
 
 				v.Value = version.Value
-				// Rate limit to avoid overwhelming the API
+				// Rate limit to avoid overwhelming the API.
 				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, c.toJSON, environmentVars)
+	return outputNamespaceVariables(c.UI, *c.toJSON, environmentVars)
 }
 
 func (*workspaceListEnvironmentVarsCommand) Synopsis() string {
@@ -105,8 +101,8 @@ func (*workspaceListEnvironmentVarsCommand) Synopsis() string {
 
 func (*workspaceListEnvironmentVarsCommand) Description() string {
 	return `
-   The workspace list-environment-vars command retrieves all terraform
-   variables from a workspace and its parent workspaces.
+   The workspace list-environment-vars command retrieves all environment
+   variables from a workspace and its parent groups.
 `
 }
 
@@ -116,23 +112,23 @@ func (*workspaceListEnvironmentVarsCommand) Usage() string {
 
 func (*workspaceListEnvironmentVarsCommand) Example() string {
 	return `
-tharsis workspace list-environment-vars --show-sensitive trn:workspace:<workspace_path>
+tharsis workspace list-environment-vars -show-sensitive trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceListEnvironmentVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceListEnvironmentVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.showSensitive,
 		"show-sensitive",
-		false,
 		"Show the actual values of sensitive variables (requires appropriate permissions).",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

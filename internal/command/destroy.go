@@ -1,9 +1,8 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
@@ -21,10 +20,9 @@ type destroyCommand struct {
 	tfVariables      []string
 	envVariables     []string
 	targetAddresses  []string
-	comment          string
-	autoApprove      bool
-	input            bool
-	refresh          bool
+	autoApprove      *bool
+	input            *bool
+	refresh          *bool
 }
 
 // NewDestroyCommandFactory returns a destroyCommand struct.
@@ -89,7 +87,7 @@ func (c *destroyCommand) Run(args []string) int {
 		TargetAddresses:  c.targetAddresses,
 		IsDestroy:        true,
 		IsSpeculative:    false,
-		Refresh:          c.refresh,
+		Refresh:          *c.refresh,
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create run")
@@ -103,13 +101,13 @@ func (c *destroyCommand) Run(args []string) int {
 	}
 
 	// Return if input is false and autoApprove is not set
-	if !c.input && !c.autoApprove {
+	if !*c.input && !*c.autoApprove {
 		c.UI.Output("Will not apply the plan since -input was false.")
 		return 0
 	}
 
 	// Handle approval
-	if c.autoApprove {
+	if *c.autoApprove {
 		c.UI.Output("\nAuto-approving.\n")
 	} else {
 		c.UI.Output("\nDo you approve to destroy the above resources?\n")
@@ -140,7 +138,7 @@ func (c *destroyCommand) Run(args []string) int {
 }
 
 func (*destroyCommand) Synopsis() string {
-	return "Destroy workspace resources"
+	return "Destroy workspace resources."
 }
 
 func (*destroyCommand) Description() string {
@@ -160,108 +158,75 @@ func (*destroyCommand) Usage() string {
 
 func (*destroyCommand) Example() string {
 	return `
-tharsis destroy --directory-path ./terraform trn:workspace:<workspace_path>
+tharsis destroy -directory-path ./terraform trn:workspace:<workspace_path>
 `
 }
 
-func (c *destroyCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *destroyCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 
-	f.Func(
+	f.StringVar(
+		&c.directoryPath,
 		"directory-path",
 		"The path of the root module's directory.",
-		func(s string) error {
-			c.directoryPath = &s
-			return nil
-		},
-	)
-	f.Func(
-		"module-source",
-		"Remote module source specification.",
-		func(s string) error {
-			c.moduleSource = &s
-			return nil
-		},
-	)
-	f.Func(
-		"module-version",
-		"Remote module version number--defaults to latest.",
-		func(s string) error {
-			c.moduleVersion = &s
-			return nil
-		},
-	)
-	f.Func(
-		"terraform-version",
-		"The Terraform CLI version to use for the run.",
-		func(s string) error {
-			c.terraformVersion = &s
-			return nil
-		},
 	)
 	f.StringVar(
-		&c.comment,
-		"comment",
-		"",
-		"Comment for the destroy.",
+		&c.moduleSource,
+		"module-source",
+		"Remote module source specification.",
+	)
+	f.StringVar(
+		&c.moduleVersion,
+		"module-version",
+		"Remote module version number. Uses latest if empty.",
+	)
+	f.StringVar(
+		&c.terraformVersion,
+		"terraform-version",
+		"The Terraform CLI version to use for the run.",
 	)
 	f.BoolVar(
 		&c.autoApprove,
 		"auto-approve",
-		false,
 		"Skip interactive approval of the plan.",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.input,
 		"input",
-		true,
 		"Ask for input for variables if not directly set.",
+		flag.Default(true),
 	)
 	f.BoolVar(
 		&c.refresh,
 		"refresh",
-		true,
 		"Whether to do the usual refresh step.",
+		flag.Default(true),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.tfVarFiles,
 		"tf-var-file",
 		"The path to a .tfvars variables file.",
-		func(s string) error {
-			c.tfVarFiles = append(c.tfVarFiles, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.envVarFiles,
 		"env-var-file",
 		"The path to an environment variables file.",
-		func(s string) error {
-			c.envVarFiles = append(c.envVarFiles, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.tfVariables,
 		"tf-var",
 		"A terraform variable as a key=value pair.",
-		func(s string) error {
-			c.tfVariables = append(c.tfVariables, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.envVariables,
 		"env-var",
 		"An environment variable as a key=value pair.",
-		func(s string) error {
-			c.envVariables = append(c.envVariables, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.targetAddresses,
 		"target",
 		"The Terraform address of the resources to be acted upon.",
-		func(s string) error {
-			c.targetAddresses = append(c.targetAddresses, s)
-			return nil
-		},
 	)
 
 	return f

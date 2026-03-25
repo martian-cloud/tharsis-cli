@@ -1,13 +1,13 @@
 package command
 
 import (
-	"flag"
 	"fmt"
 	"time"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -15,8 +15,8 @@ import (
 type groupListTerraformVarsCommand struct {
 	*BaseCommand
 
-	showSensitive bool
-	toJSON        bool
+	showSensitive *bool
+	toJSON        *bool
 }
 
 // NewGroupListTerraformVarsCommandFactory returns a groupListTerraformVarsCommand struct.
@@ -65,11 +65,11 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 		return 1
 	}
 
-	// Filter to only terraform variables
+	// Filter to only terraform variables.
 	var terraformVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
 		if v.Category == pb.VariableCategory_terraform.String() {
-			if v.Sensitive && !c.showSensitive {
+			if v.Sensitive && !*c.showSensitive {
 				v.Value = ptr.String("[SENSITIVE]")
 			}
 
@@ -77,8 +77,8 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 		}
 	}
 
-	// Fetch sensitive values if requested
-	if c.showSensitive {
+	// Fetch sensitive values if requested.
+	if *c.showSensitive {
 		for _, v := range terraformVars {
 			if v.Sensitive && v.LatestVersionId != "" {
 				versionInput := &pb.GetNamespaceVariableVersionByIDRequest{
@@ -93,13 +93,13 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 				}
 
 				v.Value = version.Value
-				// Rate limit to avoid overwhelming the API
+				// Rate limit to avoid overwhelming the API.
 				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, c.toJSON, terraformVars)
+	return outputNamespaceVariables(c.UI, *c.toJSON, terraformVars)
 }
 
 func (*groupListTerraformVarsCommand) Synopsis() string {
@@ -119,23 +119,23 @@ func (*groupListTerraformVarsCommand) Usage() string {
 
 func (*groupListTerraformVarsCommand) Example() string {
 	return `
-tharsis group list-terraform-vars --show-sensitive trn:group:<group_path>
+tharsis group list-terraform-vars -show-sensitive trn:group:<group_path>
 `
 }
 
-func (c *groupListTerraformVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupListTerraformVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.showSensitive,
 		"show-sensitive",
-		false,
 		"Show the actual values of sensitive variables (requires appropriate permissions).",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f
@@ -147,6 +147,7 @@ func outputNamespaceVariables(ui terminal.UI, toJSON bool, variables []*pb.Names
 			ui.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
 		}
+
 		return 0
 	}
 

@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -13,7 +12,7 @@ import (
 type groupGetCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*groupGetCommand)(nil)
@@ -58,7 +57,7 @@ func (c *groupGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputGroup(c.UI, c.toJSON, group)
+	return outputGroup(c.UI, *c.toJSON, group)
 }
 
 func (*groupGetCommand) Synopsis() string {
@@ -79,18 +78,18 @@ func (*groupGetCommand) Description() string {
 func (*groupGetCommand) Example() string {
 	return `
 tharsis group get \
-  --json \
+  -json \
   trn:tharsis:group:<group_path>
 `
 }
 
-func (c *groupGetCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupGetCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

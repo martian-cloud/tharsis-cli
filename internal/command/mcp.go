@@ -1,27 +1,18 @@
 package command
 
 import (
-	"flag"
 	"log/slog"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/hashicorp/go-hclog"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	env "github.com/qiangxue/go-env"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/mcp"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 )
-
-type mcpConfig struct {
-	Toolsets             string `env:"TOOLSETS"`
-	Tools                string `env:"TOOLS"`
-	ReadOnly             *bool  `env:"READ_ONLY"`
-	NamespaceMutationACL string `env:"NAMESPACE_MUTATION_ACL"`
-}
 
 // mcpCommand is the top-level structure for the mcp command.
 type mcpCommand struct {
@@ -54,45 +45,23 @@ func (c *mcpCommand) Run(args []string) int {
 		return code
 	}
 
-	// Load environment variables
-	var cfg mcpConfig
-	if err := env.New("THARSIS_MCP_", nil).Load(&cfg); err != nil {
-		c.UI.ErrorWithSummary(err, "failed to load environment variables")
-		return 1
-	}
-
-	// Command line args override environment variables
-	if c.toolsets != nil {
-		cfg.Toolsets = *c.toolsets
-	}
-
-	if c.enabledTools != nil {
-		cfg.Tools = *c.enabledTools
-	}
-
-	if c.readOnly != nil {
-		cfg.ReadOnly = c.readOnly
-	}
-
-	if c.namespaceMutationACL != nil {
-		cfg.NamespaceMutationACL = *c.namespaceMutationACL
-	}
-
 	// Enable all toolsets by default if none specified
-	if cfg.Toolsets == "" && cfg.Tools == "" {
-		cfg.Toolsets = strings.Join(tools.AvailableToolsets(), ",")
+	toolsets := ptr.ToString(c.toolsets)
+	enabledTools := ptr.ToString(c.enabledTools)
+	if toolsets == "" && enabledTools == "" {
+		toolsets = strings.Join(tools.AvailableToolsets(), ",")
 
-		if cfg.ReadOnly == nil {
+		if c.readOnly == nil {
 			// Default to read-only for safety
-			cfg.ReadOnly = ptr.Bool(true)
+			c.readOnly = ptr.Bool(true)
 		}
 	}
 
 	c.Logger.Debug("MCP server configuration",
-		"toolsets", cfg.Toolsets,
-		"tools", cfg.Tools,
-		"read_only", cfg.ReadOnly,
-		"namespace_mutation_acl", cfg.NamespaceMutationACL,
+		"toolsets", toolsets,
+		"tools", enabledTools,
+		"read_only", c.readOnly,
+		"namespace_mutation_acl", c.namespaceMutationACL,
 	)
 
 	currentSettings, err := c.getCurrentSettings()
@@ -119,14 +88,14 @@ func (c *mcpCommand) Run(args []string) int {
 		c.HTTPClient,
 		c.grpcClient,
 		tfeClient,
-		tools.WithACLPatterns(cfg.NamespaceMutationACL),
+		tools.WithACLPatterns(ptr.ToString(c.namespaceMutationACL)),
 	)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create tool context")
 		return 1
 	}
 
-	toolsetGroup, err := tools.BuildToolsetGroup(ptr.ToBool(cfg.ReadOnly), toolContext)
+	toolsetGroup, err := tools.BuildToolsetGroup(ptr.ToBool(c.readOnly), toolContext)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to build toolset group")
 		return 1
@@ -144,10 +113,10 @@ func (c *mcpCommand) Run(args []string) int {
 		Version:         c.Version,
 		Logger:          slog.New(slog.NewTextHandler(c.Logger.StandardWriter(&hclog.StandardLoggerOptions{}), nil)),
 		Instructions:    mcp.DefaultInstructions(),
-		EnabledToolsets: cfg.Toolsets,
-		EnabledTools:    cfg.Tools,
+		EnabledToolsets: toolsets,
+		EnabledTools:    enabledTools,
 		Prefix:          normalizedProfileName,
-		ReadOnly:        ptr.ToBool(cfg.ReadOnly),
+		ReadOnly:        ptr.ToBool(c.readOnly),
 	}, toolsetGroup)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create server")
@@ -218,10 +187,10 @@ func (*mcpCommand) Example() string {
 tharsis -p production mcp
 
 # Start with specific toolsets
-tharsis mcp --toolsets auth,run
+tharsis mcp -toolsets auth,run
 
 # Start with namespace ACL restrictions
-tharsis mcp --namespace-mutation-acl "dev/*,staging/*"
+tharsis mcp -namespace-mutation-acl "dev/*,staging/*"
 
 # MCP Client Configuration (mcp.json):
 {
@@ -245,43 +214,31 @@ tharsis mcp --namespace-mutation-acl "dev/*,staging/*"
 `
 }
 
-func (c *mcpCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *mcpCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.toolsets,
 		"toolsets",
 		"Comma-separated list of toolsets to enable.",
-		func(s string) error {
-			c.toolsets = &s
-			return nil
-		},
+		flag.EnvVar("THARSIS_MCP_TOOLSETS"),
 	)
-	f.Func(
+	f.StringVar(
+		&c.enabledTools,
 		"tools",
 		"Comma-separated list of individual tools to enable.",
-		func(s string) error {
-			c.enabledTools = &s
-			return nil
-		},
+		flag.EnvVar("THARSIS_MCP_TOOLS"),
 	)
-	f.BoolFunc(
+	f.BoolVar(
+		&c.readOnly,
 		"read-only",
 		"Enable read-only mode (disables write tools).",
-		func(s string) error {
-			v, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			c.readOnly = &v
-			return nil
-		},
+		flag.EnvVar("THARSIS_MCP_READ_ONLY"),
 	)
-	f.Func(
+	f.StringVar(
+		&c.namespaceMutationACL,
 		"namespace-mutation-acl",
 		"ACL patterns for namespace mutations (comma-separated).",
-		func(s string) error {
-			c.namespaceMutationACL = &s
-			return nil
-		},
+		flag.EnvVar("THARSIS_MCP_NAMESPACE_MUTATION_ACL"),
 	)
 
 	return f

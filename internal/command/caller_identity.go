@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -15,7 +14,7 @@ import (
 type callerIdentityCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*callerIdentityCommand)(nil)
@@ -81,20 +80,21 @@ tharsis caller-identity
 `
 }
 
-func (c *callerIdentityCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *callerIdentityCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show output as JSON.",
+		flag.Default(false),
 	)
 
 	return f
 }
 
 func (c *callerIdentityCommand) outputCallerIdentity(resp *pb.GetCallerIdentityResponse) int {
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(resp); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1

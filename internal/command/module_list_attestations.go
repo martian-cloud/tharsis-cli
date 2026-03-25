@@ -1,13 +1,13 @@
 package command
 
 import (
-	"flag"
 	"fmt"
-	"strings"
+	"maps"
+	"slices"
 
-	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -15,12 +15,12 @@ import (
 type moduleListAttestationsCommand struct {
 	*BaseCommand
 
-	limit     int
-	sortOrder *string
+	limit     *int32
 	cursor    *string
 	digest    *string
 	sortBy    *string
-	toJSON    bool
+	sortOrder *string
+	toJSON    *bool
 }
 
 // NewModuleListAttestationsCommandFactory returns a moduleListAttestationsCommand struct.
@@ -33,13 +33,16 @@ func NewModuleListAttestationsCommandFactory(baseCommand *BaseCommand) func() (C
 }
 
 func (c *moduleListAttestationsCommand) validate() error {
+	if c.sortBy != nil && c.sortOrder != nil {
+		return fmt.Errorf("cannot use both -sort-by and -sort-order")
+	}
+
 	const message = "module-id is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
 	)
 }
 
@@ -68,7 +71,7 @@ func (c *moduleListAttestationsCommand) Run(args []string) int {
 		ModuleId: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
 		Sort:     sortByEnum,
 		PaginationOptions: &pb.PaginationOptions{
-			First: ptr.Int32(int32(c.limit)),
+			First: c.limit,
 			After: c.cursor,
 		},
 		Digest: c.digest,
@@ -80,7 +83,7 @@ func (c *moduleListAttestationsCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(result); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
@@ -133,76 +136,52 @@ func (*moduleListAttestationsCommand) Usage() string {
 func (*moduleListAttestationsCommand) Example() string {
 	return `
 tharsis module list-attestations \
-  --sort-by CREATED_AT_DESC \
-  --limit 10 \
+  -sort-by CREATED_AT_DESC \
+  -limit 10 \
   trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 
-func (c *moduleListAttestationsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *moduleListAttestationsCommand) Flags() *flag.Set {
+	sortValues := slices.Collect(maps.Keys(pb.TerraformModuleAttestationSortableField_value))
+
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.cursor,
 		"cursor",
 		"The cursor string for manual pagination.",
-		func(s string) error {
-			c.cursor = &s
-			return nil
-		},
 	)
-	f.IntVar(
+	f.Int32Var(
 		&c.limit,
 		"limit",
-		maxPaginationLimit,
 		"Maximum number of result elements to return.",
+		flag.Default(maxPaginationLimit),
+		flag.ValidRange(0, int(maxPaginationLimit)),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortBy,
 		"sort-by",
-		"Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).",
-		func(s string) error {
-			// TODO: Update to use PB types and validate with PB map once deprecation is done.
-			switch v := strings.ToUpper(s); v {
-			case "PREDICATE", // Deprecated
-				pb.TerraformModuleAttestationSortableField_CREATED_AT_ASC.String(),
-				pb.TerraformModuleAttestationSortableField_CREATED_AT_DESC.String(),
-				pb.TerraformModuleAttestationSortableField_PREDICATE_ASC.String(),
-				pb.TerraformModuleAttestationSortableField_PREDICATE_DESC.String():
-				c.sortBy = &v
-			case "CREATED": // Deprecated
-				c.sortBy = ptr.String("CREATED_AT")
-			default:
-				return fmt.Errorf("unknown sort by option %s", s)
-			}
-
-			return nil
-		},
+		"Sort by this field.",
+		flag.PredictValues(sortValues...),
 	)
-	f.Func(
+	f.StringVar(
+		&c.digest,
 		"digest",
 		"Filter to attestations with this digest.",
-		func(s string) error {
-			c.digest = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortOrder,
 		"sort-order",
-		"Sort in this direction, ASC or DESC. Deprecated",
-		func(s string) error {
-			switch v := strings.ToUpper(s); v {
-			case "ASC", "DESC":
-				c.sortOrder = &v
-			default:
-				return fmt.Errorf("invalid sort-order value: %s", s)
-			}
-
-			return nil
-		},
+		"Sort in this direction.",
+		flag.Deprecated("use -sort-by"),
+		flag.ValidValues("ASC", "DESC"),
+		flag.PredictValues("ASC", "DESC"),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

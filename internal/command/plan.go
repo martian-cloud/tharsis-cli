@@ -1,9 +1,8 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -20,9 +19,9 @@ type planCommand struct {
 	tfVariables      []string
 	envVariables     []string
 	targetAddresses  []string
-	destroy          bool
-	refresh          bool
-	refreshOnly      bool
+	destroy          *bool
+	refresh          *bool
+	refreshOnly      *bool
 }
 
 // NewPlanCommandFactory returns a planCommand struct.
@@ -84,10 +83,10 @@ func (c *planCommand) Run(args []string) int {
 		TfVariables:      c.tfVariables,
 		EnvVariables:     c.envVariables,
 		TargetAddresses:  c.targetAddresses,
-		IsDestroy:        c.destroy,
+		IsDestroy:        *c.destroy,
 		IsSpeculative:    true,
-		Refresh:          c.refresh,
-		RefreshOnly:      c.refreshOnly,
+		Refresh:          *c.refresh,
+		RefreshOnly:      *c.refreshOnly,
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create run")
@@ -100,7 +99,7 @@ func (c *planCommand) Run(args []string) int {
 }
 
 func (*planCommand) Synopsis() string {
-	return "Create a speculative plan"
+	return "Create a speculative plan."
 }
 
 func (*planCommand) Description() string {
@@ -120,8 +119,8 @@ func (*planCommand) Description() string {
      2. terraform.tfvars file from module's directory, if present.
      3. terraform.tfvars.json file from module's directory, if present.
      4. *.auto.tfvars, *.auto.tfvars.json files from the module's directory, if present.
-     5. --tf-var-file option(s).
-     6. --tf-var option(s).
+     5. -tf-var-file option(s).
+     6. -tf-var option(s).
 
    NOTE: If the same variable is assigned multiple values, the last value found will be used.
 `
@@ -133,102 +132,74 @@ func (*planCommand) Usage() string {
 
 func (*planCommand) Example() string {
 	return `
-tharsis plan --directory-path ./terraform trn:workspace:<workspace_path>
+tharsis plan -directory-path ./terraform trn:workspace:<workspace_path>
 `
 }
 
-func (c *planCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-
-	f.Func(
+func (c *planCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.directoryPath,
 		"directory-path",
 		"The path of the root module's directory.",
-		func(s string) error {
-			c.directoryPath = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.moduleSource,
 		"module-source",
 		"Remote module source specification.",
-		func(s string) error {
-			c.moduleSource = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.moduleVersion,
 		"module-version",
-		"Remote module version number--defaults to latest.",
-		func(s string) error {
-			c.moduleVersion = &s
-			return nil
-		},
+		"Remote module version number. Uses latest if empty.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.terraformVersion,
 		"terraform-version",
 		"The Terraform CLI version to use for the run.",
-		func(s string) error {
-			c.terraformVersion = &s
-			return nil
-		},
 	)
 	f.BoolVar(
 		&c.destroy,
 		"destroy",
-		false,
 		"Designates this run as a destroy operation.",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.refresh,
 		"refresh",
-		true,
 		"Whether to do the usual refresh step.",
+		flag.Default(true),
 	)
 	f.BoolVar(
 		&c.refreshOnly,
 		"refresh-only",
-		false,
 		"Whether to do ONLY a refresh operation.",
+		flag.Default(false),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.tfVarFiles,
 		"tf-var-file",
 		"The path to a .tfvars variables file.",
-		func(s string) error {
-			c.tfVarFiles = append(c.tfVarFiles, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.envVarFiles,
 		"env-var-file",
 		"The path to an environment variables file.",
-		func(s string) error {
-			c.envVarFiles = append(c.envVarFiles, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.tfVariables,
 		"tf-var",
 		"A terraform variable as a key=value pair.",
-		func(s string) error {
-			c.tfVariables = append(c.tfVariables, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.envVariables,
 		"env-var",
 		"An environment variable as a key=value pair.",
-		func(s string) error {
-			c.envVariables = append(c.envVariables, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.targetAddresses,
 		"target",
 		"The Terraform address of the resources to be acted upon.",
-		func(s string) error {
-			c.targetAddresses = append(c.targetAddresses, s)
-			return nil
-		},
 	)
 
 	return f

@@ -1,17 +1,16 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
 type terraformProviderMirrorGetVersionCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 // NewTerraformProviderMirrorGetVersionCommandFactory returns a terraformProviderMirrorGetVersionCommand struct.
@@ -54,11 +53,12 @@ func (c *terraformProviderMirrorGetVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(versionMirror); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
 		}
+
 		return 0
 	}
 
@@ -96,13 +96,13 @@ tharsis terraform-provider-mirror get-version <version-mirror-id>
 `
 }
 
-func (c *terraformProviderMirrorGetVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *terraformProviderMirrorGetVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

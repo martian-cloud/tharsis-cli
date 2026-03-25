@@ -1,20 +1,18 @@
 package command
 
 import (
-	"flag"
-	"strconv"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceUpdateMembershipCommand struct {
 	*BaseCommand
 
-	roleID  string
+	roleID  *string
 	version *int64
-	toJSON  bool
+	toJSON  *bool
 }
 
 // NewWorkspaceUpdateMembershipCommandFactory returns a workspaceUpdateMembershipCommand struct.
@@ -33,7 +31,7 @@ func (c *workspaceUpdateMembershipCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
-		validation.Field(&c.roleID, validation.Required),
+		validation.Field(&c.roleID, validation.Required, validation.NotNil),
 	)
 }
 
@@ -50,7 +48,7 @@ func (c *workspaceUpdateMembershipCommand) Run(args []string) int {
 
 	input := &pb.UpdateNamespaceMembershipRequest{
 		Id:      c.arguments[0],
-		RoleId:  c.roleID,
+		RoleId:  *c.roleID,
 		Version: c.version,
 	}
 
@@ -60,7 +58,7 @@ func (c *workspaceUpdateMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputMembership(c.UI, c.toJSON, membership)
+	return outputMembership(c.UI, *c.toJSON, membership)
 }
 
 func (*workspaceUpdateMembershipCommand) Synopsis() string {
@@ -80,44 +78,37 @@ func (*workspaceUpdateMembershipCommand) Usage() string {
 func (*workspaceUpdateMembershipCommand) Example() string {
 	return `
 tharsis workspace update-membership \
-  --role-id trn:role:<role_name> \
+  -role-id trn:role:<role_name> \
   <id>
 `
 }
 
-func (c *workspaceUpdateMembershipCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceUpdateMembershipCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.roleID,
 		"role-id",
-		"",
 		"The role ID for the membership.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.roleID,
 		"role",
-		"Role name for the membership. Deprecated.",
-		func(s string) error {
-			c.roleID = trn.NewResourceTRN(trn.ResourceTypeRole, s)
-			return nil
-		},
+		"Role name for the membership.",
+		flag.Deprecated("use -role-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeRole, s)
+		}),
 	)
-	f.Func(
+	f.Int64Var(
+		&c.version,
 		"version",
 		"Metadata version of the resource to be updated. In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Output in JSON format.",
+		flag.Default(false),
 	)
 
 	return f

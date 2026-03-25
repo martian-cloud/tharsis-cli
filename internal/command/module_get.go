@@ -1,10 +1,9 @@
 package command
 
 import (
-	"flag"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -13,7 +12,7 @@ import (
 type moduleGetCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*moduleGetCommand)(nil)
@@ -58,7 +57,7 @@ func (c *moduleGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModule(c.UI, c.toJSON, module)
+	return outputModule(c.UI, *c.toJSON, module)
 }
 
 func (*moduleGetCommand) Synopsis() string {
@@ -81,13 +80,13 @@ tharsis module get trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 
-func (c *moduleGetCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *moduleGetCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

@@ -1,11 +1,11 @@
 package command
 
 import (
-	"flag"
 	"fmt"
 	"sort"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
@@ -96,6 +96,6 @@ func (c *configureListCommand) Description() string {
 `
 }
 
-func (c *configureListCommand) Flags() *flag.FlagSet {
+func (c *configureListCommand) Flags() *flag.Set {
 	return nil
 }

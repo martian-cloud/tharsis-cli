@@ -1,11 +1,9 @@
 package command
 
 import (
-	"flag"
-	"strconv"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 // runnerAgentUpdateCommand is the top-level structure for the runner agent update command.
@@ -13,11 +11,11 @@ type runnerAgentUpdateCommand struct {
 	*BaseCommand
 
 	description     *string
+	version         *int64
+	tags            []string
 	disabled        *bool
 	runUntaggedJobs *bool
-	tags            []string
-	version         *int64
-	toJSON          bool
+	toJSON          *bool
 }
 
 var _ Command = (*runnerAgentUpdateCommand)(nil)
@@ -67,7 +65,7 @@ func (c *runnerAgentUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputRunnerAgent(c.UI, c.toJSON, updatedRunner)
+	return outputRunnerAgent(c.UI, *c.toJSON, updatedRunner)
 }
 
 func (*runnerAgentUpdateCommand) Synopsis() string {
@@ -87,74 +85,46 @@ func (*runnerAgentUpdateCommand) Description() string {
 func (*runnerAgentUpdateCommand) Example() string {
 	return `
 tharsis runner-agent update \
-  --description "Updated description" \
-  --disabled true \
-  --tag prod \
-  --tag us-west-2 \
+  -description "Updated description" \
+  -disabled true \
+  -tag prod \
+  -tag us-west-2 \
   trn:runner:<group_path>/<runner_name>
 `
 }
 
-func (c *runnerAgentUpdateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *runnerAgentUpdateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.description,
 		"description",
 		"Description for the runner agent.",
-		func(s string) error {
-			c.description = &s
-			return nil
-		},
 	)
-	f.BoolFunc(
+	f.BoolVar(
+		&c.disabled,
 		"disabled",
 		"Enable or disable the runner agent.",
-		func(s string) error {
-			val, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			c.disabled = &val
-			return nil
-		},
 	)
-	f.BoolFunc(
+	f.BoolVar(
+		&c.runUntaggedJobs,
 		"run-untagged-jobs",
 		"Allow the runner agent to execute jobs without tags.",
-		func(s string) error {
-			val, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			c.runUntaggedJobs = &val
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.tags,
 		"tag",
-		"Tag for the runner agent. (This flag may be repeated)",
-		func(s string) error {
-			c.tags = append(c.tags, s)
-			return nil
-		},
+		"Tag for the runner agent.",
 	)
-	f.Func(
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be updated. "+
-			"In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Metadata version of the resource to be updated. In most cases, this is not required.",
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f
