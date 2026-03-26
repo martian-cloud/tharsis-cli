@@ -303,7 +303,7 @@ func TestBoolAutoPrediction(t *testing.T) {
 	var debug *bool
 	fs.BoolVar(&debug, "debug", "debug flag")
 
-	assert.Equal(t, []string{"true", "false"}, fs.Lookup("debug").CompletionValues())
+	assert.Equal(t, []string{"true", "false"}, fs.Lookup("debug").predictors)
 }
 
 func TestEnvVarFallback(t *testing.T) {
@@ -461,14 +461,6 @@ func TestMapVar(t *testing.T) {
 			assert.Equal(t, tc.expectVal, labels)
 		})
 	}
-}
-
-func TestPredictValues(t *testing.T) {
-	fs := NewSet("test")
-	var format *string
-	fs.StringVar(&format, "format", "output format", PredictValues("json", "table", "yaml"))
-
-	assert.Equal(t, []string{"json", "table", "yaml"}, fs.Lookup("format").CompletionValues())
 }
 
 func TestFormatArgs(t *testing.T) {

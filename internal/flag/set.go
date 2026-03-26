@@ -45,7 +45,7 @@ func PredictValues(values ...string) Option {
 }
 
 // Aliases registers short or alternate names for a flag (e.g. Aliases("n")
-// lets -n work as an alias for --name).
+// lets -n work as an alias for -name).
 func Aliases(names ...string) Option {
 	return func(f *Flag) { f.aliases = names }
 }
@@ -166,8 +166,7 @@ func (fs *Set) VisitAll(fn func(*Flag)) {
 // Informational registers a flag for help and documentation display only.
 // It is not parsed from the command line.
 func (fs *Set) Informational(name string, usage string, opts ...any) {
-	f := fs.register(name, usage, opts)
-	f.informational = true
+	fs.register(name, usage, opts)
 }
 
 // Predictors returns a map of flag names to their shell completion candidates.
@@ -448,6 +447,15 @@ func (fs *Set) register(name string, usage string, args []any) *Flag {
 	return f
 }
 
+// registerAliases registers alternate names for a flag that delegate to the
+// same setter function.
+func (fs *Set) registerAliases(f *Flag, setter func(string) error) {
+	for _, alias := range f.aliases {
+		fs.stdfs.Func(alias, f.Usage, setter)
+		fs.flags[alias] = f
+	}
+}
+
 // extractOptions separates FlagOptions from format args in a variadic slice.
 // Format args must come before FlagOptions. Panics if a non-FlagOption value
 // appears after a FlagOption.
@@ -503,9 +511,7 @@ func setEnvDefault[T any](f *Flag, p **T) {
 		return
 	}
 
-	// Parse the env value into the target type via the stdlib flag Func
-	// registered for this flag. We reuse the same parsing by going through
-	// a temporary flag set — but it's simpler to just parse here directly.
+	// Parse the env value into the target type.
 	var result any
 	var err error
 
@@ -536,13 +542,4 @@ func setEnvDefault[T any](f *Flag, p **T) {
 	}
 
 	*p = &typed
-}
-
-// registerAliases registers alternate names for a flag that delegate to the
-// same setter function.
-func (fs *Set) registerAliases(f *Flag, setter func(string) error) {
-	for _, alias := range f.aliases {
-		fs.stdfs.Func(alias, f.Usage, setter)
-		fs.flags[alias] = f
-	}
 }
