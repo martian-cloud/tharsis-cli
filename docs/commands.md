@@ -611,7 +611,7 @@ Filter to only groups containing this substring in their path.
 #### sort-by
 
 Sort by this field.\
-**Values:** `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`, `FULL_PATH_ASC`, `FULL_PATH_DESC`, `GROUP_LEVEL_ASC`
+**Values:** `UPDATED_AT_DESC`, `FULL_PATH_ASC`, `FULL_PATH_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`
 
 #### sort-order <span style={{color:'orange'}}>!</span>
 
@@ -2371,7 +2371,7 @@ Maximum number of result elements to return.\
 #### sort-by
 
 Sort by this field.\
-**Values:** `CREATED_AT_ASC`, `CREATED_AT_DESC`, `TYPE_ASC`, `TYPE_DESC`
+**Values:** `TYPE_DESC`, `CREATED_AT_ASC`, `CREATED_AT_DESC`, `TYPE_ASC`
 
 #### sort-order <span style={{color:'orange'}}>!</span>
 

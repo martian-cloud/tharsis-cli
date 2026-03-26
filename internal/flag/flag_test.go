@@ -61,23 +61,6 @@ func TestFlagEnvVar(t *testing.T) {
 	}
 }
 
-func TestFlagCompletionValues(t *testing.T) {
-	tests := []struct {
-		name   string
-		values []string
-	}{
-		{name: "nil", values: nil},
-		{name: "with values", values: []string{"json", "table"}},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			f := &Flag{predictors: tc.values}
-			assert.Equal(t, tc.values, f.CompletionValues())
-		})
-	}
-}
-
 func TestFlagValidate(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -162,7 +145,6 @@ func TestLookup(t *testing.T) {
 		assert.Equal(t, "json", f.DefValue())
 		assert.True(t, f.IsDeprecated())
 		assert.Equal(t, "use --output instead", f.DeprecationMessage())
-		assert.Equal(t, []string{"json", "table"}, f.CompletionValues())
 	})
 
 	t.Run("required flag", func(t *testing.T) {

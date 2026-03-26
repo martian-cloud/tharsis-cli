@@ -47,16 +47,25 @@ func helpFunc(h cli.HelpFunc, globalFlags *flag.Set) cli.HelpFunc {
 // custom predictor for the profile flag.
 func globalAutocompletions(fs *flag.Set) complete.Flags {
 	result := make(complete.Flags)
-	for name, values := range fs.Predictors() {
-		if len(values) > 0 {
-			result["-"+name] = complete.PredictSet(values...)
+
+	fs.VisitAll(func(f *flag.Flag) {
+		var predictor complete.Predictor
+		if vals := f.ValidValues(); len(vals) > 0 {
+			predictor = complete.PredictSet(vals...)
 		} else {
-			result["-"+name] = complete.PredictAnything
+			predictor = complete.PredictAnything
 		}
-	}
+
+		result["-"+f.Name] = predictor
+		for _, alias := range f.Aliases() {
+			result["-"+alias] = predictor
+		}
+	})
 
 	// Override profile flag with dynamic predictor.
-	result["-p"] = complete.PredictFunc(predictProfiles)
+	profilePredictor := complete.PredictFunc(predictProfiles)
+	result["-p"] = profilePredictor
+	result["-profile"] = profilePredictor
 
 	return result
 }

@@ -21,10 +21,10 @@
 //	fs.StringVar(&name, "format", "output format", Default("json")) // optional, defaults to "json"
 //	fs.StringVar(&name, "desc", "description")                      // optional, nil if not set
 //
-//	// Aliases let short flags work: -n is equivalent to --name.
+//	// Aliases let short flags work: -n is equivalent to -name.
 //	fs.StringVar(&name, "name", "resource name", Aliases("n"))
 //
-//	// Env var fallback: uses THARSIS_TOKEN if --token is not set.
+//	// Env var fallback: uses THARSIS_TOKEN if -token is not set.
 //	fs.StringVar(&token, "token", "auth token", EnvVar("THARSIS_TOKEN"))
 //
 //	var tags []string

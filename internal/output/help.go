@@ -145,7 +145,7 @@ func (h *helpBuilder) flagMeta(f *flag.Flag) []string {
 	}
 
 	if env := f.EnvVar(); env != "" {
-		lines = append(lines, fmt.Sprintf("Env: %s", h.bold.Sprint(env)))
+		lines = append(lines, fmt.Sprintf("%s %s", h.bold.Sprint("Env:"), env))
 	}
 
 	return lines

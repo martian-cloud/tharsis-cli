@@ -81,7 +81,7 @@ func realMain() int {
 	globalFlags.StringVar(
 		&profileName,
 		"p",
-		"Profile name.",
+		"Profile to use from the configuration file.",
 		flag.Default(settings.DefaultProfileName),
 		flag.EnvVar(profileEnvVar),
 		flag.Aliases("profile"),
@@ -90,7 +90,7 @@ func realMain() int {
 	globalFlags.StringVar(
 		&logLevel,
 		"log",
-		"Log level.",
+		"Set the verbosity of log output for debugging.",
 		flag.Default(hclog.Off.String()),
 		flag.EnvVar(logLevelEnvVar),
 		flag.ValidValues(logLevels...),

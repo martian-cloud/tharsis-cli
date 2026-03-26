@@ -2,6 +2,7 @@ package flag
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -39,17 +40,16 @@ type Flag struct {
 	Name  string
 	Usage string
 
-	required      bool
-	repeatable    bool
-	informational bool
-	aliases       []string
-	predictors    []string
-	deprecated    string
-	envVar        string
-	defaultVal    any
-	validValues   []string
-	validate      func(string) error
-	transform     func(string) string
+	required    bool
+	repeatable  bool
+	aliases     []string
+	predictors  []string
+	deprecated  string
+	envVar      string
+	defaultVal  any
+	validValues []string
+	validate    func(string) error
+	transform   func(string) string
 }
 
 // Markers returns all applicable marker symbols for the flag.
@@ -117,17 +117,19 @@ func (f *Flag) EnvVar() string {
 	return f.envVar
 }
 
-// ValidValues returns the list of valid values, or nil.
+// ValidValues returns the list of valid values sorted alphabetically, or nil.
 func (f *Flag) ValidValues() []string {
-	return f.validValues
+	if len(f.validValues) == 0 {
+		return nil
+	}
+
+	sorted := make([]string, len(f.validValues))
+	copy(sorted, f.validValues)
+	sort.Strings(sorted)
+
+	return sorted
 }
 
-// CompletionValues returns the shell completion candidates.
-func (f *Flag) CompletionValues() []string {
-	return f.predictors
-}
-
-// Validate runs the flag's validator, if any.
 // wasSet reports whether this flag or any of its aliases appear in seen.
 func (f *Flag) wasSet(seen map[string]bool) bool {
 	if seen[f.Name] {
