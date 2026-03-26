@@ -62,7 +62,7 @@ func (c *groupMigrateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputGroup(c.UI, *c.toJSON, group)
+	return c.OutputProto(group, c.toJSON)
 }
 
 func (*groupMigrateCommand) Synopsis() string {

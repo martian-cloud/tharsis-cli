@@ -5,7 +5,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -62,7 +61,7 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModuleAttestation(c.UI, *c.toJSON, createdAttestation)
+	return c.OutputProto(createdAttestation, c.toJSON)
 }
 
 func (*moduleCreateAttestationCommand) Synopsis() string {
@@ -109,26 +108,4 @@ func (c *moduleCreateAttestationCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-func outputModuleAttestation(ui terminal.UI, toJSON bool, attestation *pb.TerraformModuleAttestation) int {
-	if toJSON {
-		if err := ui.JSON(attestation); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "module_id", "description", "predicate_type", "schema_type")
-		t.Rich([]string{
-			attestation.Metadata.Id,
-			attestation.ModuleId,
-			attestation.Description,
-			attestation.PredicateType,
-			attestation.SchemaType,
-		}, nil)
-
-		ui.Table(t)
-	}
-
-	return 0
 }

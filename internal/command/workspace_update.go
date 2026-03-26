@@ -69,7 +69,7 @@ func (c *workspaceUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputWorkspace(c.UI, *c.toJSON, updatedWorkspace)
+	return c.OutputProto(updatedWorkspace, c.toJSON)
 }
 
 func (*workspaceUpdateCommand) Synopsis() string {

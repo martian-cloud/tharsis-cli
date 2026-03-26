@@ -4,7 +4,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
 type terraformProviderMirrorGetVersionCommand struct {
@@ -53,26 +52,7 @@ func (c *terraformProviderMirrorGetVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	if *c.toJSON {
-		if err := c.UI.JSON(versionMirror); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-
-		return 0
-	}
-
-	t := terminal.NewTable("id", "semantic_version", "registry_hostname", "registry_namespace", "type")
-	t.Rich([]string{
-		versionMirror.Metadata.Id,
-		versionMirror.SemanticVersion,
-		versionMirror.RegistryHostname,
-		versionMirror.RegistryNamespace,
-		versionMirror.Type,
-	}, nil)
-
-	c.UI.Table(t)
-	return 0
+	return c.OutputProto(versionMirror, c.toJSON)
 }
 
 func (*terraformProviderMirrorGetVersionCommand) Synopsis() string {

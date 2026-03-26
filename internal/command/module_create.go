@@ -106,7 +106,7 @@ func (c *moduleCreateCommand) Run(args []string) int {
 
 		if module != nil {
 			c.Logger.Debug("module already exists, returning existing module")
-			return outputModule(c.UI, *c.toJSON, module)
+			return c.OutputProto(module, c.toJSON)
 		}
 	}
 
@@ -124,7 +124,7 @@ func (c *moduleCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModule(c.UI, *c.toJSON, createdModule)
+	return c.OutputProto(createdModule, c.toJSON)
 }
 
 func (*moduleCreateCommand) Synopsis() string {

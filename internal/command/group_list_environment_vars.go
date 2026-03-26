@@ -96,7 +96,7 @@ func (c *groupListEnvironmentVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, *c.toJSON, environmentVars)
+	return c.OutputProtoList(environmentVars, c.toJSON)
 }
 
 func (*groupListEnvironmentVarsCommand) Synopsis() string {

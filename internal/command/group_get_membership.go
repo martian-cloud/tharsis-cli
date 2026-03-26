@@ -7,7 +7,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -133,7 +132,7 @@ func (c *groupGetMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputMembership(c.UI, *c.toJSON, foundMembership)
+	return c.OutputProto(foundMembership, c.toJSON)
 }
 
 func (*groupGetMembershipCommand) Synopsis() string {
@@ -201,27 +200,4 @@ func (c *groupGetMembershipCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-func outputMembership(ui terminal.UI, toJSON bool, membership *pb.NamespaceMembership) int {
-	if toJSON {
-		if err := ui.JSON(membership); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "role_id", "user_id", "service_account_id", "team_id")
-
-		t.Rich([]string{
-			membership.GetMetadata().Id,
-			membership.RoleId,
-			ptr.ToString(membership.UserId),
-			ptr.ToString(membership.ServiceAccountId),
-			ptr.ToString(membership.TeamId),
-		}, nil)
-
-		ui.Table(t)
-	}
-
-	return 0
 }

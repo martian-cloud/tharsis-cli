@@ -1,12 +1,9 @@
 package command
 
 import (
-	"strings"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
 // managedIdentityAccessRuleGetCommand is the top-level structure for the managed identity access rule get command.
@@ -56,7 +53,7 @@ func (c *managedIdentityAccessRuleGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentityAccessRule(c.UI, *c.toJSON, rule)
+	return c.OutputProto(rule, c.toJSON)
 }
 
 func (*managedIdentityAccessRuleGetCommand) Synopsis() string {
@@ -89,37 +86,4 @@ func (c *managedIdentityAccessRuleGetCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-func outputManagedIdentityAccessRule(ui terminal.UI, toJSON bool, rule *pb.ManagedIdentityAccessRule) int {
-	if toJSON {
-		if err := ui.JSON(rule); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		values := []terminal.NamedValue{
-			{Name: "ID", Value: rule.Metadata.Id},
-			{Name: "TRN", Value: rule.Metadata.Trn},
-			{Name: "Type", Value: rule.Type},
-			{Name: "Run Stage", Value: rule.RunStage},
-			{Name: "Verify State Lineage", Value: rule.VerifyStateLineage},
-		}
-
-		if len(rule.AllowedUsers) > 0 {
-			values = append(values, terminal.NamedValue{Name: "Allowed Users", Value: strings.Join(rule.AllowedUsers, ", ")})
-		}
-
-		if len(rule.AllowedServiceAccounts) > 0 {
-			values = append(values, terminal.NamedValue{Name: "Allowed Service Accounts", Value: strings.Join(rule.AllowedServiceAccounts, ", ")})
-		}
-
-		if len(rule.AllowedTeams) > 0 {
-			values = append(values, terminal.NamedValue{Name: "Allowed Teams", Value: strings.Join(rule.AllowedTeams, ", ")})
-		}
-
-		ui.NamedValues(values)
-	}
-
-	return 0
 }

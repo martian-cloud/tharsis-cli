@@ -1,6 +1,7 @@
 package command
 
 import (
+	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
@@ -81,7 +82,11 @@ func (c *workspaceGetTerraformVarCommand) Run(args []string) int {
 		variable.Value = version.Value
 	}
 
-	return outputNamespaceVariable(c.UI, *c.toJSON, *c.showSensitive, variable)
+	if variable.Sensitive && !*c.showSensitive {
+		variable.Value = ptr.String("[SENSITIVE]")
+	}
+
+	return c.OutputProto(variable, c.toJSON)
 }
 
 func (*workspaceGetTerraformVarCommand) Synopsis() string {

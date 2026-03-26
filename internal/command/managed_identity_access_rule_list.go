@@ -1,12 +1,9 @@
 package command
 
 import (
-	"fmt"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -54,27 +51,7 @@ func (c *managedIdentityAccessRuleListCommand) Run(args []string) int {
 		return 1
 	}
 
-	if *c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "type", "run_stage", "verify_state_lineage")
-
-		for _, rule := range result.AccessRules {
-			t.Rich([]string{
-				rule.Metadata.Id,
-				rule.Type,
-				rule.RunStage,
-				fmt.Sprintf("%t", rule.VerifyStateLineage),
-			}, nil)
-		}
-
-		c.UI.Table(t)
-	}
-
-	return 0
+	return c.OutputProtoList(result, c.toJSON)
 }
 
 func (*managedIdentityAccessRuleListCommand) Synopsis() string {

@@ -17,16 +17,15 @@ import (
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
 	// maxPaginationLimit is the default (and max) limit for paginated list commands.
 	maxPaginationLimit int32 = 100
-
-	// humanTimeFormat is the format used for displaying timestamps in human-readable output.
-	humanTimeFormat = "January 2 2006, 3:04:05 PM MST"
 )
 
 // baseOptions contains the different ways to configure the behavior of BaseCommand.
@@ -123,6 +122,76 @@ type BaseCommand struct {
 	UserAgent            string
 	arguments            []string
 	DefaultTLSSkipVerify bool
+}
+
+// OutputProto renders a proto message as JSON or a human-readable table.
+func (c *BaseCommand) OutputProto(msg proto.Message, toJSON *bool) int {
+	if *toJSON {
+		if err := c.UI.JSON(msg); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+
+		return 0
+	}
+
+	c.UI.NamedValues(output.ProtoToNamedValues(msg))
+
+	return 0
+}
+
+// OutputProtoList renders a paginated list as JSON or a table with pagination info.
+// data can be a proto message (with repeated fields and optional PageInfo) or a
+// plain slice of proto messages.
+func (c *BaseCommand) OutputProtoList(data any, toJSON *bool) int {
+	if *toJSON {
+		if err := c.UI.JSON(data); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+
+		return 0
+	}
+
+	items, pageInfo := output.ExtractListFields(data)
+	if len(items) == 0 {
+		c.UI.Warnf("No results found")
+		return 0
+	}
+
+	c.UI.Table(output.ProtoToTable(items))
+
+	if pageInfo != nil {
+		values := []terminal.NamedValue{
+			{Name: "Total count", Value: pageInfo.TotalCount},
+			{Name: "Has Next Page", Value: pageInfo.HasNextPage},
+		}
+
+		if pageInfo.EndCursor != nil {
+			values = append(values, terminal.NamedValue{
+				Name:  "Cursor",
+				Value: pageInfo.GetEndCursor(),
+			})
+		}
+
+		c.UI.NamedValues(values)
+	}
+
+	return 0
+}
+
+// Close closes any pending resources.
+func (c *BaseCommand) Close() error {
+	var errs []error
+
+	if closer, ok := c.UI.(io.Closer); ok {
+		errs = append(errs, closer.Close())
+	}
+	if c.grpcClient != nil {
+		errs = append(errs, c.grpcClient.Close())
+	}
+
+	return errors.Join(errs...)
 }
 
 // initialize performs some preliminary tasks for each command. It should be
@@ -227,20 +296,6 @@ func (c *BaseCommand) getCurrentSettings() (*settings.Settings, error) {
 	c.Logger.Debug("loaded settings", "settings", currentSettings)
 
 	return currentSettings, nil
-}
-
-// Close closes any pending resources.
-func (c *BaseCommand) Close() error {
-	var errs []error
-
-	if closer, ok := c.UI.(io.Closer); ok {
-		errs = append(errs, closer.Close())
-	}
-	if c.grpcClient != nil {
-		errs = append(errs, c.grpcClient.Close())
-	}
-
-	return errors.Join(errs...)
 }
 
 /*

@@ -1,14 +1,12 @@
 package command
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/aws/smithy-go/ptr"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -99,7 +97,7 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, *c.toJSON, terraformVars)
+	return c.OutputProtoList(terraformVars, c.toJSON)
 }
 
 func (*groupListTerraformVarsCommand) Synopsis() string {
@@ -139,33 +137,4 @@ func (c *groupListTerraformVarsCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-func outputNamespaceVariables(ui terminal.UI, toJSON bool, variables []*pb.NamespaceVariable) int {
-	if toJSON {
-		if err := ui.JSON(variables); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-
-		return 0
-	}
-
-	if len(variables) == 0 {
-		ui.Warnf("No variables found")
-		return 0
-	}
-
-	t := terminal.NewTable("key", "value", "namespace_path", "sensitive")
-	for _, v := range variables {
-		t.Rich([]string{
-			v.Key,
-			ptr.ToString(v.Value),
-			v.NamespacePath,
-			fmt.Sprintf("%t", v.Sensitive),
-		}, nil)
-	}
-
-	ui.Table(t)
-	return 0
 }

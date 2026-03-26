@@ -1,12 +1,9 @@
 package command
 
 import (
-	"encoding/base64"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -59,7 +56,7 @@ func (c *managedIdentityGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentity(c.UI, *c.toJSON, identity)
+	return c.OutputProto(identity, c.toJSON)
 }
 
 func (*managedIdentityGetCommand) Synopsis() string {
@@ -93,35 +90,4 @@ func (c *managedIdentityGetCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-func outputManagedIdentity(ui terminal.UI, toJSON bool, identity *pb.ManagedIdentity) int {
-	if toJSON {
-		if err := ui.JSON(identity); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		// Decode base64 data.
-		decoded, err := base64.StdEncoding.DecodeString(identity.Data)
-		if err != nil {
-			ui.ErrorWithSummary(err, "failed to decode identity data")
-			return 1
-		}
-
-		ui.NamedValues([]terminal.NamedValue{
-			{Name: "ID", Value: identity.Metadata.Id},
-			{Name: "TRN", Value: identity.Metadata.Trn},
-			{Name: "Name", Value: identity.Name},
-			{Name: "Description", Value: identity.Description},
-			{Name: "Type", Value: identity.Type},
-			{Name: "Is Alias", Value: identity.AliasSourceId != nil},
-			{Name: "Data", Value: string(decoded)},
-			{Name: "Created By", Value: identity.CreatedBy},
-			{Name: "Created At", Value: identity.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
-			{Name: "Updated At", Value: identity.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
-		})
-	}
-
-	return 0
 }

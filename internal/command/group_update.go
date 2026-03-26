@@ -60,7 +60,7 @@ func (c *groupUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputGroup(c.UI, *c.toJSON, updatedGroup)
+	return c.OutputProto(updatedGroup, c.toJSON)
 }
 
 func (*groupUpdateCommand) Synopsis() string {

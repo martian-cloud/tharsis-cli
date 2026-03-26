@@ -4,7 +4,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -56,7 +55,14 @@ func (c *callerIdentityCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.outputCallerIdentity(resp)
+	switch caller := resp.Caller.(type) {
+	case *pb.GetCallerIdentityResponse_User:
+		return c.OutputProto(caller.User, c.toJSON)
+	case *pb.GetCallerIdentityResponse_ServiceAccount:
+		return c.OutputProto(caller.ServiceAccount, c.toJSON)
+	}
+
+	return 0
 }
 
 func (*callerIdentityCommand) Synopsis() string {
@@ -91,32 +97,4 @@ func (c *callerIdentityCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-func (c *callerIdentityCommand) outputCallerIdentity(resp *pb.GetCallerIdentityResponse) int {
-	if *c.toJSON {
-		if err := c.UI.JSON(resp); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		switch caller := resp.Caller.(type) {
-		case *pb.GetCallerIdentityResponse_User:
-			c.UI.NamedValues([]terminal.NamedValue{
-				{Name: "Name", Value: caller.User.Username},
-				{Name: "TRN", Value: caller.User.Metadata.Trn},
-				{Name: "Email", Value: caller.User.Email},
-				{Name: "Admin", Value: caller.User.Admin},
-				{Name: "Active", Value: caller.User.Active},
-			})
-		case *pb.GetCallerIdentityResponse_ServiceAccount:
-			c.UI.NamedValues([]terminal.NamedValue{
-				{Name: "Name", Value: caller.ServiceAccount.Name},
-				{Name: "TRN", Value: caller.ServiceAccount.Metadata.Trn},
-				{Name: "Description", Value: caller.ServiceAccount.Description},
-			})
-		}
-	}
-
-	return 0
 }
