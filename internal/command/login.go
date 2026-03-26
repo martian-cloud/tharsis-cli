@@ -3,7 +3,6 @@ package command
 import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/auth"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 )
 
@@ -106,8 +105,4 @@ func (c *loginCommand) Example() string {
 	return `
 tharsis sso login
 `
-}
-
-func (c *loginCommand) Flags() *flag.Set {
-	return nil
 }

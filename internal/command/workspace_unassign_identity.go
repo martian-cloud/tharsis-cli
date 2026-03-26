@@ -3,13 +3,14 @@ package command
 import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceUnassignManagedIdentityCommand struct {
 	*BaseCommand
 }
+
+var _ Command = (*workspaceUnassignManagedIdentityCommand)(nil)
 
 // NewWorkspaceUnassignManagedIdentityCommandFactory returns a workspaceUnassignManagedIdentityCommand struct.
 func NewWorkspaceUnassignManagedIdentityCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -74,8 +75,4 @@ tharsis workspace unassign-managed-identity \
   trn:workspace:<workspace_path> \
   trn:managed_identity:<group_path>/<identity_name>
 `
-}
-
-func (c *workspaceUnassignManagedIdentityCommand) Flags() *flag.Set {
-	return nil
 }

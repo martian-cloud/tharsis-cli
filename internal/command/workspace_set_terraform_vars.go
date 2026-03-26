@@ -14,6 +14,8 @@ type workspaceSetTerraformVarsCommand struct {
 	tfVarFiles []string
 }
 
+var _ Command = (*workspaceSetTerraformVarsCommand)(nil)
+
 // NewWorkspaceSetTerraformVarsCommandFactory returns a workspaceSetTerraformVarsCommand struct.
 func NewWorkspaceSetTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

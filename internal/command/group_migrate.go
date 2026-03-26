@@ -17,6 +17,8 @@ type groupMigrateCommand struct {
 	toJSON      *bool
 }
 
+var _ Command = (*groupMigrateCommand)(nil)
+
 // NewGroupMigrateCommandFactory returns a groupMigrateCommand struct.
 func NewGroupMigrateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

@@ -14,6 +14,8 @@ type groupSetTerraformVarsCommand struct {
 	tfVarFiles []string
 }
 
+var _ Command = (*groupSetTerraformVarsCommand)(nil)
+
 // NewGroupSetTerraformVarsCommandFactory returns a groupSetTerraformVarsCommand struct.
 func NewGroupSetTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

@@ -17,6 +17,8 @@ type workspaceSetTerraformVarCommand struct {
 	sensitive *bool
 }
 
+var _ Command = (*workspaceSetTerraformVarCommand)(nil)
+
 // NewWorkspaceSetTerraformVarCommandFactory returns a workspaceSetTerraformVarCommand struct.
 func NewWorkspaceSetTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

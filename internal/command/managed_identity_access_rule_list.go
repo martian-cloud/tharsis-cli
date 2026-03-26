@@ -14,6 +14,8 @@ type managedIdentityAccessRuleListCommand struct {
 	toJSON            *bool
 }
 
+var _ Command = (*managedIdentityAccessRuleListCommand)(nil)
+
 // NewManagedIdentityAccessRuleListCommandFactory returns a managedIdentityAccessRuleListCommand struct.
 func NewManagedIdentityAccessRuleListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

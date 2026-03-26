@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mitchellh/cli"
+	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 )
@@ -69,6 +70,10 @@ func (c *helpCommand) Example() string {
 
 func (c *helpCommand) Flags() *flag.Set {
 	return nil
+}
+
+func (c *helpCommand) PredictArgs() complete.Predictor {
+	return complete.PredictNothing
 }
 
 func (c *helpCommand) HelpTemplate() string {

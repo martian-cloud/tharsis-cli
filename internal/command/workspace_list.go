@@ -24,6 +24,8 @@ type workspaceListCommand struct {
 	toJSON       *bool
 }
 
+var _ Command = (*workspaceListCommand)(nil)
+
 // NewWorkspaceListCommandFactory returns a workspaceListCommand struct.
 func NewWorkspaceListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

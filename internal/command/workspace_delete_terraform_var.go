@@ -14,6 +14,8 @@ type workspaceDeleteTerraformVarCommand struct {
 	version *int64
 }
 
+var _ Command = (*workspaceDeleteTerraformVarCommand)(nil)
+
 // NewWorkspaceDeleteTerraformVarCommandFactory returns a workspaceDeleteTerraformVarCommand struct.
 func NewWorkspaceDeleteTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

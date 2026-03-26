@@ -13,6 +13,7 @@ type Command interface {
 	Description() string
 	Example() string
 	Flags() *flag.Set
+	PredictArgs() complete.Predictor
 	Run(args []string) int
 	Synopsis() string
 }
@@ -59,7 +60,7 @@ func (c Wrapper) Synopsis() string {
 
 // AutocompleteArgs returns argument completions (none by default).
 func (c Wrapper) AutocompleteArgs() complete.Predictor {
-	return complete.PredictNothing
+	return c.command.PredictArgs()
 }
 
 // AutocompleteFlags returns flag completions derived from the command's Flags().

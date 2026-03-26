@@ -13,6 +13,8 @@ type workspaceGetAssignedManagedIdentitiesCommand struct {
 	toJSON *bool
 }
 
+var _ Command = (*workspaceGetAssignedManagedIdentitiesCommand)(nil)
+
 // NewWorkspaceGetAssignedManagedIdentitiesCommandFactory returns a workspaceGetAssignedManagedIdentitiesCommand struct.
 func NewWorkspaceGetAssignedManagedIdentitiesCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

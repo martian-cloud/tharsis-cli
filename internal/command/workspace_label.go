@@ -18,6 +18,8 @@ type workspaceLabelCommand struct {
 	toJSON    *bool
 }
 
+var _ Command = (*workspaceLabelCommand)(nil)
+
 // NewWorkspaceLabelCommandFactory returns a workspaceLabelCommand struct.
 func NewWorkspaceLabelCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

@@ -12,6 +12,8 @@ type runCancelCommand struct {
 	force *bool
 }
 
+var _ Command = (*runCancelCommand)(nil)
+
 // NewRunCancelCommandFactory returns a runCancelCommand struct.
 func NewRunCancelCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

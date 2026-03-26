@@ -12,6 +12,8 @@ type moduleDeleteVersionCommand struct {
 	version *int64
 }
 
+var _ Command = (*moduleDeleteVersionCommand)(nil)
+
 // NewModuleDeleteVersionCommandFactory returns a moduleDeleteVersionCommand struct.
 func NewModuleDeleteVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

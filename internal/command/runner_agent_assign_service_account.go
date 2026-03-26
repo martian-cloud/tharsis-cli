@@ -3,13 +3,14 @@ package command
 import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type runnerAgentAssignServiceAccountCommand struct {
 	*BaseCommand
 }
+
+var _ Command = (*runnerAgentAssignServiceAccountCommand)(nil)
 
 // NewRunnerAgentAssignServiceAccountCommandFactory returns a runnerAgentAssignServiceAccountCommand struct.
 func NewRunnerAgentAssignServiceAccountCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -74,8 +75,4 @@ tharsis runner-agent assign-service-account \
   trn:service_account:<group_path>/<service_account_name> \
   trn:runner:<group_path>/<runner_name>
 `
-}
-
-func (c *runnerAgentAssignServiceAccountCommand) Flags() *flag.Set {
-	return nil
 }

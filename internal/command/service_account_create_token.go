@@ -14,6 +14,8 @@ type serviceAccountCreateTokenCommand struct {
 	toJSON *bool
 }
 
+var _ Command = (*serviceAccountCreateTokenCommand)(nil)
+
 // NewServiceAccountCreateTokenCommandFactory returns a serviceAccountCreateTokenCommand struct.
 func NewServiceAccountCreateTokenCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

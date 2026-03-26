@@ -16,6 +16,8 @@ type workspaceListEnvironmentVarsCommand struct {
 	toJSON        *bool
 }
 
+var _ Command = (*workspaceListEnvironmentVarsCommand)(nil)
+
 // NewWorkspaceListEnvironmentVarsCommandFactory returns a workspaceListEnvironmentVarsCommand struct.
 func NewWorkspaceListEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

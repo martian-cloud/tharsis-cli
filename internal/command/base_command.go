@@ -15,6 +15,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mitchellh/cli"
+	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
@@ -122,6 +123,16 @@ type BaseCommand struct {
 	UserAgent            string
 	arguments            []string
 	DefaultTLSSkipVerify bool
+}
+
+// PredictArgs returns argument completions. Override in commands that accept arguments.
+func (c *BaseCommand) PredictArgs() complete.Predictor {
+	return complete.PredictNothing
+}
+
+// Flags returns the command's flag set. Override in commands that accept flags.
+func (c *BaseCommand) Flags() *flag.Set {
+	return nil
 }
 
 // OutputProto renders a proto message as JSON or a human-readable table.

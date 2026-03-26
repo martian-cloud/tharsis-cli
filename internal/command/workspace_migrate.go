@@ -13,6 +13,8 @@ type workspaceMigrateCommand struct {
 	toJSON     *bool
 }
 
+var _ Command = (*workspaceMigrateCommand)(nil)
+
 // NewWorkspaceMigrateCommandFactory returns a workspaceMigrateCommand struct.
 func NewWorkspaceMigrateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

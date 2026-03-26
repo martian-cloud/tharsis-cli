@@ -14,6 +14,8 @@ type moduleGetVersionCommand struct {
 	toJSON  *bool
 }
 
+var _ Command = (*moduleGetVersionCommand)(nil)
+
 // NewModuleGetVersionCommandFactory returns a moduleGetVersionCommand struct.
 func NewModuleGetVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {
