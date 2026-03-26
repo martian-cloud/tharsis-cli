@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -121,16 +122,6 @@ func (fs *Set) Name() string {
 // Delegated methods
 // ---------------------------------------------------------------------------
 
-// VisitAll calls fn for each flag in the set, including unset flags.
-func (fs *Set) VisitAll(fn func(*Flag)) {
-	fs.stdfs.VisitAll(func(sf *stdflag.Flag) {
-		f := fs.flags[sf.Name]
-		if sf.Name == f.Name {
-			fn(f)
-		}
-	})
-}
-
 // SetOutput sets the output writer for error messages and usage.
 func (fs *Set) SetOutput(output io.Writer) {
 	fs.stdfs.SetOutput(output)
@@ -149,6 +140,34 @@ func (fs *Set) Args() []string {
 // Lookup returns the Flag for the named flag, or nil if not found.
 func (fs *Set) Lookup(name string) *Flag {
 	return fs.flags[name]
+}
+
+// ---------------------------------------------------------------------------
+// Query methods
+// ---------------------------------------------------------------------------
+
+// VisitAll calls fn for each flag in the set (sorted alphabetically),
+// including informational and unset flags. Aliases are excluded.
+func (fs *Set) VisitAll(fn func(*Flag)) {
+	names := make([]string, 0, len(fs.flags))
+	for name, f := range fs.flags {
+		if name == f.Name {
+			names = append(names, name)
+		}
+	}
+
+	sort.Strings(names)
+
+	for _, name := range names {
+		fn(fs.flags[name])
+	}
+}
+
+// Informational registers a flag for help and documentation display only.
+// It is not parsed from the command line.
+func (fs *Set) Informational(name string, usage string, opts ...any) {
+	f := fs.register(name, usage, opts)
+	f.informational = true
 }
 
 // Predictors returns a map of flag names to their shell completion candidates.

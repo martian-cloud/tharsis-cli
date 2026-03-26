@@ -18,10 +18,8 @@ func helpFunc(h cli.HelpFunc, globalFlags *flag.Set) cli.HelpFunc {
 	return func(commands map[string]cli.CommandFactory) string {
 		var headingBuf bytes.Buffer
 
-		fmt.Fprint(&headingBuf, color.New(color.Bold, color.FgHiGreen).Sprint("Welcome to Tharsis!"))
-		fmt.Fprintln(&headingBuf)
-
-		fmt.Fprintln(&headingBuf, "An open-source Terraform platform.")
+		fmt.Fprint(&headingBuf, color.New(color.Bold, color.FgHiGreen).Sprint("Welcome to Tharsis"))
+		fmt.Fprintln(&headingBuf, " - An open-source Terraform platform.")
 
 		fmt.Fprint(&headingBuf, color.New(color.Bold).Sprint("Documentation:"))
 		fmt.Fprintln(&headingBuf, " https://tharsis.martian-cloud.io")
