@@ -91,7 +91,7 @@ func (c *planCommand) Run(args []string) int {
 		RefreshOnly:      *c.refreshOnly,
 	})
 	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to create run")
+		c.UI.ErrorWithSummary(err, "failed to plan")
 		return 1
 	}
 

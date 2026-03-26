@@ -153,7 +153,7 @@ func TestLookup(t *testing.T) {
 
 		f := fs.Lookup("name")
 		require.NotNil(t, f)
-		assert.True(t, f.IsRequired())
+		assert.Contains(t, f.Markers(), Marker("*"))
 	})
 
 	t.Run("flag with aliases", func(t *testing.T) {
@@ -244,25 +244,22 @@ func TestVisitAll(t *testing.T) {
 }
 
 func TestPredictors(t *testing.T) {
-	t.Run("includes aliases", func(t *testing.T) {
+	t.Run("with predict values", func(t *testing.T) {
 		fs := NewSet("test")
 		var s *string
 		fs.StringVar(&s, "format", "output format",
 			PredictValues("json", "table"), Aliases("f"),
 		)
 
-		m := fs.Predictors()
-		assert.Equal(t, []string{"json", "table"}, m["format"])
-		assert.Equal(t, []string{"json", "table"}, m["f"])
-	})
+		var found *Flag
+		fs.VisitAll(func(f *Flag) {
+			if f.Name == "format" {
+				found = f
+			}
+		})
 
-	t.Run("bool auto prediction", func(t *testing.T) {
-		fs := NewSet("test")
-		var b *bool
-		fs.BoolVar(&b, "debug", "debug mode")
-
-		m := fs.Predictors()
-		assert.Equal(t, []string{"true", "false"}, m["debug"])
+		require.NotNil(t, found)
+		assert.Equal(t, []string{"json", "table"}, found.Predictors())
 	})
 
 	t.Run("no predictors", func(t *testing.T) {
@@ -270,8 +267,15 @@ func TestPredictors(t *testing.T) {
 		var s *string
 		fs.StringVar(&s, "plain", "no predictions")
 
-		m := fs.Predictors()
-		assert.Nil(t, m["plain"])
+		var found *Flag
+		fs.VisitAll(func(f *Flag) {
+			if f.Name == "plain" {
+				found = f
+			}
+		})
+
+		require.NotNil(t, found)
+		assert.Nil(t, found.Predictors())
 	})
 }
 

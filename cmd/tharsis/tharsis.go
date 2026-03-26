@@ -181,18 +181,26 @@ func realMain() int {
 	}
 
 	c := cli.CLI{
-		Name:                       binaryName,
-		Version:                    Version,
-		Args:                       commandArgs,
-		Commands:                   availableCommands,
-		HelpFunc:                   helpFunc(cli.BasicHelpFunc(binaryName), globalFlags),
-		HelpWriter:                 os.Stdout,
-		ErrorWriter:                os.Stderr,
-		Autocomplete:               true,
-		AutocompleteInstall:        autocompleteFlagInstall,
-		AutocompleteUninstall:      autocompleteFlagUninstall,
-		AutocompleteGlobalFlags:    globalAutocompletions(globalFlags),
-		AutocompleteNoDefaultFlags: true, // We provide our own via AutocompleteGlobalFlags.
+		Name:        binaryName,
+		Version:     Version,
+		Args:        commandArgs,
+		Commands:    availableCommands,
+		HelpFunc:    helpFunc(cli.BasicHelpFunc(binaryName), globalFlags),
+		HelpWriter:  os.Stdout,
+		ErrorWriter: os.Stderr,
+
+		// Shell autocompletion via posener/complete.
+		Autocomplete:          true,
+		AutocompleteInstall:   autocompleteFlagInstall,
+		AutocompleteUninstall: autocompleteFlagUninstall,
+
+		// nil prevents our global flags (-p, -log, -no-color) from appearing
+		// on subcommand completions. They're only relevant before the subcommand.
+		AutocompleteGlobalFlags: nil,
+
+		// false lets mitchellh/cli add its own flags (-help, -version, etc.)
+		// to the root command's Flags map, keeping them root-only.
+		AutocompleteNoDefaultFlags: false,
 	}
 
 	exitStatus, err := c.Run()

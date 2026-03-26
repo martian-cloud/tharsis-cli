@@ -102,7 +102,6 @@ func (c *groupAddMembershipCommand) Flags() *flag.Set {
 		&c.roleID,
 		"role-id",
 		"The role ID for the membership.",
-		flag.Required(),
 	)
 	f.StringVar(
 		&c.userID,

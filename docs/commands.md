@@ -359,7 +359,7 @@ Output in JSON format.\
 The role for the membership.\
 **Deprecated**: use -role-id
 
-#### role-id <span style={{color:'red'}}>*</span>
+#### role-id
 
 The role ID for the membership.
 

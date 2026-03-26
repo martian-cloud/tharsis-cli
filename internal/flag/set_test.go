@@ -298,14 +298,6 @@ func TestBoolVar(t *testing.T) {
 	}
 }
 
-func TestBoolAutoPrediction(t *testing.T) {
-	fs := NewSet("test")
-	var debug *bool
-	fs.BoolVar(&debug, "debug", "debug flag")
-
-	assert.Equal(t, []string{"true", "false"}, fs.Lookup("debug").predictors)
-}
-
 func TestEnvVarFallback(t *testing.T) {
 	t.Run("env var used when flag not set", func(t *testing.T) {
 		t.Setenv("TEST_NAME", "from-env")
@@ -373,7 +365,15 @@ func TestDeprecated(t *testing.T) {
 	var old *string
 	fs.StringVar(&old, "old", "old flag", Deprecated("use --new instead"))
 
-	assert.Equal(t, "use --new instead", fs.Lookup("old").DeprecationMessage())
+	var found *Flag
+	fs.VisitAll(func(f *Flag) {
+		if f.Name == "old" {
+			found = f
+		}
+	})
+
+	require.NotNil(t, found)
+	assert.Equal(t, "use --new instead", found.DeprecationMessage())
 }
 
 func TestMultipleRequiredMissing(t *testing.T) {

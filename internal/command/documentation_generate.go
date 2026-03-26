@@ -9,11 +9,10 @@ import (
 	"sort"
 	"strings"
 
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	md "github.com/nao1215/markdown"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
-
-var _ Command = (*documentationGenerateCommand)(nil)
 
 // documentationGenerateCommand is the structure for documentation generate command.
 type documentationGenerateCommand struct {
@@ -24,8 +23,12 @@ type documentationGenerateCommand struct {
 	globalFlags    *flag.Set
 }
 
+var _ Command = (*documentationGenerateCommand)(nil)
+
 func (c *documentationGenerateCommand) validate() error {
-	return nil
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments, validation.Empty),
+	)
 }
 
 // NewDocumentationGenerateCommandFactory returns a documentationGenerateCommand struct.

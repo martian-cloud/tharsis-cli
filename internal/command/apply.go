@@ -98,7 +98,7 @@ func (c *applyCommand) Run(args []string) int {
 		RefreshOnly:      *c.refreshOnly,
 	})
 	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to create run")
+		c.UI.ErrorWithSummary(err, "failed to apply")
 		return 1
 	}
 
@@ -127,7 +127,7 @@ func (c *applyCommand) Run(args []string) int {
 			return 1
 		}
 		if answer != "yes" {
-			c.UI.Output("Approval response was negative. Will NOT apply the plan.")
+			c.UI.Output("Approval response was negative. Will not apply the plan.")
 			return 0
 		}
 		c.UI.Output("\n")

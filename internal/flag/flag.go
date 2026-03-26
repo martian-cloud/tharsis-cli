@@ -42,6 +42,7 @@ type Flag struct {
 
 	required    bool
 	repeatable  bool
+	isBool      bool
 	aliases     []string
 	predictors  []string
 	deprecated  string
@@ -50,6 +51,10 @@ type Flag struct {
 	validValues []string
 	validate    func(string) error
 	transform   func(string) string
+	// value holds the current string representation of the flag's parsed value,
+	// set by the flag's setter during parsing. This allows callers to read the
+	// parsed value via Lookup().Value() without needing access to the flag set.
+	value string
 }
 
 // Markers returns all applicable marker symbols for the flag.
@@ -71,14 +76,19 @@ func (f *Flag) Markers() []Marker {
 	return m
 }
 
-// IsRequired reports whether the flag is required.
-func (f *Flag) IsRequired() bool {
-	return f.required
+// Predictors returns the completion predictor values for the flag.
+func (f *Flag) Predictors() []string {
+	return f.predictors
 }
 
-// IsRepeatable reports whether the flag can be specified multiple times.
-func (f *Flag) IsRepeatable() bool {
-	return f.repeatable
+// IsBool reports whether the flag is a boolean flag.
+func (f *Flag) IsBool() bool {
+	return f.isBool
+}
+
+// Value returns the current string value of the flag after parsing.
+func (f *Flag) Value() string {
+	return f.value
 }
 
 // DefValue returns the default value string representation.
