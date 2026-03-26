@@ -58,8 +58,8 @@ Show this usage message.
 
 #### log
 
-Log level.\
-**Values:** `off`, `trace`, `debug`, `info`, `warn`, `error`\
+Set the verbosity of log output for debugging.\
+**Values:** `debug`, `error`, `info`, `off`, `trace`, `warn`\
 **Default:** `off`\
 **Env:** `THARSIS_CLI_LOG`
 
@@ -71,7 +71,7 @@ Disable colored output.\
 
 #### p, profile
 
-Profile name.\
+Profile to use from the configuration file.\
 **Default:** `default`\
 **Env:** `THARSIS_PROFILE`
 
@@ -611,7 +611,7 @@ Filter to only groups containing this substring in their path.
 #### sort-by
 
 Sort by this field.\
-**Values:** `UPDATED_AT_DESC`, `FULL_PATH_ASC`, `FULL_PATH_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`
+**Values:** `FULL_PATH_ASC`, `FULL_PATH_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
 
 #### sort-order <span style={{color:'orange'}}>!</span>
 
@@ -952,7 +952,7 @@ Tharsis service account path this managed identity will assume. (Only if type is
 #### type
 
 The type of managed identity.\
-**Values:** `azure_federated`, `aws_federated`, `tharsis_federated`, `kubernetes_federated`
+**Values:** `aws_federated`, `azure_federated`, `kubernetes_federated`, `tharsis_federated`
 
 
 ---
@@ -1111,7 +1111,7 @@ The type of access rule.\
 #### run-stage <span style={{color:'red'}}>*</span>
 
 The run stage.\
-**Values:** `plan`, `apply`
+**Values:** `apply`, `plan`
 
 #### verify-state-lineage
 
@@ -2371,7 +2371,7 @@ Maximum number of result elements to return.\
 #### sort-by
 
 Sort by this field.\
-**Values:** `TYPE_DESC`, `CREATED_AT_ASC`, `CREATED_AT_DESC`, `TYPE_ASC`
+**Values:** `CREATED_AT_ASC`, `CREATED_AT_DESC`, `TYPE_ASC`, `TYPE_DESC`
 
 #### sort-order <span style={{color:'orange'}}>!</span>
 
