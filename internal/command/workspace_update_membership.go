@@ -58,7 +58,7 @@ func (c *workspaceUpdateMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputMembership(c.UI, *c.toJSON, membership)
+	return c.OutputProto(membership, c.toJSON)
 }
 
 func (*workspaceUpdateMembershipCommand) Synopsis() string {

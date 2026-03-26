@@ -43,7 +43,7 @@ func formatError(err error, format string, a ...any) string {
 			writeBar("")
 		}
 
-		for _, line := range wrapPreservingNewlines(body, getTerminalWidth()-len(errorBar)) {
+		for _, line := range wrapPreservingNewlines(body, GetTerminalWidth()-len(errorBar)) {
 			writeBar(line)
 		}
 
@@ -108,9 +108,9 @@ func outerError(err error) string {
 	return err.Error()
 }
 
-// getTerminalWidth returns the current terminal width, falling back to a
+// GetTerminalWidth returns the current terminal width, falling back to a
 // default when stdout is not a TTY (e.g. piped output, CI environments).
-func getTerminalWidth() int {
+func GetTerminalWidth() int {
 	w, _, _ := term.GetSize(int(os.Stdout.Fd()))
 	if w > 0 {
 		return w

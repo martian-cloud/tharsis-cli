@@ -80,7 +80,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 
 		if existingGroup != nil {
 			c.Logger.Debug("group already exists, returning existing group")
-			return outputGroup(c.UI, *c.toJSON, existingGroup)
+			return c.OutputProto(existingGroup, c.toJSON)
 		}
 	}
 
@@ -104,7 +104,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputGroup(c.UI, *c.toJSON, createdGroup)
+	return c.OutputProto(createdGroup, c.toJSON)
 }
 
 func (*groupCreateCommand) Synopsis() string {

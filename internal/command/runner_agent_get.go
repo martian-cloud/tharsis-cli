@@ -1,12 +1,9 @@
 package command
 
 import (
-	"strings"
-
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
 // runnerAgentGetCommand is the top-level structure for the runner agent get command.
@@ -54,7 +51,7 @@ func (c *runnerAgentGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputRunnerAgent(c.UI, *c.toJSON, runner)
+	return c.OutputProto(runner, c.toJSON)
 }
 
 func (*runnerAgentGetCommand) Synopsis() string {
@@ -87,29 +84,4 @@ func (c *runnerAgentGetCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-func outputRunnerAgent(ui terminal.UI, toJSON bool, runner *pb.Runner) int {
-	if toJSON {
-		if err := ui.JSON(runner); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		ui.NamedValues([]terminal.NamedValue{
-			{Name: "ID", Value: runner.Metadata.Id},
-			{Name: "TRN", Value: runner.Metadata.Trn},
-			{Name: "Name", Value: runner.Name},
-			{Name: "Description", Value: runner.Description},
-			{Name: "Type", Value: runner.Type},
-			{Name: "Disabled", Value: runner.Disabled},
-			{Name: "Run Untagged Jobs", Value: runner.RunUntaggedJobs},
-			{Name: "Tags", Value: strings.Join(runner.Tags, ", ")},
-			{Name: "Created By", Value: runner.CreatedBy},
-			{Name: "Created At", Value: runner.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
-			{Name: "Updated At", Value: runner.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
-		})
-	}
-
-	return 0
 }

@@ -68,7 +68,7 @@ func (c *managedIdentityAliasCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentity(c.UI, *c.toJSON, createdAlias)
+	return c.OutputProto(createdAlias, c.toJSON)
 }
 
 func (*managedIdentityAliasCreateCommand) Synopsis() string {

@@ -106,7 +106,7 @@ func (c *managedIdentityCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentity(c.UI, *c.toJSON, createdIdentity)
+	return c.OutputProto(createdIdentity, c.toJSON)
 }
 
 func (c *managedIdentityCreateCommand) encodeIdentityData() (string, error) {

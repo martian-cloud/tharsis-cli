@@ -4,7 +4,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -57,7 +56,7 @@ func (c *moduleGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModule(c.UI, *c.toJSON, module)
+	return c.OutputProto(module, c.toJSON)
 }
 
 func (*moduleGetCommand) Synopsis() string {
@@ -90,27 +89,4 @@ func (c *moduleGetCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-func outputModule(ui terminal.UI, toJSON bool, module *pb.TerraformModule) int {
-	if toJSON {
-		if err := ui.JSON(module); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		ui.NamedValues([]terminal.NamedValue{
-			{Name: "ID", Value: module.Metadata.Id},
-			{Name: "TRN", Value: module.Metadata.Trn},
-			{Name: "Name", Value: module.Name},
-			{Name: "System", Value: module.System},
-			{Name: "Private", Value: module.Private},
-			{Name: "Repository URL", Value: module.RepositoryUrl},
-			{Name: "Created By", Value: module.CreatedBy},
-			{Name: "Created At", Value: module.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
-			{Name: "Updated At", Value: module.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
-		})
-	}
-
-	return 0
 }

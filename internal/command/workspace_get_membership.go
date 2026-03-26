@@ -134,7 +134,7 @@ func (c *workspaceGetMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputMembership(c.UI, *c.toJSON, foundMembership)
+	return c.OutputProto(foundMembership, c.toJSON)
 }
 
 func (*workspaceGetMembershipCommand) Synopsis() string {

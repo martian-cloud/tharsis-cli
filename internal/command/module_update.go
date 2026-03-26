@@ -62,7 +62,7 @@ func (c *moduleUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModule(c.UI, *c.toJSON, updatedModule)
+	return c.OutputProto(updatedModule, c.toJSON)
 }
 
 func (*moduleUpdateCommand) Synopsis() string {

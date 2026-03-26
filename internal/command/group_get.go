@@ -4,7 +4,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -57,7 +56,7 @@ func (c *groupGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputGroup(c.UI, *c.toJSON, group)
+	return c.OutputProto(group, c.toJSON)
 }
 
 func (*groupGetCommand) Synopsis() string {
@@ -93,27 +92,4 @@ func (c *groupGetCommand) Flags() *flag.Set {
 	)
 
 	return f
-}
-
-// outputGroup is the output for most group operations.
-func outputGroup(ui terminal.UI, toJSON bool, group *pb.Group) int {
-	if toJSON {
-		if err := ui.JSON(group); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		ui.NamedValues([]terminal.NamedValue{
-			{Name: "ID", Value: group.Metadata.Id},
-			{Name: "TRN", Value: group.Metadata.Trn},
-			{Name: "Name", Value: group.Name},
-			{Name: "Full Path", Value: group.FullPath},
-			{Name: "Description", Value: group.Description},
-			{Name: "Created By", Value: group.CreatedBy},
-			{Name: "Created At", Value: group.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
-			{Name: "Updated At", Value: group.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
-		})
-	}
-
-	return 0
 }

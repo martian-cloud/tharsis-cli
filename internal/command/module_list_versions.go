@@ -8,7 +8,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -87,40 +86,7 @@ func (c *moduleListVersionsCommand) Run(args []string) int {
 		return 1
 	}
 
-	if *c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "version", "status", "latest", "sha_sum")
-
-		for _, version := range result.Versions {
-			t.Rich([]string{
-				version.Metadata.Id,
-				version.SemanticVersion,
-				version.Status,
-				fmt.Sprintf("%t", version.Latest),
-				version.ShaSum,
-			}, nil)
-		}
-
-		c.UI.Table(t)
-		namedValues := []terminal.NamedValue{
-			{Name: "Total count", Value: result.GetPageInfo().TotalCount},
-			{Name: "Has Next Page", Value: result.GetPageInfo().HasNextPage},
-		}
-		if result.GetPageInfo().EndCursor != nil {
-			namedValues = append(namedValues, terminal.NamedValue{
-				Name:  "Next cursor",
-				Value: result.GetPageInfo().GetEndCursor(),
-			})
-		}
-
-		c.UI.NamedValues(namedValues)
-	}
-
-	return 0
+	return c.OutputProtoList(result, c.toJSON)
 }
 
 func (*moduleListVersionsCommand) Synopsis() string {
