@@ -17,6 +17,8 @@ type groupListTerraformVarsCommand struct {
 	toJSON        *bool
 }
 
+var _ Command = (*groupListTerraformVarsCommand)(nil)
+
 // NewGroupListTerraformVarsCommandFactory returns a groupListTerraformVarsCommand struct.
 func NewGroupListTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

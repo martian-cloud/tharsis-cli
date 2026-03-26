@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aws/smithy-go/ptr"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/hashicorp/go-hclog"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/mcp"
@@ -26,6 +27,12 @@ type mcpCommand struct {
 
 var _ Command = (*mcpCommand)(nil)
 
+func (c *mcpCommand) validate() error {
+	return validation.ValidateStruct(c,
+		validation.Field(&c.arguments, validation.Empty),
+	)
+}
+
 // NewMCPCommandFactory returns a mcpCommand struct.
 func NewMCPCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {
@@ -41,6 +48,7 @@ func (c *mcpCommand) Run(args []string) int {
 		WithFlags(c.Flags()),
 		WithCommandName("mcp"),
 		WithClient(true),
+		WithInputValidator(c.validate),
 	); code != 0 {
 		return code
 	}

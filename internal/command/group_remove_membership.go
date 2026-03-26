@@ -12,6 +12,8 @@ type groupRemoveMembershipCommand struct {
 	version *int64
 }
 
+var _ Command = (*groupRemoveMembershipCommand)(nil)
+
 // NewGroupRemoveMembershipCommandFactory returns a groupRemoveMembershipCommand struct.
 func NewGroupRemoveMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

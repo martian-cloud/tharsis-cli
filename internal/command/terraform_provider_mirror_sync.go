@@ -37,6 +37,8 @@ type terraformProviderMirrorSyncCommand struct {
 	platforms []string
 }
 
+var _ Command = (*terraformProviderMirrorSyncCommand)(nil)
+
 func (c *terraformProviderMirrorSyncCommand) validate() error {
 	const message = "provider-fqn is required"
 	return validation.ValidateStruct(c,

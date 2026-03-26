@@ -14,6 +14,8 @@ type workspaceSetEnvironmentVarsCommand struct {
 	envVarFiles []string
 }
 
+var _ Command = (*workspaceSetEnvironmentVarsCommand)(nil)
+
 // NewWorkspaceSetEnvironmentVarsCommandFactory returns a workspaceSetEnvironmentVarsCommand struct.
 func NewWorkspaceSetEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

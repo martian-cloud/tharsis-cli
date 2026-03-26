@@ -3,12 +3,13 @@ package command
 import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type terraformProviderMirrorDeletePlatformCommand struct {
 	*BaseCommand
 }
+
+var _ Command = (*terraformProviderMirrorDeletePlatformCommand)(nil)
 
 // NewTerraformProviderMirrorDeletePlatformCommandFactory returns a terraformProviderMirrorDeletePlatformCommand struct.
 func NewTerraformProviderMirrorDeletePlatformCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -72,8 +73,4 @@ func (*terraformProviderMirrorDeletePlatformCommand) Example() string {
 	return `
 tharsis terraform-provider-mirror delete-platform <platform-mirror-id>
 `
-}
-
-func (c *terraformProviderMirrorDeletePlatformCommand) Flags() *flag.Set {
-	return nil
 }

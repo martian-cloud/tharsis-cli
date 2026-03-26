@@ -12,6 +12,8 @@ type workspaceRemoveMembershipCommand struct {
 	version *int64
 }
 
+var _ Command = (*workspaceRemoveMembershipCommand)(nil)
+
 // NewWorkspaceRemoveMembershipCommandFactory returns a workspaceRemoveMembershipCommand struct.
 func NewWorkspaceRemoveMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

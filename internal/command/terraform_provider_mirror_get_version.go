@@ -12,6 +12,8 @@ type terraformProviderMirrorGetVersionCommand struct {
 	toJSON *bool
 }
 
+var _ Command = (*terraformProviderMirrorGetVersionCommand)(nil)
+
 // NewTerraformProviderMirrorGetVersionCommandFactory returns a terraformProviderMirrorGetVersionCommand struct.
 func NewTerraformProviderMirrorGetVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

@@ -16,6 +16,8 @@ type workspaceGetTerraformVarCommand struct {
 	toJSON        *bool
 }
 
+var _ Command = (*workspaceGetTerraformVarCommand)(nil)
+
 // NewWorkspaceGetTerraformVarCommandFactory returns a workspaceGetTerraformVarCommand struct.
 func NewWorkspaceGetTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

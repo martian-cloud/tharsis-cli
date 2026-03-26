@@ -24,6 +24,8 @@ type planCommand struct {
 	refreshOnly      *bool
 }
 
+var _ Command = (*planCommand)(nil)
+
 // NewPlanCommandFactory returns a planCommand struct.
 func NewPlanCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

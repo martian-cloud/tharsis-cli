@@ -40,6 +40,8 @@ type terraformProviderUploadVersionCommand struct {
 	directory *string
 }
 
+var _ Command = (*terraformProviderUploadVersionCommand)(nil)
+
 func (c *terraformProviderUploadVersionCommand) validate() error {
 	const message = "provider-id is required"
 	return validation.ValidateStruct(c,

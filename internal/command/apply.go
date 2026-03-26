@@ -30,6 +30,8 @@ type applyCommand struct {
 	refreshOnly      *bool
 }
 
+var _ Command = (*applyCommand)(nil)
+
 // NewApplyCommandFactory returns an applyCommand struct.
 func NewApplyCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

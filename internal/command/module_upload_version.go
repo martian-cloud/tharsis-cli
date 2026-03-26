@@ -28,6 +28,8 @@ type moduleUploadVersionCommand struct {
 	version       *string
 }
 
+var _ Command = (*moduleUploadVersionCommand)(nil)
+
 // NewModuleUploadVersionCommandFactory returns a moduleUploadVersionCommand struct.
 func NewModuleUploadVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

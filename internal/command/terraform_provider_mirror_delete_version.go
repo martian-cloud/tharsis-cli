@@ -13,6 +13,8 @@ type terraformProviderMirrorDeleteVersionCommand struct {
 	force *bool
 }
 
+var _ Command = (*terraformProviderMirrorDeleteVersionCommand)(nil)
+
 // NewTerraformProviderMirrorDeleteVersionCommandFactory returns a terraformProviderMirrorDeleteVersionCommand struct.
 func NewTerraformProviderMirrorDeleteVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

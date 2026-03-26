@@ -64,7 +64,7 @@ func (c *configureCommand) Run(args []string) int {
 
 		if profile == "" {
 			// If nothing entered manually, default to default.
-			c.profileName = ptr.String("default")
+			c.profileName = ptr.String(settings.DefaultProfileName)
 		} else {
 			c.profileName = &profile
 		}
@@ -163,9 +163,9 @@ func (c *configureCommand) updateOneProfile(oldSettings *settings.Settings) int 
 
 	c.UI.Output("Setting profile:")
 	c.UI.NamedValues([]terminal.NamedValue{
-		{Name: "Profile", Value: c.profileName},
-		{Name: "HTTP endpoint", Value: c.httpEndpoint},
-		{Name: "TLS Skip Verify", Value: c.tlsSkipVerify},
+		{Name: "Profile", Value: *c.profileName},
+		{Name: "HTTP endpoint", Value: *c.httpEndpoint},
+		{Name: "TLS Skip Verify", Value: *c.tlsSkipVerify},
 	})
 
 	// Set the endpoints on the settings.
@@ -217,13 +217,11 @@ func (c *configureCommand) Flags() *flag.Set {
 		&c.httpEndpoint,
 		"http-endpoint",
 		"The Tharsis HTTP API endpoint (in URL format).",
-		flag.Default(c.DefaultHTTPEndpoint),
 	)
 	f.StringVar(
 		&c.httpEndpoint,
 		"endpoint-url",
 		"The Tharsis HTTP API endpoint (in URL format).",
-		flag.Default(c.DefaultHTTPEndpoint),
 		flag.Deprecated("use -http-endpoint instead"),
 	)
 	f.BoolVar(

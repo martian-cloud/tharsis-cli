@@ -19,6 +19,8 @@ type terraformProviderCreateCommand struct {
 	toJSON        *bool
 }
 
+var _ Command = (*terraformProviderCreateCommand)(nil)
+
 // NewTerraformProviderCreateCommandFactory returns a terraformProviderCreateCommand struct.
 func NewTerraformProviderCreateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

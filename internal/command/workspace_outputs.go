@@ -36,6 +36,8 @@ type workspaceOutputsCommand struct {
 	toJSON     *bool
 }
 
+var _ Command = (*workspaceOutputsCommand)(nil)
+
 // NewWorkspaceOutputsCommandFactory returns a workspaceOutputsCommand struct.
 func NewWorkspaceOutputsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

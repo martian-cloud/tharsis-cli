@@ -25,6 +25,8 @@ type destroyCommand struct {
 	refresh          *bool
 }
 
+var _ Command = (*destroyCommand)(nil)
+
 // NewDestroyCommandFactory returns a destroyCommand struct.
 func NewDestroyCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

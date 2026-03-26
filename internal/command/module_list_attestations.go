@@ -22,6 +22,8 @@ type moduleListAttestationsCommand struct {
 	toJSON    *bool
 }
 
+var _ Command = (*moduleListAttestationsCommand)(nil)
+
 // NewModuleListAttestationsCommandFactory returns a moduleListAttestationsCommand struct.
 func NewModuleListAttestationsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

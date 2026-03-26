@@ -16,6 +16,8 @@ type groupListEnvironmentVarsCommand struct {
 	toJSON        *bool
 }
 
+var _ Command = (*groupListEnvironmentVarsCommand)(nil)
+
 // NewGroupListEnvironmentVarsCommandFactory returns a groupListEnvironmentVarsCommand struct.
 func NewGroupListEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

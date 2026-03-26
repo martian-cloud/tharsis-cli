@@ -14,6 +14,8 @@ type groupDeleteTerraformVarCommand struct {
 	version *int64
 }
 
+var _ Command = (*groupDeleteTerraformVarCommand)(nil)
+
 // NewGroupDeleteTerraformVarCommandFactory returns a groupDeleteTerraformVarCommand struct.
 func NewGroupDeleteTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

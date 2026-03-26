@@ -17,6 +17,8 @@ type workspaceAddMembershipCommand struct {
 	toJSON           *bool
 }
 
+var _ Command = (*workspaceAddMembershipCommand)(nil)
+
 // NewWorkspaceAddMembershipCommandFactory returns a workspaceAddMembershipCommand struct.
 func NewWorkspaceAddMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

@@ -14,6 +14,8 @@ type groupSetEnvironmentVarsCommand struct {
 	envVarFiles []string
 }
 
+var _ Command = (*groupSetEnvironmentVarsCommand)(nil)
+
 // NewGroupSetEnvironmentVarsCommandFactory returns a groupSetEnvironmentVarsCommand struct.
 func NewGroupSetEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

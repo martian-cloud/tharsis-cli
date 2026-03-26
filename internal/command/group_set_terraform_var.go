@@ -17,6 +17,8 @@ type groupSetTerraformVarCommand struct {
 	sensitive *bool
 }
 
+var _ Command = (*groupSetTerraformVarCommand)(nil)
+
 // NewGroupSetTerraformVarCommandFactory returns a groupSetTerraformVarCommand struct.
 func NewGroupSetTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

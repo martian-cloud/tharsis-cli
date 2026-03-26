@@ -24,6 +24,8 @@ type groupListCommand struct {
 	toJSON    *bool
 }
 
+var _ Command = (*groupListCommand)(nil)
+
 // NewGroupListCommandFactory returns a groupListCommand struct.
 func NewGroupListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {

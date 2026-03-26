@@ -2,7 +2,7 @@ package command
 
 import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
+	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 )
 
@@ -90,6 +90,18 @@ tharsis configure delete prod-example
 `
 }
 
-func (c *configureDeleteCommand) Flags() *flag.Set {
-	return nil
+func (c *configureDeleteCommand) PredictArgs() complete.Predictor {
+	return complete.PredictFunc(func(complete.Args) []string {
+		gotSettings, err := settings.ReadSettings()
+		if err != nil {
+			return nil
+		}
+
+		names := make([]string, 0, len(gotSettings.Profiles))
+		for name := range gotSettings.Profiles {
+			names = append(names, name)
+		}
+
+		return names
+	})
 }

@@ -3,7 +3,6 @@ package command
 import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 // managedIdentityAccessRuleDeleteCommand is the top-level structure for the managed identity access rule delete command.
@@ -74,8 +73,4 @@ func (*managedIdentityAccessRuleDeleteCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule delete <id>
 `
-}
-
-func (c *managedIdentityAccessRuleDeleteCommand) Flags() *flag.Set {
-	return nil
 }
