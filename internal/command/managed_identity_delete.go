@@ -42,7 +42,7 @@ func (c *managedIdentityDeleteCommand) Run(args []string) int {
 		WithCommandName("managed-identity delete"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt(c.force, "Are you sure you want to delete this managed identity?"),
+		WithForcePrompt("Are you sure you want to delete this managed identity?"),
 	); code != 0 {
 		return code
 	}

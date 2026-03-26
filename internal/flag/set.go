@@ -127,24 +127,19 @@ func (fs *Set) SetOutput(output io.Writer) {
 	fs.stdfs.SetOutput(output)
 }
 
-// NFlag returns the number of flags that have been set.
-func (fs *Set) NFlag() int {
-	return fs.stdfs.NFlag()
-}
-
 // Args returns the non-flag arguments remaining after parsing.
 func (fs *Set) Args() []string {
 	return fs.stdfs.Args()
 }
 
+// ---------------------------------------------------------------------------
+// Query methods
+// ---------------------------------------------------------------------------
+
 // Lookup returns the Flag for the named flag, or nil if not found.
 func (fs *Set) Lookup(name string) *Flag {
 	return fs.flags[name]
 }
-
-// ---------------------------------------------------------------------------
-// Query methods
-// ---------------------------------------------------------------------------
 
 // VisitAll calls fn for each flag in the set (sorted alphabetically),
 // including informational and unset flags. Aliases are excluded.
@@ -169,24 +164,6 @@ func (fs *Set) Informational(name string, usage string, opts ...any) {
 	fs.register(name, usage, opts)
 }
 
-// Predictors returns a map of flag names to their shell completion candidates.
-func (fs *Set) Predictors() map[string][]string {
-	m := make(map[string][]string)
-	for name, f := range fs.flags {
-		if name != f.Name || len(f.predictors) == 0 {
-			continue
-		}
-
-		m[name] = f.predictors
-
-		for _, alias := range f.aliases {
-			m[alias] = f.predictors
-		}
-	}
-
-	return m
-}
-
 // ---------------------------------------------------------------------------
 // Scalar flag registration (**T pointers, nullable)
 // ---------------------------------------------------------------------------
@@ -203,6 +180,7 @@ func (fs *Set) StringVar(p **string, name string, usage string, args ...any) {
 		s = f.transform(s)
 
 		*p = &s
+		f.value = s
 
 		return nil
 	}
@@ -230,6 +208,7 @@ func (fs *Set) IntVar(p **int, name string, usage string, args ...any) {
 
 		intVal := int(v)
 		*p = &intVal
+		f.value = s
 
 		return nil
 	}
@@ -257,6 +236,7 @@ func (fs *Set) Int32Var(p **int32, name string, usage string, args ...any) {
 
 		v32 := int32(v)
 		*p = &v32
+		f.value = s
 
 		return nil
 	}
@@ -283,6 +263,7 @@ func (fs *Set) Int64Var(p **int64, name string, usage string, args ...any) {
 		}
 
 		*p = &v
+		f.value = s
 
 		return nil
 	}
@@ -295,19 +276,18 @@ func (fs *Set) Int64Var(p **int64, name string, usage string, args ...any) {
 }
 
 // BoolVar defines a bool flag. Optional by default (nil if not set).
-// Automatically predicts "true" and "false" for shell completion.
 func (fs *Set) BoolVar(p **bool, name string, usage string, args ...any) {
 	f := fs.register(name, usage, args)
-	f.predictors = []string{"true", "false"}
+	f.isBool = true
 
 	setter := func(s string) error {
-
 		v, err := strconv.ParseBool(s)
 		if err != nil {
 			return err
 		}
 
 		*p = &v
+		f.value = s
 
 		return nil
 	}

@@ -32,7 +32,6 @@ const (
 // baseOptions contains the different ways to configure the behavior of BaseCommand.
 type baseOptions struct {
 	flags          *flag.Set
-	force          *bool
 	inputValidator func() error
 	commandName    string
 	args           []string
@@ -43,6 +42,16 @@ type baseOptions struct {
 
 // BaseOptionsFunc is an alias that allows setting baseOptions.
 type BaseOptionsFunc func(*baseOptions) error
+
+// isForceFlagSet checks if the -force flag is set in the parsed flags.
+func (o *baseOptions) isForceFlagSet() bool {
+	if o.flags == nil {
+		return false
+	}
+
+	f := o.flags.Lookup("force")
+	return f != nil && f.Value() == "true"
+}
 
 // WithFlags sets the FlagSet that needs to be parsed. Return
 // values are often set as fields on the caller command's struct.
@@ -95,11 +104,9 @@ func WithClient(withAuth bool) BaseOptionsFunc {
 }
 
 // WithForcePrompt prompts for confirmation in interactive mode when
-// --force option is used to prevent accidental deletions for forceful
-// actions. The prompt parameter is the confirmation message shown to the user.
-func WithForcePrompt(force *bool, prompt string) BaseOptionsFunc {
+// the -force flag is set, to prevent accidental destructive actions.
+func WithForcePrompt(prompt string) BaseOptionsFunc {
 	return func(o *baseOptions) error {
-		o.force = force
 		o.confirmPrompt = prompt
 		return nil
 	}
@@ -251,9 +258,8 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 		}
 	}
 
-	// Prompt for confirmation if destructive operation in interactive mode.
-	// Only prompt when --force is used.
-	if o.confirmPrompt != "" && c.UI.Interactive() && o.force != nil && *o.force {
+	// Prompt for confirmation in interactive mode when -force is true.
+	if o.confirmPrompt != "" && c.UI.Interactive() && o.isForceFlagSet() {
 		confirmed, err := c.UI.Confirm(o.confirmPrompt)
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to confirm")
@@ -304,7 +310,12 @@ func (c *BaseCommand) getCurrentSettings() (*settings.Settings, error) {
 		return nil, err
 	}
 
-	c.Logger.Debug("loaded settings", "settings", currentSettings)
+	c.Logger.Debug("loaded settings",
+		"profile", c.CurrentProfileName,
+		"endpoint", currentSettings.CurrentProfile.Endpoint,
+		"tlsSkipVerify", currentSettings.CurrentProfile.TLSSkipVerify,
+		"profileCount", len(currentSettings.Profiles),
+	)
 
 	return currentSettings, nil
 }

@@ -92,7 +92,7 @@ func (c *destroyCommand) Run(args []string) int {
 		Refresh:          *c.refresh,
 	})
 	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to create run")
+		c.UI.ErrorWithSummary(err, "failed to destroy")
 		return 1
 	}
 
@@ -121,7 +121,7 @@ func (c *destroyCommand) Run(args []string) int {
 			return 1
 		}
 		if answer != "yes" {
-			c.UI.Output("Approval response was negative. Will NOT destroy resources.")
+			c.UI.Output("Approval response was negative. Will not destroy resources.")
 			return 0
 		}
 		c.UI.Output("\n")

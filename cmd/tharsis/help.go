@@ -7,10 +7,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mitchellh/cli"
-	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 )
 
 // helpFunc adds global options to the default help function.
@@ -41,47 +39,6 @@ func helpFunc(h cli.HelpFunc, globalFlags *flag.Set) cli.HelpFunc {
 
 		return strings.TrimSpace(headingBuf.String() + h(commands) + "\n" + globalFlagsOutput + "\n\n" + legend)
 	}
-}
-
-// globalAutocompletions builds completions for global flags, with a
-// custom predictor for the profile flag.
-func globalAutocompletions(fs *flag.Set) complete.Flags {
-	result := make(complete.Flags)
-
-	fs.VisitAll(func(f *flag.Flag) {
-		var predictor complete.Predictor
-		if vals := f.ValidValues(); len(vals) > 0 {
-			predictor = complete.PredictSet(vals...)
-		} else {
-			predictor = complete.PredictAnything
-		}
-
-		result["-"+f.Name] = predictor
-		for _, alias := range f.Aliases() {
-			result["-"+alias] = predictor
-		}
-	})
-
-	// Override profile flag with dynamic predictor.
-	profilePredictor := complete.PredictFunc(predictProfiles)
-	result["-p"] = profilePredictor
-	result["-profile"] = profilePredictor
-
-	return result
-}
-
-// predictProfiles returns available profile names for autocompletion.
-func predictProfiles(_ complete.Args) []string {
-	s, err := settings.ReadSettings()
-	if err != nil {
-		return nil
-	}
-
-	profiles := make([]string, 0, len(s.Profiles))
-	for name := range s.Profiles {
-		profiles = append(profiles, name)
-	}
-	return profiles
 }
 
 // getHelpText returns the helpText for command.

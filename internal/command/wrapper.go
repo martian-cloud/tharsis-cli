@@ -73,8 +73,10 @@ func (c Wrapper) AutocompleteFlags() complete.Flags {
 	result := make(complete.Flags)
 	fs.VisitAll(func(f *flag.Flag) {
 		var predictor complete.Predictor
-		if vals := f.ValidValues(); len(vals) > 0 {
-			predictor = complete.PredictSet(vals...)
+		if f.IsBool() {
+			predictor = complete.PredictNothing
+		} else if preds := f.Predictors(); len(preds) > 0 {
+			predictor = complete.PredictSet(preds...)
 		} else {
 			predictor = complete.PredictAnything
 		}

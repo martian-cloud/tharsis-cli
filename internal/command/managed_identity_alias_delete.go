@@ -42,7 +42,7 @@ func (c *managedIdentityAliasDeleteCommand) Run(args []string) int {
 		WithCommandName("managed-identity-alias delete"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt(c.force, "Are you sure you want to delete this managed identity alias?"),
+		WithForcePrompt("Are you sure you want to delete this managed identity alias?"),
 	); code != 0 {
 		return code
 	}
