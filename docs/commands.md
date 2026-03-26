@@ -42,6 +42,45 @@ Check the [FAQ](#frequently-asked-questions-faq) to see if there's already an an
 :::
   
 ---
+## Global Options
+  
+#### disable-autocomplete
+
+Uninstall shell autocompletion.
+
+#### enable-autocomplete
+
+Install shell autocompletion.
+
+#### h, help
+
+Show this usage message.
+
+#### log
+
+Log level.\
+**Values:** `off`, `trace`, `debug`, `info`, `warn`, `error`\
+**Default:** `off`\
+**Env:** `THARSIS_CLI_LOG`
+
+#### no-color
+
+Disable colored output.\
+**Default:** `false`\
+**Env:** `NO_COLOR`
+
+#### p, profile
+
+Profile name.\
+**Default:** `default`\
+**Env:** `THARSIS_PROFILE`
+
+#### v, version
+
+Show the version information.
+
+
+---
 ## apply command
 **Apply a Terraform run.**
   
@@ -572,7 +611,7 @@ Filter to only groups containing this substring in their path.
 #### sort-by
 
 Sort by this field.\
-**Values:** `FULL_PATH_ASC`, `FULL_PATH_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+**Values:** `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`, `FULL_PATH_ASC`, `FULL_PATH_DESC`, `GROUP_LEVEL_ASC`
 
 #### sort-order <span style={{color:'orange'}}>!</span>
 
@@ -1072,7 +1111,7 @@ The type of access rule.\
 #### run-stage <span style={{color:'red'}}>*</span>
 
 The run stage.\
-**Values:** `apply`, `plan`
+**Values:** `plan`, `apply`
 
 #### verify-state-lineage
 

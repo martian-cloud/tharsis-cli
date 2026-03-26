@@ -117,7 +117,6 @@ type BaseCommand struct {
 	HTTPClient           *http.Client
 	grpcClient           *client.Client
 	Version              string
-	DisplayTitle         string
 	BinaryName           string
 	CurrentProfileName   string
 	DefaultHTTPEndpoint  string

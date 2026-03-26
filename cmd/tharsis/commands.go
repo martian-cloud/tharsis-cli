@@ -3,10 +3,11 @@ package main
 import (
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/command"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 // commands returns all the available commands.
-func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, error) {
+func commands(baseCommand *command.BaseCommand, globalFlags *flag.Set) (map[string]cli.CommandFactory, error) {
 	// The map of all commands except documentation.
 	commandMap := map[string]command.Factory{
 		"apply":                                     command.NewApplyCommandFactory(baseCommand),
@@ -114,9 +115,9 @@ func commands(baseCommand *command.BaseCommand) (map[string]cli.CommandFactory, 
 		"workspace set-environment-vars":            command.NewWorkspaceSetEnvironmentVarsCommandFactory(baseCommand),
 	}
 
-	// 	// Add the documentation commands.
+	// Add the documentation commands.
 	commandMap["documentation"] = command.NewHelpCommandFactory(getHelpText("documentation"))
-	commandMap["documentation generate"] = command.NewDocumentationGenerateCommandFactory(baseCommand, commandMap)
+	commandMap["documentation generate"] = command.NewDocumentationGenerateCommandFactory(baseCommand, commandMap, globalFlags)
 
 	// Convert CommandFactory to cli.CommandFactory.
 	returnMap := map[string]cli.CommandFactory{}

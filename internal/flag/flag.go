@@ -39,16 +39,17 @@ type Flag struct {
 	Name  string
 	Usage string
 
-	required    bool
-	repeatable  bool
-	aliases     []string
-	predictors  []string
-	deprecated  string
-	envVar      string
-	defaultVal  any
-	validValues []string
-	validate    func(string) error
-	transform   func(string) string
+	required      bool
+	repeatable    bool
+	informational bool
+	aliases       []string
+	predictors    []string
+	deprecated    string
+	envVar        string
+	defaultVal    any
+	validValues   []string
+	validate      func(string) error
+	transform     func(string) string
 }
 
 // Markers returns all applicable marker symbols for the flag.

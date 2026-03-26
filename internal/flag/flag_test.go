@@ -198,17 +198,67 @@ func TestLookup(t *testing.T) {
 }
 
 func TestVisitAll(t *testing.T) {
-	fs := NewSet("test")
-	var a, b *string
-	fs.StringVar(&a, "aaa", "first")
-	fs.StringVar(&b, "bbb", "second", Default("hello"), Aliases("b"))
+	tests := []struct {
+		name          string
+		setup         func(*Set)
+		expectedNames []string
+	}{
+		{
+			name:          "empty set",
+			setup:         func(_ *Set) {},
+			expectedNames: nil,
+		},
+		{
+			name: "sorted alphabetically",
+			setup: func(fs *Set) {
+				var a, b *string
+				fs.StringVar(&a, "zebra", "last")
+				fs.StringVar(&b, "alpha", "first")
+			},
+			expectedNames: []string{"alpha", "zebra"},
+		},
+		{
+			name: "aliases excluded",
+			setup: func(fs *Set) {
+				var v *string
+				fs.StringVar(&v, "verbose", "verbose output", Aliases("v"))
+			},
+			expectedNames: []string{"verbose"},
+		},
+		{
+			name: "informational flags included",
+			setup: func(fs *Set) {
+				var v *bool
+				fs.BoolVar(&v, "debug", "enable debug", Default(false))
+				fs.Informational("help", "show help")
+			},
+			expectedNames: []string{"debug", "help"},
+		},
+		{
+			name: "mixed parsed and informational sorted together",
+			setup: func(fs *Set) {
+				var v *string
+				fs.StringVar(&v, "name", "the name")
+				fs.Informational("version", "show version")
+				fs.Informational("help", "show help")
+			},
+			expectedNames: []string{"help", "name", "version"},
+		},
+	}
 
-	var names []string
-	fs.VisitAll(func(f *Flag) {
-		names = append(names, f.Name)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := NewSet("test")
+			tc.setup(fs)
 
-	assert.Equal(t, []string{"aaa", "bbb"}, names)
+			var names []string
+			fs.VisitAll(func(f *Flag) {
+				names = append(names, f.Name)
+			})
+
+			assert.Equal(t, tc.expectedNames, names)
+		})
+	}
 }
 
 func TestPredictors(t *testing.T) {

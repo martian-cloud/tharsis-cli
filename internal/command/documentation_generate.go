@@ -21,6 +21,7 @@ type documentationGenerateCommand struct {
 
 	outputFilename *string
 	allCommands    map[string]Factory
+	globalFlags    *flag.Set
 }
 
 func (c *documentationGenerateCommand) validate() error {
@@ -31,11 +32,13 @@ func (c *documentationGenerateCommand) validate() error {
 func NewDocumentationGenerateCommandFactory(
 	baseCommand *BaseCommand,
 	allCommands map[string]Factory,
+	globalFlags *flag.Set,
 ) func() (Command, error) {
 	return func() (Command, error) {
 		return &documentationGenerateCommand{
 			BaseCommand: baseCommand,
 			allCommands: allCommands,
+			globalFlags: globalFlags,
 		}, nil
 	}
 }
@@ -61,7 +64,7 @@ func (c *documentationGenerateCommand) Run(args []string) int {
 		writer = file
 	}
 
-	if err := generateDocumentation(writer, c.allCommands); err != nil {
+	if err := generateDocumentation(writer, c.allCommands, c.globalFlags); err != nil {
 		c.Logger.Error(fmt.Sprintf("Failed to generate documentation: %s", err))
 		return 1
 	}
@@ -101,7 +104,7 @@ func (c *documentationGenerateCommand) Flags() *flag.Set {
 	return f
 }
 
-func generateDocumentation(writer io.Writer, allCommands map[string]Factory) error {
+func generateDocumentation(writer io.Writer, allCommands map[string]Factory, globalFlags *flag.Set) error {
 	commands, err := instantiateCommands(allCommands)
 	if err != nil {
 		return err
@@ -115,6 +118,10 @@ func generateDocumentation(writer io.Writer, allCommands map[string]Factory) err
 	// Frontmatter + command list.
 	writeFrontmatter(m)
 	writeCommandList(m, commands, names)
+
+	// Global options.
+	m.HorizontalRule().H2("Global Options").LF()
+	writeFlags(m, globalFlags)
 
 	// Command details.
 	for _, name := range names {
@@ -150,7 +157,10 @@ func generateDocumentation(writer io.Writer, allCommands map[string]Factory) err
 			m.CodeBlocks(md.SyntaxHighlightShell, example).LF()
 		}
 
-		writeFlagsTable(m, cmd)
+		if cmd.Flags() != nil {
+			m.H4("Options").LF()
+			writeFlags(m, cmd.Flags())
+		}
 	}
 
 	// FAQ.
@@ -192,19 +202,14 @@ func writeCommandList(m *md.Markdown, commands map[string]Command, names []strin
 	m.LF()
 }
 
-func writeFlagsTable(m *md.Markdown, cmd Command) {
-	flagSet := cmd.Flags()
-	if flagSet == nil {
-		return
-	}
-
+func writeFlags(m *md.Markdown, flagSet *flag.Set) {
 	var buf strings.Builder
 	flagSet.VisitAll(func(f *flag.Flag) {
 		var name strings.Builder
 		name.WriteString(f.FormattedName())
-		for _, m := range f.Markers() {
+		for _, mk := range f.Markers() {
 			name.WriteString(" ")
-			name.WriteString(coloredMarker(m))
+			name.WriteString(coloredMarker(mk))
 		}
 
 		buf.WriteString("#### " + name.String() + "\n\n")
@@ -241,7 +246,6 @@ func writeFlagsTable(m *md.Markdown, cmd Command) {
 	})
 
 	if buf.Len() > 0 {
-		m.H4("Options").LF()
 		m.PlainText(buf.String())
 	}
 }
