@@ -56,7 +56,7 @@ func (c *groupGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(group, c.toJSON)
+	return c.Output(group, c.toJSON)
 }
 
 func (*groupGetCommand) Synopsis() string {

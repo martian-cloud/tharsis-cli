@@ -97,7 +97,7 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return c.OutputProtoList(terraformVars, c.toJSON)
+	return c.OutputList(terraformVars, c.toJSON)
 }
 
 func (*workspaceListTerraformVarsCommand) Synopsis() string {

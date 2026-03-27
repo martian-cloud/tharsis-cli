@@ -80,7 +80,7 @@ func (c *runnerAgentCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(createdRunner, c.toJSON)
+	return c.Output(createdRunner, c.toJSON)
 }
 
 func (*runnerAgentCreateCommand) Synopsis() string {

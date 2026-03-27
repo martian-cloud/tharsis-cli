@@ -65,7 +65,7 @@ func (c *runnerAgentUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(updatedRunner, c.toJSON)
+	return c.Output(updatedRunner, c.toJSON)
 }
 
 func (*runnerAgentUpdateCommand) Synopsis() string {

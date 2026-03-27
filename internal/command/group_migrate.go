@@ -64,7 +64,7 @@ func (c *groupMigrateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(group, c.toJSON)
+	return c.Output(group, c.toJSON)
 }
 
 func (*groupMigrateCommand) Synopsis() string {

@@ -134,7 +134,7 @@ func (c *groupGetMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(foundMembership, c.toJSON)
+	return c.Output(foundMembership, c.toJSON)
 }
 
 func (*groupGetMembershipCommand) Synopsis() string {

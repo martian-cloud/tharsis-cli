@@ -104,7 +104,7 @@ func (c *workspaceLabelCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(updatedWorkspace, c.toJSON)
+	return c.Output(updatedWorkspace, c.toJSON)
 }
 
 func (c *workspaceLabelCommand) applyLabelOperations(existingLabels map[string]string) map[string]string {

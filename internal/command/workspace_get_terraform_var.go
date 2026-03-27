@@ -88,7 +88,7 @@ func (c *workspaceGetTerraformVarCommand) Run(args []string) int {
 		variable.Value = ptr.String("[SENSITIVE]")
 	}
 
-	return c.OutputProto(variable, c.toJSON)
+	return c.Output(variable, c.toJSON)
 }
 
 func (*workspaceGetTerraformVarCommand) Synopsis() string {

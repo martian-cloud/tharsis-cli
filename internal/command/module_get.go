@@ -56,7 +56,7 @@ func (c *moduleGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(module, c.toJSON)
+	return c.Output(module, c.toJSON)
 }
 
 func (*moduleGetCommand) Synopsis() string {

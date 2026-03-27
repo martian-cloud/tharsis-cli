@@ -84,7 +84,7 @@ func (c *moduleListAttestationsCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProtoList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON)
 }
 
 func (*moduleListAttestationsCommand) Synopsis() string {

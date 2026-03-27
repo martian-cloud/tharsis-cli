@@ -61,7 +61,7 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(createdAttestation, c.toJSON)
+	return c.Output(createdAttestation, c.toJSON)
 }
 
 func (*moduleCreateAttestationCommand) Synopsis() string {

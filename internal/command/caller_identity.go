@@ -57,9 +57,9 @@ func (c *callerIdentityCommand) Run(args []string) int {
 
 	switch caller := resp.Caller.(type) {
 	case *pb.GetCallerIdentityResponse_User:
-		return c.OutputProto(caller.User, c.toJSON)
+		return c.Output(caller.User, c.toJSON)
 	case *pb.GetCallerIdentityResponse_ServiceAccount:
-		return c.OutputProto(caller.ServiceAccount, c.toJSON)
+		return c.Output(caller.ServiceAccount, c.toJSON)
 	}
 
 	return 0

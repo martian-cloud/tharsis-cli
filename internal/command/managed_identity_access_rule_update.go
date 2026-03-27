@@ -76,7 +76,7 @@ func (c *managedIdentityAccessRuleUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(updatedRule, c.toJSON)
+	return c.Output(updatedRule, c.toJSON)
 }
 
 func (*managedIdentityAccessRuleUpdateCommand) Synopsis() string {

@@ -118,7 +118,7 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(updatedIdentity, c.toJSON)
+	return c.Output(updatedIdentity, c.toJSON)
 }
 
 func (*managedIdentityUpdateCommand) Synopsis() string {
