@@ -98,9 +98,9 @@ func (*terraformProviderMirrorListPlatformsCommand) Usage() string {
 func (*terraformProviderMirrorListPlatformsCommand) Example() string {
 	return `
 tharsis terraform-provider-mirror list-platforms \
-  -os linux \
-  -architecture amd64 \
-  -sort-by CREATED_AT_DESC \
+  -os "linux" \
+  -architecture "amd64" \
+  -sort-by "CREATED_AT_DESC" \
   trn:terraform_provider_version_mirror:<group_path>/<provider_namespace>/<provider_name>/<semantic_version>
 `
 }

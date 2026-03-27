@@ -102,7 +102,7 @@ func (*groupSetTerraformVarsCommand) Usage() string {
 func (*groupSetTerraformVarsCommand) Example() string {
 	return `
 tharsis group set-terraform-vars \
-  -tf-var-file terraform.tfvars \
+  -tf-var-file "terraform.tfvars" \
   trn:group:<group_path>
 `
 }

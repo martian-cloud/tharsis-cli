@@ -84,7 +84,7 @@ func (*groupDeleteTerraformVarCommand) Usage() string {
 func (*groupDeleteTerraformVarCommand) Example() string {
 	return `
 tharsis group delete-terraform-var \
-  -key region \
+  -key "region" \
   trn:group:<group_path>
 `
 }

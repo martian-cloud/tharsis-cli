@@ -141,7 +141,7 @@ func (*managedIdentityUpdateCommand) Example() string {
 	return `
 tharsis managed-identity update \
   -description "Updated AWS production role" \
-  -aws-federated-role arn:aws:iam::123456789012:role/UpdatedRole \
+  -aws-federated-role "arn:aws:iam::123456789012:role/UpdatedRole" \
   trn:managed_identity:<group_path>/<managed_identity_name>
 `
 }

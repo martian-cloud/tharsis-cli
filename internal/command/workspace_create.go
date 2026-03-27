@@ -143,14 +143,14 @@ func (*workspaceCreateCommand) Description() string {
 func (*workspaceCreateCommand) Example() string {
 	return `
 tharsis workspace create \
-  -parent-group-id trn:group:<group_path> \
+  -parent-group-id "trn:group:<group_path>" \
   -description "Production workspace" \
   -terraform-version "1.5.0" \
   -max-job-duration 60 \
   -prevent-destroy-plan \
-  -managed-identity trn:managed_identity:<group_path>/<identity_name> \
-  -label env=prod \
-  -label team=platform \
+  -managed-identity "trn:managed_identity:<group_path>/<identity_name>" \
+  -label "env=prod" \
+  -label "team=platform" \
   <name>
 `
 }

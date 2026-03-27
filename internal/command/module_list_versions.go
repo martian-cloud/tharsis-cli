@@ -109,8 +109,8 @@ func (*moduleListVersionsCommand) Usage() string {
 func (*moduleListVersionsCommand) Example() string {
 	return `
 tharsis module list-versions \
-  -search 1.0 \
-  -sort-by CREATED_AT_DESC \
+  -search "1.0" \
+  -sort-by "CREATED_AT_DESC" \
   -limit 10 \
   trn:terraform_module:<group_path>/<module_name>/<system>
 `

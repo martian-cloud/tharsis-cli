@@ -166,7 +166,7 @@ func (*applyCommand) Usage() string {
 
 func (*applyCommand) Example() string {
 	return `
-tharsis apply -directory-path ./terraform trn:workspace:<workspace_path>
+tharsis apply -directory-path "./terraform" trn:workspace:<workspace_path>
 `
 }
 

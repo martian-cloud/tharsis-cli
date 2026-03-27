@@ -156,7 +156,7 @@ func (*workspaceGetMembershipCommand) Usage() string {
 func (*workspaceGetMembershipCommand) Example() string {
 	return `
 tharsis workspace get-membership \
-  -user-id trn:user:<username> \
+  -user-id "trn:user:<username>" \
   trn:workspace:<workspace_path>
 `
 }

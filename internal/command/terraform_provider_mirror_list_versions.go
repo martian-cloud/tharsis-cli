@@ -112,7 +112,7 @@ func (*terraformProviderMirrorListVersionsCommand) Usage() string {
 func (*terraformProviderMirrorListVersionsCommand) Example() string {
 	return `
 tharsis terraform-provider-mirror list-versions \
-  -sort-by CREATED_AT_DESC \
+  -sort-by "CREATED_AT_DESC" \
   -limit 10 \
   <namespace_path>
 `

@@ -89,7 +89,7 @@ func (*serviceAccountCreateTokenCommand) Usage() string {
 func (*serviceAccountCreateTokenCommand) Example() string {
 	return `
 tharsis service-account create-token \
-  -token <oidc-token> \
+  -token "<oidc-token>" \
   trn:service_account:<group_path>/<service_account_name>
 `
 }

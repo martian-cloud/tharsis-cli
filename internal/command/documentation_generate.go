@@ -263,7 +263,7 @@ func writeFlags(m *md.Markdown, flagSet *flag.Set) {
 }
 
 // writeExample writes an example to the markdown output. Examples containing
-// code block markers are written as-is; others are wrapped in a shell block.
+// code block markers are written as-is; others are wrapped in a bash block.
 func writeExample(m *md.Markdown, example string) {
 	if strings.Contains(example, "```") {
 		m.PlainText(example).LF()

@@ -100,11 +100,11 @@ func (*managedIdentityAccessRuleCreateCommand) Description() string {
 func (*managedIdentityAccessRuleCreateCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule create \
-  -managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name> \
-  -rule-type eligible_principals \
-  -run-stage plan \
-  -allowed-user trn:user:<username> \
-  -allowed-team trn:team:<team_name>
+  -managed-identity-id "trn:managed_identity:<group_path>/<managed_identity_name>" \
+  -rule-type "eligible_principals" \
+  -run-stage "plan" \
+  -allowed-user "trn:user:<username>" \
+  -allowed-team "trn:team:<team_name>"
 `
 }
 

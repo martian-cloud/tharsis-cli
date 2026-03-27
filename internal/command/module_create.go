@@ -148,8 +148,8 @@ func (*moduleCreateCommand) Description() string {
 func (*moduleCreateCommand) Example() string {
 	return `
 tharsis module create \
-  -group-id trn:group:<group_path> \
-  -repository-url https://github.com/example/terraform-aws-vpc \
+  -group-id "trn:group:<group_path>" \
+  -repository-url "https://github.com/example/terraform-aws-vpc" \
   -private \
   vpc/aws
 `

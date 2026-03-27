@@ -154,7 +154,7 @@ func (*groupGetMembershipCommand) Usage() string {
 func (*groupGetMembershipCommand) Example() string {
 	return `
 tharsis group get-membership \
-  -user-id trn:user:<username> \
+  -user-id "trn:user:<username>" \
   trn:group:<group_path>
 `
 }

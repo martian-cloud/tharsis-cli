@@ -108,7 +108,7 @@ func (*workspaceGetTerraformVarCommand) Usage() string {
 func (*workspaceGetTerraformVarCommand) Example() string {
 	return `
 tharsis workspace get-terraform-var \
-  -key region \
+  -key "region" \
   trn:workspace:<workspace_path>
 `
 }

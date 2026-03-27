@@ -93,8 +93,8 @@ func (*workspaceAddMembershipCommand) Usage() string {
 func (*workspaceAddMembershipCommand) Example() string {
 	return `
 tharsis workspace add-membership \
-  -role-id trn:role:owner \
-  -user-id trn:user:john.smith \
+  -role-id "trn:role:owner" \
+  -user-id "trn:user:john.smith" \
   trn:workspace:<workspace_path>
 `
 }

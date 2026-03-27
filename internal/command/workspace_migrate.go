@@ -76,7 +76,7 @@ func (*workspaceMigrateCommand) Usage() string {
 func (*workspaceMigrateCommand) Example() string {
 	return `
 tharsis workspace migrate \
-  -new-group-id trn:group:<group_path> \
+  -new-group-id "trn:group:<group_path>" \
   trn:workspace:<workspace_path>
 `
 }

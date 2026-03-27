@@ -84,7 +84,7 @@ func (*moduleUpdateCommand) Description() string {
 func (*moduleUpdateCommand) Example() string {
 	return `
 tharsis module update \
-  -repository-url https://github.com/example/terraform-aws-vpc-v2 \
+  -repository-url "https://github.com/example/terraform-aws-vpc-v2" \
   -private true \
   trn:terraform_module:<group_path>/<module_name>/<system>
 `

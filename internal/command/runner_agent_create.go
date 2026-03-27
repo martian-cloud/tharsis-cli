@@ -100,11 +100,11 @@ func (*runnerAgentCreateCommand) Description() string {
 func (*runnerAgentCreateCommand) Example() string {
 	return `
 tharsis runner-agent create \
-  -group-id trn:group:<group_path> \
+  -group-id "trn:group:<group_path>" \
   -description "Production runner" \
   -run-untagged-jobs \
-  -tag prod \
-  -tag us-east-1 \
+  -tag "prod" \
+  -tag "us-east-1" \
   prod-runner
 `
 }
