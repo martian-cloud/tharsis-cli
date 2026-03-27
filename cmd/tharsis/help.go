@@ -61,7 +61,8 @@ func helpFunc(globalFlags *flag.Set) cli.HelpFunc {
 		globalFlagsOutput := output.CommandHelp(output.CommandHelpInfo{
 			Flags: globalFlags,
 		})
-		fmt.Fprintf(&buf, "\n%s\n\n", globalFlagsOutput)
+		buf.WriteString(strings.TrimRight(globalFlagsOutput, "\n"))
+		buf.WriteString("\n\n")
 
 		// Legend.
 		fmt.Fprintln(&buf, bold.Sprint("Legend:"))
