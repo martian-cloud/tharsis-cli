@@ -3,7 +3,6 @@ package flag
 import (
 	"fmt"
 	"sort"
-	"strings"
 )
 
 // Marker represents a flag annotation symbol.
@@ -40,17 +39,17 @@ type Flag struct {
 	Name  string
 	Usage string
 
-	required    bool
-	repeatable  bool
-	isBool      bool
-	aliases     []string
-	predictors  []string
-	deprecated  string
-	envVar      string
-	defaultVal  any
-	validValues []string
-	validate    func(string) error
-	transform   func(string) string
+	required           bool
+	repeatable         bool
+	isBool             bool
+	aliases            []string
+	predictors         []string
+	deprecationMessage string
+	envVar             string
+	defaultVal         any
+	validValues        []string
+	validate           func(string) error
+	transform          func(string) string
 	// value holds the current string representation of the flag's parsed value,
 	// set by the flag's setter during parsing. This allows callers to read the
 	// parsed value via Lookup().Value() without needing access to the flag set.
@@ -65,7 +64,7 @@ func (f *Flag) Markers() []Marker {
 		m = append(m, MarkerRequired)
 	}
 
-	if f.deprecated != "" {
+	if f.deprecationMessage != "" {
 		m = append(m, MarkerDeprecated)
 	}
 
@@ -91,8 +90,8 @@ func (f *Flag) Value() string {
 	return f.value
 }
 
-// DefValue returns the default value string representation.
-func (f *Flag) DefValue() string {
+// DefaultValue returns the default value string representation.
+func (f *Flag) DefaultValue() string {
 	if f.defaultVal == nil {
 		return ""
 	}
@@ -100,26 +99,14 @@ func (f *Flag) DefValue() string {
 	return fmt.Sprintf("%v", f.defaultVal)
 }
 
-// IsDeprecated reports whether the flag is deprecated.
-func (f *Flag) IsDeprecated() bool {
-	return f.deprecated != ""
-}
-
 // DeprecationMessage returns the deprecation message, or "".
 func (f *Flag) DeprecationMessage() string {
-	return f.deprecated
+	return f.deprecationMessage
 }
 
-// FormattedName returns the flag name and aliases joined with ", ".
-// e.g. "verbose, v".
-func (f *Flag) FormattedName() string {
-	parts := append([]string{f.Name}, f.aliases...)
-	return strings.Join(parts, ", ")
-}
-
-// Aliases returns the flag's alternate names.
-func (f *Flag) Aliases() []string {
-	return f.aliases
+// Names returns the flag's primary name and all aliases.
+func (f *Flag) Names() []string {
+	return append([]string{f.Name}, f.aliases...)
 }
 
 // EnvVar returns the environment variable name, or "".

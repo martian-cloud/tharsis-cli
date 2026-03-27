@@ -30,7 +30,7 @@ func Default(value any) Option {
 // A deprecated flag cannot be required since it has a replacement; panics if
 // combined with [Required].
 func Deprecated(message string) Option {
-	return func(f *Flag) { f.deprecated = message }
+	return func(f *Flag) { f.deprecationMessage = message }
 }
 
 // TransformString applies a function to the raw string value before storing it.
@@ -418,7 +418,7 @@ func (fs *Set) register(name string, usage string, args []any) *Flag {
 	}
 
 	// Deprecated flags should always be optional since they're being replaced by another.
-	if f.required && f.IsDeprecated() {
+	if f.required && f.deprecationMessage != "" {
 		panic(fmt.Sprintf("flag %s: cannot be both required and deprecated", name))
 	}
 

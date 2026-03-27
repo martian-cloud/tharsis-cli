@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/fatih/color"
@@ -11,33 +13,63 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 )
 
-// helpFunc adds global options to the default help function.
-func helpFunc(h cli.HelpFunc, globalFlags *flag.Set) cli.HelpFunc {
+// helpFunc builds the full CLI help output.
+func helpFunc(globalFlags *flag.Set) cli.HelpFunc {
 	return func(commands map[string]cli.CommandFactory) string {
-		var headingBuf bytes.Buffer
+		bold := color.New(color.Bold)
+		green := output.PrimaryColor()
 
-		fmt.Fprint(&headingBuf, color.New(color.Bold, color.FgHiGreen).Sprint("Welcome to Tharsis"))
-		fmt.Fprintln(&headingBuf, " - An open-source Terraform platform.")
+		var buf bytes.Buffer
 
-		fmt.Fprint(&headingBuf, color.New(color.Bold).Sprint("Documentation:"))
-		fmt.Fprintln(&headingBuf, " https://tharsis.martian-cloud.io")
+		// Header.
+		fmt.Fprint(&buf, color.New(color.Bold, color.FgHiGreen).Sprint("Welcome to Tharsis"))
+		fmt.Fprintln(&buf, " - An open-source Terraform platform.")
+		fmt.Fprint(&buf, bold.Sprint("Documentation:"))
+		fmt.Fprintln(&buf, " https://tharsis.martian-cloud.io")
+		fmt.Fprint(&buf, green.Sprint("Version:"))
+		fmt.Fprintln(&buf, " "+Version)
+		fmt.Fprintln(&buf)
 
-		fmt.Fprint(&headingBuf, color.New(color.FgGreen).Sprint("Version:"))
-		fmt.Fprintln(&headingBuf, " "+Version)
-		fmt.Fprintln(&headingBuf)
+		// Usage.
+		fmt.Fprintf(&buf, "%s [global options] <command> [options] <args>\n\n", green.Sprint("tharsis"))
 
-		// Build global flag usage with syntax highlighting.
+		// Command list — top-level only.
+		keys := slices.Sorted(maps.Keys(commands))
+
+		maxLen := 0
+		for _, key := range keys {
+			if !strings.Contains(key, " ") && len(key) > maxLen {
+				maxLen = len(key)
+			}
+		}
+
+		fmt.Fprintln(&buf, bold.Sprint("Available Commands:"))
+		for _, key := range keys {
+			if strings.Contains(key, " ") {
+				continue
+			}
+
+			cmd, err := commands[key]()
+			if err != nil {
+				continue
+			}
+
+			fmt.Fprintf(&buf, "    %s    %s\n", key+strings.Repeat(" ", maxLen-len(key)), cmd.Synopsis())
+		}
+
+		// Global flags.
 		globalFlagsOutput := output.CommandHelp(output.CommandHelpInfo{
 			Flags: globalFlags,
 		})
+		fmt.Fprintf(&buf, "\n%s\n\n", globalFlagsOutput)
 
-		bold := color.New(color.Bold)
-		legend := bold.Sprint("Legend:") + "\n" +
-			"  " + color.New(color.FgRed).Sprint("*  ") + " required flag\n" +
-			"  " + color.New(color.FgYellow).Sprint("!  ") + " deprecated flag\n" +
-			"  " + color.New(color.FgGreen).Sprint("...") + " repeatable flag"
+		// Legend.
+		fmt.Fprintln(&buf, bold.Sprint("Legend:"))
+		fmt.Fprintln(&buf, "  "+color.New(color.FgRed).Sprint("*  ")+" required flag")
+		fmt.Fprintln(&buf, "  "+color.New(color.FgYellow).Sprint("!  ")+" deprecated flag")
+		fmt.Fprintln(&buf, "  "+color.New(color.FgGreen).Sprint("...")+" repeatable flag")
 
-		return strings.TrimSpace(headingBuf.String() + h(commands) + "\n" + globalFlagsOutput + "\n\n" + legend)
+		return strings.TrimSpace(buf.String())
 	}
 }
 

@@ -1,6 +1,7 @@
 package command
 
 import (
+	"github.com/fatih/color"
 	"github.com/mitchellh/cli"
 	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
@@ -48,6 +49,21 @@ func (c Wrapper) Help() string {
 	})
 }
 
+// HelpTemplate returns a custom help template if the wrapped command provides one.
+// Otherwise it returns the default template with bold subcommand headers.
+func (c Wrapper) HelpTemplate() string {
+	if t, ok := c.command.(interface{ HelpTemplate() string }); ok {
+		return t.HelpTemplate()
+	}
+
+	return `{{.Help}}{{if gt (len .Subcommands) 0}}
+` + color.New(color.Bold).Sprint("Subcommands:") + `
+{{- range $value := .Subcommands }}
+    {{ $value.NameAligned }}    {{ $value.Synopsis }}{{ end }}
+{{- end }}
+`
+}
+
 // Run executes the command.
 func (c Wrapper) Run(args []string) int {
 	return c.command.Run(args)
@@ -81,9 +97,8 @@ func (c Wrapper) AutocompleteFlags() complete.Flags {
 			predictor = complete.PredictAnything
 		}
 
-		result["-"+f.Name] = predictor
-		for _, alias := range f.Aliases() {
-			result["-"+alias] = predictor
+		for _, name := range f.Names() {
+			result["-"+name] = predictor
 		}
 	})
 
