@@ -41,7 +41,7 @@ func (c *terraformProviderMirrorDeleteVersionCommand) Run(args []string) int {
 		WithCommandName("terraform-provider-mirror delete-version"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to delete this provider version mirror?"),
+		WithWarningPrompt("This will permanently delete the provider version mirror."),
 	); code != 0 {
 		return code
 	}

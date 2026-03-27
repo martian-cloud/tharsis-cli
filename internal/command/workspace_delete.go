@@ -43,7 +43,7 @@ func (c *workspaceDeleteCommand) Run(args []string) int {
 		WithCommandName("workspace delete"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to delete this workspace?"),
+		WithWarningPrompt("This will delete the workspace even if resources are still deployed."),
 	); code != 0 {
 		return code
 	}

@@ -43,7 +43,7 @@ func (c *groupDeleteCommand) Run(args []string) int {
 		WithCommandName("group delete"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to delete this group?"),
+		WithWarningPrompt("This will permanently delete the group and all its contents."),
 	); code != 0 {
 		return code
 	}

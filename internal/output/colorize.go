@@ -132,7 +132,7 @@ func (c *colorizer) colorizeFlagMeta(line string) string {
 	label := line[6:loc[1]]
 	rest := line[loc[1]:]
 
-	return prefix + c.bold.Sprint(label) + rest
+	return prefix + c.bold.Sprint(label) + c.colorizeFlags(rest)
 }
 
 // colorizeCmdRefs highlights quoted command references like "product run".
