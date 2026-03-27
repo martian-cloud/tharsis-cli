@@ -23,6 +23,12 @@ var markdownSanitizer = strings.NewReplacer(
 	"}", "\\}",
 )
 
+var markerHTMLColors = map[flag.Marker]string{
+	flag.MarkerRequired:   "red",
+	flag.MarkerDeprecated: "orange",
+	flag.MarkerRepeatable: "green",
+}
+
 // documentationGenerateCommand is the structure for documentation generate command.
 type documentationGenerateCommand struct {
 	*BaseCommand
@@ -166,7 +172,7 @@ func generateDocumentation(writer io.Writer, allCommands map[string]Factory, glo
 		}
 
 		if example := strings.TrimSpace(cmd.Example()); example != "" {
-			m.CodeBlocks(md.SyntaxHighlightShell, example).LF()
+			writeExample(m, example)
 		}
 
 		if cmd.Flags() != nil {
@@ -256,6 +262,16 @@ func writeFlags(m *md.Markdown, flagSet *flag.Set) {
 	}
 }
 
+// writeExample writes an example to the markdown output. Examples containing
+// code block markers are written as-is; others are wrapped in a shell block.
+func writeExample(m *md.Markdown, example string) {
+	if strings.Contains(example, "```") {
+		m.PlainText(example).LF()
+	} else {
+		m.CodeBlocks(md.SyntaxHighlightShell, example).LF()
+	}
+}
+
 func writeFAQ(m *md.Markdown) {
 	m.H2("Frequently asked questions (FAQ)")
 
@@ -339,7 +355,7 @@ func sanitizeForMarkdown(s string) string {
 }
 
 func coloredMarker(m flag.Marker) string {
-	if c := m.Color(); c != "" {
+	if c, ok := markerHTMLColors[m]; ok {
 		return fmt.Sprintf("<span style={{color:'%s'}}>%s</span>", c, m)
 	}
 

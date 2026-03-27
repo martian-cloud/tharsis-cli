@@ -11,6 +11,10 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
+// maxHelpTextWidth is the max line width for help text such as
+// descriptions and flag usage, accounting for indentation.
+const maxHelpTextWidth = 70
+
 // CommandHelpInfo contains the components of command help text.
 type CommandHelpInfo struct {
 	ProductName string
@@ -52,6 +56,11 @@ func CommandHelp(info CommandHelpInfo) string {
 	return Colorize(strings.TrimRight(buf.String(), " \n"), info.ProductName)
 }
 
+// Wrap wraps text to fit the terminal width.
+func Wrap(s string) string {
+	return text.Wrap(s, maxHelpTextWidth)
+}
+
 // normalizeDescription trims and indents description text with 2-space indent.
 func normalizeDescription(desc string) string {
 	desc = strings.TrimSpace(desc)
@@ -77,7 +86,12 @@ func writeFlags(buf *bytes.Buffer, flagSet *flag.Set) {
 
 	flagSet.VisitAll(func(f *flag.Flag) {
 		// Flag names.
-		parts := []string{strings.Join(f.Names(), ", ")}
+		names := f.Names()
+		for i, name := range names {
+			names[i] = "-" + name
+		}
+
+		parts := []string{strings.Join(names, ", ")}
 		for _, m := range f.Markers() {
 			parts = append(parts, m.String())
 		}
@@ -85,7 +99,7 @@ func writeFlags(buf *bytes.Buffer, flagSet *flag.Set) {
 		// Usage text.
 		var usage strings.Builder
 		first := true
-		for line := range strings.SplitSeq(text.Wrap(f.Usage, 70), "\n") {
+		for line := range strings.SplitSeq(text.Wrap(f.Usage, maxHelpTextWidth), "\n") {
 			if !first {
 				usage.WriteByte('\n')
 			}
@@ -94,7 +108,7 @@ func writeFlags(buf *bytes.Buffer, flagSet *flag.Set) {
 			first = false
 		}
 
-		fmt.Fprintf(w, "  -%s\n%s\n", strings.Join(parts, " "), usage.String())
+		fmt.Fprintf(w, "  %s\n%s\n", strings.Join(parts, " "), usage.String())
 
 		// Metadata lines.
 		if vals := f.ValidValues(); len(vals) > 0 {

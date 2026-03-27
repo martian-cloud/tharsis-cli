@@ -1297,7 +1297,11 @@ The mcp command starts the Tharsis MCP server, enabling AI assistants
 to interact with Tharsis resources through the Model Context Protocol.
 By default, all toolsets are enabled in read-only mode for safety.
 
-Available toolsets: auth, run, job, configuration_version, workspace, group, variable, managed_identity, documentation, terraform_module, terraform_module_version, terraform_provider, terraform_provider_platform
+Available toolsets:
+auth, run, job, configuration_version, workspace, group,
+variable, managed_identity, documentation, terraform_module,
+terraform_module_version, terraform_provider,
+terraform_provider_platform
 
 Environment variables (command-line options take precedence):
 THARSIS_MCP_TOOLSETS               Comma-separated list of toolsets to enable
@@ -1331,7 +1335,7 @@ Restrictions:
 - Wildcard-only patterns ("*") are not allowed
 - Patterns cannot start with a wildcard ("*/workspace")
   
-```shell
+```bash
 # Start MCP server with production profile in read-only mode
 tharsis -p production mcp
 
@@ -1340,8 +1344,10 @@ tharsis mcp -toolsets auth,run
 
 # Start with namespace ACL restrictions
 tharsis mcp -namespace-mutation-acl "dev/*,staging/*"
+```
 
-# MCP Client Configuration (mcp.json):
+MCP Client Configuration (mcp.json):
+```json
 {
   "mcpServers": {
     "tharsis-prod": {

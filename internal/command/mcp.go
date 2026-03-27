@@ -12,6 +12,7 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/mcp"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 )
 
@@ -153,7 +154,8 @@ func (*mcpCommand) Description() string {
    to interact with Tharsis resources through the Model Context Protocol.
    By default, all toolsets are enabled in read-only mode for safety.
 
-   Available toolsets: ` + strings.Join(tools.AvailableToolsets(), ", ") + `
+   Available toolsets:
+    ` + output.Wrap(strings.Join(tools.AvailableToolsets(), ", ")) + `
 
    Environment variables (command-line options take precedence):
      THARSIS_MCP_TOOLSETS               Comma-separated list of toolsets to enable
@@ -190,7 +192,7 @@ func (*mcpCommand) Description() string {
 }
 
 func (*mcpCommand) Example() string {
-	return `
+	return "```bash" + `
 # Start MCP server with production profile in read-only mode
 tharsis -p production mcp
 
@@ -199,8 +201,10 @@ tharsis mcp -toolsets auth,run
 
 # Start with namespace ACL restrictions
 tharsis mcp -namespace-mutation-acl "dev/*,staging/*"
+` + "```" + `
 
-# MCP Client Configuration (mcp.json):
+MCP Client Configuration (mcp.json):
+` + "```json" + `
 {
   "mcpServers": {
     "tharsis-prod": {
@@ -219,6 +223,7 @@ tharsis mcp -namespace-mutation-acl "dev/*,staging/*"
     }
   }
 }
+` + "```" + `
 `
 }
 

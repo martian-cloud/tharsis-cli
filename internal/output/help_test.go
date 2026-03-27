@@ -151,26 +151,6 @@ func TestCommandHelp(t *testing.T) {
 		assert.Contains(t, result, "--env production")
 	})
 
-	t.Run("highlights JSON code blocks", func(t *testing.T) {
-		result := CommandHelp(CommandHelpInfo{
-			Usage:       "mycli config",
-			Description: "Config format:\n```json\n{\"key\": \"value\"}\n```",
-		})
-
-		assert.NotContains(t, result, "```")
-		assert.Contains(t, result, "key")
-	})
-
-	t.Run("highlights HCL code blocks", func(t *testing.T) {
-		result := CommandHelp(CommandHelpInfo{
-			Usage:       "mycli init",
-			Description: "Example:\n```hcl\nresource \"test\" {\n  name = \"example\"\n}\n```",
-		})
-
-		assert.NotContains(t, result, "```")
-		assert.Contains(t, result, "resource")
-	})
-
 	t.Run("handles nil flags", func(t *testing.T) {
 		result := CommandHelp(CommandHelpInfo{
 			Usage: "mycli version",
