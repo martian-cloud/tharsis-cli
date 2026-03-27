@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFlagIsDeprecated(t *testing.T) {
+func TestIsDeprecated(t *testing.T) {
 	tests := []struct {
 		name       string
 		message    string
@@ -19,14 +19,13 @@ func TestFlagIsDeprecated(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			f := &Flag{deprecated: tc.message}
-			assert.Equal(t, tc.expectBool, f.IsDeprecated())
+			f := &Flag{deprecationMessage: tc.message}
 			assert.Equal(t, tc.message, f.DeprecationMessage())
 		})
 	}
 }
 
-func TestFlagAliases(t *testing.T) {
+func TestNames(t *testing.T) {
 	tests := []struct {
 		name    string
 		aliases []string
@@ -38,13 +37,13 @@ func TestFlagAliases(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			f := &Flag{aliases: tc.aliases}
-			assert.Equal(t, tc.aliases, f.Aliases())
+			f := &Flag{Name: "test", aliases: tc.aliases}
+			assert.Equal(t, append([]string{"test"}, tc.aliases...), f.Names())
 		})
 	}
 }
 
-func TestFlagEnvVar(t *testing.T) {
+func TestEnvVar(t *testing.T) {
 	tests := []struct {
 		name   string
 		envVar string
@@ -61,7 +60,7 @@ func TestFlagEnvVar(t *testing.T) {
 	}
 }
 
-func TestFlagValidate(t *testing.T) {
+func TestValidate(t *testing.T) {
 	tests := []struct {
 		name      string
 		opts      []any
@@ -88,7 +87,7 @@ func TestFlagValidate(t *testing.T) {
 	}
 }
 
-func TestFlagWasSet(t *testing.T) {
+func TestWasSet(t *testing.T) {
 	tests := []struct {
 		name   string
 		flag   *Flag
@@ -142,8 +141,7 @@ func TestLookup(t *testing.T) {
 		require.NotNil(t, f)
 		assert.Equal(t, "format", f.Name)
 		assert.Equal(t, "output format", f.Usage)
-		assert.Equal(t, "json", f.DefValue())
-		assert.True(t, f.IsDeprecated())
+		assert.Equal(t, "json", f.DefaultValue())
 		assert.Equal(t, "use --output instead", f.DeprecationMessage())
 	})
 
@@ -162,7 +160,7 @@ func TestLookup(t *testing.T) {
 
 		f := fs.Lookup("verbose")
 		require.NotNil(t, f)
-		assert.Equal(t, []string{"v"}, f.Aliases())
+		assert.Equal(t, []string{"verbose", "v"}, f.Names())
 	})
 
 	t.Run("flag with env var", func(t *testing.T) {
@@ -282,4 +280,70 @@ func TestPredictors(t *testing.T) {
 func TestName(t *testing.T) {
 	fs := NewSet("Global options")
 	assert.Equal(t, "Global options", fs.Name())
+}
+
+func TestValue(t *testing.T) {
+	tests := []struct {
+		name   string
+		args   []string
+		expect string
+	}{
+		{
+			name:   "set value",
+			args:   []string{"-name", "hello"},
+			expect: "hello",
+		},
+		{
+			name:   "unset value",
+			args:   nil,
+			expect: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := NewSet("test")
+			var s *string
+			fs.StringVar(&s, "name", "a name")
+
+			if tc.args != nil {
+				require.NoError(t, fs.Parse(tc.args))
+			}
+
+			f := fs.Lookup("name")
+			require.NotNil(t, f)
+			assert.Equal(t, tc.expect, f.Value())
+		})
+	}
+}
+
+func TestIsBool(t *testing.T) {
+	fs := NewSet("test")
+	var b *bool
+	var s *string
+	fs.BoolVar(&b, "verbose", "verbose output")
+	fs.StringVar(&s, "name", "a name")
+
+	tests := []struct {
+		name   string
+		flag   string
+		expect bool
+	}{
+		{
+			name:   "bool flag",
+			flag:   "verbose",
+			expect: true,
+		},
+		{
+			name:   "string flag",
+			flag:   "name",
+			expect: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expect, fs.Lookup(tc.flag).IsBool())
+		})
+	}
 }

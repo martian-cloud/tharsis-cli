@@ -10,23 +10,12 @@ package command
 import (
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/mitchellh/cli"
 	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 )
-
-const helpTemplate = `
-Usage: {{.Name}} {{.SubcommandName}} SUBCOMMAND
-
-{{indent 2 (trim .Help)}}{{if gt (len .Subcommands) 0}}
-
-Subcommands:
-{{- range $value := .Subcommands }}
-    {{ $value.NameAligned }}    {{ $value.Synopsis }}{{ end }}
-
-{{- end }}
-`
 
 // helpCommand is the structure for the help command.
 type helpCommand struct {
@@ -77,5 +66,13 @@ func (c *helpCommand) PredictArgs() complete.Predictor {
 }
 
 func (c *helpCommand) HelpTemplate() string {
-	return output.CommandHelp(output.CommandHelpInfo{Usage: helpTemplate})
+	return output.PrimaryColor().Sprint("{{.Name}}") + ` [global options] {{.SubcommandName}} <subcommand> [options] <args>
+
+{{indent 2 (trim .Help)}}
+{{if gt (len .Subcommands) 0}}
+` + color.New(color.Bold).Sprint("Subcommands:") + `
+{{- range $value := .Subcommands }}
+    {{ $value.NameAligned }}    {{ $value.Synopsis }}{{ end }}
+{{- end }}
+`
 }

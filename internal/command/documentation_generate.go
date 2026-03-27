@@ -14,6 +14,15 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
+var markdownSanitizer = strings.NewReplacer(
+	"[", "\\[",
+	"]", "\\]",
+	"<", "\\<",
+	">", "\\>",
+	"{", "\\{",
+	"}", "\\}",
+)
+
 // documentationGenerateCommand is the structure for documentation generate command.
 type documentationGenerateCommand struct {
 	*BaseCommand
@@ -208,34 +217,28 @@ func writeCommandList(m *md.Markdown, commands map[string]Command, names []strin
 func writeFlags(m *md.Markdown, flagSet *flag.Set) {
 	var buf strings.Builder
 	flagSet.VisitAll(func(f *flag.Flag) {
-		var name strings.Builder
-		name.WriteString(f.FormattedName())
+		parts := []string{strings.Join(f.Names(), ", ")}
 		for _, mk := range f.Markers() {
-			name.WriteString(" ")
-			name.WriteString(coloredMarker(mk))
+			parts = append(parts, coloredMarker(mk))
 		}
 
-		buf.WriteString("#### " + name.String() + "\n\n")
+		buf.WriteString("#### " + strings.Join(parts, " ") + "\n\n")
 
 		var meta []string
 		if vals := f.ValidValues(); len(vals) > 0 {
 			meta = append(meta, "**Values:** `"+strings.Join(vals, "`, `")+"`")
 		}
 
-		if f.DefValue() != "" {
-			meta = append(meta, "**Default:** `"+f.DefValue()+"`")
+		if dv := f.DefaultValue(); dv != "" {
+			meta = append(meta, "**Default:** `"+dv+"`")
 		}
 
-		if f.IsDeprecated() {
-			msg := "**Deprecated**"
-			if f.DeprecationMessage() != "" {
-				msg += ": " + f.DeprecationMessage()
-			}
-			meta = append(meta, msg)
+		if dm := f.DeprecationMessage(); dm != "" {
+			meta = append(meta, "**Deprecated**: "+dm)
 		}
 
-		if f.EnvVar() != "" {
-			meta = append(meta, "**Env:** `"+f.EnvVar()+"`")
+		if ev := f.EnvVar(); ev != "" {
+			meta = append(meta, "**Env:** `"+ev+"`")
 		}
 
 		if len(meta) > 0 {
@@ -332,14 +335,7 @@ func sanitizeForMarkdown(s string) string {
 		lines[i] = strings.TrimSpace(line)
 	}
 
-	s = strings.Join(lines, "\n")
-	s = strings.ReplaceAll(s, "[", "\\[")
-	s = strings.ReplaceAll(s, "]", "\\]")
-	s = strings.ReplaceAll(s, "<", "\\<")
-	s = strings.ReplaceAll(s, ">", "\\>")
-	s = strings.ReplaceAll(s, "{", "\\{")
-	s = strings.ReplaceAll(s, "}", "\\}")
-	return s
+	return markdownSanitizer.Replace(strings.Join(lines, "\n"))
 }
 
 func coloredMarker(m flag.Marker) string {

@@ -20,6 +20,11 @@ var (
 	reCodeBlock  = regexp.MustCompile("(?s)([ ]*)```(\\w*)\\n(.*?)```") // matches ```lang\ncode``` with optional indent
 )
 
+// PrimaryColor returns a new Color instance with the primary brand color.
+func PrimaryColor() *color.Color {
+	return color.New(color.FgHiGreen)
+}
+
 // CommandHelpInfo contains the components of command help text.
 type CommandHelpInfo struct {
 	ProductName string
@@ -36,6 +41,7 @@ type helpBuilder struct {
 	highlight *color.Color
 	warn      *color.Color
 	danger    *color.Color
+	reCmdRef  *regexp.Regexp
 }
 
 // CommandHelp builds and formats help text for a command with syntax highlighting.
@@ -43,9 +49,13 @@ func CommandHelp(info CommandHelpInfo) string {
 	h := &helpBuilder{
 		info:      info,
 		bold:      color.New(color.Bold),
-		highlight: color.New(color.FgHiGreen),
+		highlight: PrimaryColor(),
 		warn:      color.New(color.FgYellow),
 		danger:    color.New(color.FgRed),
+	}
+
+	if info.ProductName != "" {
+		h.reCmdRef = regexp.MustCompile(`"` + regexp.QuoteMeta(info.ProductName) + ` (\w\s?)+"`)
 	}
 
 	var buf bytes.Buffer
@@ -58,7 +68,7 @@ func CommandHelp(info CommandHelpInfo) string {
 }
 
 func (h *helpBuilder) writeUsage(buf *bytes.Buffer) {
-	buf.WriteString("\n" + strings.TrimSpace(h.info.Usage) + "\n")
+	buf.WriteString(strings.TrimSpace(h.info.Usage) + "\n")
 }
 
 func (h *helpBuilder) writeDescription(buf *bytes.Buffer) {
@@ -99,11 +109,13 @@ func (h *helpBuilder) writeFlags(buf *bytes.Buffer) {
 // Required flags get a red * suffix via Flag.Marker().
 func (h *helpBuilder) flagNames(f *flag.Flag) string {
 	var b strings.Builder
-	b.WriteString(h.highlight.Sprintf("-%s", f.Name))
 
-	for _, a := range f.Aliases() {
-		b.WriteString(", ")
-		b.WriteString(h.highlight.Sprintf("-%s", a))
+	for i, name := range f.Names() {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+
+		b.WriteString(h.highlight.Sprintf("-%s", name))
 	}
 
 	termColors := map[string]*color.Color{
@@ -132,16 +144,12 @@ func (h *helpBuilder) flagMeta(f *flag.Flag) []string {
 		lines = append(lines, fmt.Sprintf("%s %s", h.bold.Sprint("Values:"), strings.Join(vals, ", ")))
 	}
 
-	if f.DefValue() != "" {
-		lines = append(lines, fmt.Sprintf("%s %s", h.bold.Sprint("Default:"), f.DefValue()))
+	if dv := f.DefaultValue(); dv != "" {
+		lines = append(lines, fmt.Sprintf("%s %s", h.bold.Sprint("Default:"), dv))
 	}
 
-	if f.IsDeprecated() {
-		msg := h.bold.Sprint("Deprecated")
-		if f.DeprecationMessage() != "" {
-			msg += ": " + f.DeprecationMessage()
-		}
-		lines = append(lines, msg)
+	if dm := f.DeprecationMessage(); dm != "" {
+		lines = append(lines, h.bold.Sprint("Deprecated")+": "+dm)
 	}
 
 	if env := f.EnvVar(); env != "" {
@@ -223,8 +231,7 @@ func (h *helpBuilder) colorize(raw string) string {
 
 // colorizeCmdRefs highlights quoted command references like "product run".
 func (h *helpBuilder) colorizeCmdRefs(line string) (string, bool) {
-	re := regexp.MustCompile(`"` + regexp.QuoteMeta(h.info.ProductName) + ` (\w\s?)+"`)
-	matches := re.FindAllStringIndex(line, -1)
+	matches := h.reCmdRef.FindAllStringIndex(line, -1)
 	if len(matches) == 0 {
 		return "", false
 	}

@@ -669,3 +669,50 @@ func TestPanics(t *testing.T) {
 		})
 	}
 }
+
+func TestParse(t *testing.T) {
+	tests := []struct {
+		name            string
+		args            []string
+		expectErrorCode string
+		expectArgs      []string
+	}{
+		{
+			name:       "valid flags",
+			args:       []string{"-json", "-name", "test"},
+			expectArgs: []string{},
+		},
+		{
+			name:       "flags with positional args",
+			args:       []string{"-name", "test", "extra"},
+			expectArgs: []string{"extra"},
+		},
+		{
+			name:            "missing required flag",
+			args:            []string{"-json"},
+			expectErrorCode: "flag name is required",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := NewSet("test")
+			var name *string
+			var json *bool
+			fs.StringVar(&name, "name", "a name", Required())
+			fs.BoolVar(&json, "json", "json output")
+			fs.SetOutput(io.Discard)
+
+			err := fs.Parse(tc.args)
+
+			if tc.expectErrorCode != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectErrorCode)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectArgs, fs.Args())
+		})
+	}
+}

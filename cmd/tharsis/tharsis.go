@@ -185,7 +185,7 @@ func realMain() int {
 		Version:     Version,
 		Args:        commandArgs,
 		Commands:    availableCommands,
-		HelpFunc:    helpFunc(cli.BasicHelpFunc(binaryName), globalFlags),
+		HelpFunc:    helpFunc(globalFlags),
 		HelpWriter:  os.Stdout,
 		ErrorWriter: os.Stderr,
 
