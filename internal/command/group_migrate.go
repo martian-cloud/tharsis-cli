@@ -85,7 +85,7 @@ func (*groupMigrateCommand) Usage() string {
 func (*groupMigrateCommand) Example() string {
 	return `
 tharsis group migrate \
-  -new-parent-id trn:group:<parent_group_path> \
+  -new-parent-id "trn:group:<parent_group_path>" \
   trn:group:<group_path>
 `
 }

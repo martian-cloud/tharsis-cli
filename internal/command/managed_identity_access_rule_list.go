@@ -74,7 +74,7 @@ func (*managedIdentityAccessRuleListCommand) Usage() string {
 func (*managedIdentityAccessRuleListCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule list \
-  -managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name>
+  -managed-identity-id "trn:managed_identity:<group_path>/<managed_identity_name>"
 `
 }
 

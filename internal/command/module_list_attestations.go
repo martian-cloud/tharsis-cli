@@ -105,7 +105,7 @@ func (*moduleListAttestationsCommand) Usage() string {
 func (*moduleListAttestationsCommand) Example() string {
 	return `
 tharsis module list-attestations \
-  -sort-by CREATED_AT_DESC \
+  -sort-by "CREATED_AT_DESC" \
   -limit 10 \
   trn:terraform_module:<group_path>/<module_name>/<system>
 `

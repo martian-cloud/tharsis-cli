@@ -79,7 +79,7 @@ func (*groupUpdateMembershipCommand) Usage() string {
 func (*groupUpdateMembershipCommand) Example() string {
 	return `
 tharsis group update-membership \
-  -role-id trn:role:<role_name> \
+  -role-id "trn:role:<role_name>" \
   <id>
 `
 }

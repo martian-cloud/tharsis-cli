@@ -134,7 +134,7 @@ func (*planCommand) Usage() string {
 
 func (*planCommand) Example() string {
 	return `
-tharsis plan -directory-path ./terraform trn:workspace:<workspace_path>
+tharsis plan -directory-path "./terraform" trn:workspace:<workspace_path>
 `
 }
 

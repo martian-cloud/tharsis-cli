@@ -104,9 +104,9 @@ func (*moduleListCommand) Usage() string {
 func (*moduleListCommand) Example() string {
 	return `
 tharsis module list \
-  -group-id trn:group:<group_path> \
+  -group-id "trn:group:<group_path>" \
   -include-inherited \
-  -sort-by UPDATED_AT_DESC \
+  -sort-by "UPDATED_AT_DESC" \
   -limit 5 \
   -json
 `

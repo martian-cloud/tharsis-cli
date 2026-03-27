@@ -80,7 +80,7 @@ func (*workspaceUpdateMembershipCommand) Usage() string {
 func (*workspaceUpdateMembershipCommand) Example() string {
 	return `
 tharsis workspace update-membership \
-  -role-id trn:role:<role_name> \
+  -role-id "trn:role:<role_name>" \
   <id>
 `
 }

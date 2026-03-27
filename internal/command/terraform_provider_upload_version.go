@@ -358,7 +358,7 @@ func (*terraformProviderUploadVersionCommand) Usage() string {
 func (*terraformProviderUploadVersionCommand) Example() string {
 	return `
 tharsis terraform-provider upload-version \
-  -directory ./my-provider \
+  -directory "./my-provider" \
   trn:terraform_provider:<group_path>/<name>
 `
 }

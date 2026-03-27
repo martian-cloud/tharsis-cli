@@ -104,7 +104,7 @@ func (*workspaceSetEnvironmentVarsCommand) Usage() string {
 func (*workspaceSetEnvironmentVarsCommand) Example() string {
 	return `
 tharsis workspace set-environment-vars \
-  -env-var-file vars.env \
+  -env-var-file "vars.env" \
   trn:workspace:<workspace_path>
 `
 }

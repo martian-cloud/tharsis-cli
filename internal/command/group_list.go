@@ -107,8 +107,8 @@ func (*groupListCommand) Usage() string {
 func (*groupListCommand) Example() string {
 	return `
 tharsis group list \
-  -parent-id trn:group:<parent_group_path> \
-  -sort-by FULL_PATH_ASC \
+  -parent-id "trn:group:<parent_group_path>" \
+  -sort-by "FULL_PATH_ASC" \
   -limit 5 \
   -json
 `

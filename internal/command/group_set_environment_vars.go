@@ -102,7 +102,7 @@ func (*groupSetEnvironmentVarsCommand) Usage() string {
 func (*groupSetEnvironmentVarsCommand) Example() string {
 	return `
 tharsis group set-environment-vars \
-  -env-var-file vars.env \
+  -env-var-file "vars.env" \
   trn:group:<group_path>
 `
 }

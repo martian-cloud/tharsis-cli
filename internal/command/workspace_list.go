@@ -106,10 +106,10 @@ func (*workspaceListCommand) Usage() string {
 func (*workspaceListCommand) Example() string {
 	return `
 tharsis workspace list \
-  -group-id trn:group:<group_path> \
-  -label env=prod \
-  -label team=platform \
-  -sort-by FULL_PATH_ASC \
+  -group-id "trn:group:<group_path>" \
+  -label "env=prod" \
+  -label "team=platform" \
+  -sort-by "FULL_PATH_ASC" \
   -limit 5 \
   -json
 `

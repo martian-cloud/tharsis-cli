@@ -142,9 +142,9 @@ func (*managedIdentityCreateCommand) Description() string {
 func (*managedIdentityCreateCommand) Example() string {
 	return `
 tharsis managed-identity create \
-  -group-id trn:group:<group_path> \
-  -type aws_federated \
-  -aws-federated-role arn:aws:iam::123456789012:role/MyRole \
+  -group-id "trn:group:<group_path>" \
+  -type "aws_federated" \
+  -aws-federated-role "arn:aws:iam::123456789012:role/MyRole" \
   -description "AWS production role" \
   aws-prod
 `

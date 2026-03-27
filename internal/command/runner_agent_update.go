@@ -87,8 +87,8 @@ func (*runnerAgentUpdateCommand) Example() string {
 tharsis runner-agent update \
   -description "Updated description" \
   -disabled true \
-  -tag prod \
-  -tag us-west-2 \
+  -tag "prod" \
+  -tag "us-west-2" \
   trn:runner:<group_path>/<runner_name>
 `
 }

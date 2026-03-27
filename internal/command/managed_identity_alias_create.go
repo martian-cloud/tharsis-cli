@@ -88,8 +88,8 @@ func (*managedIdentityAliasCreateCommand) Description() string {
 func (*managedIdentityAliasCreateCommand) Example() string {
 	return `
 tharsis managed-identity-alias create \
-  -group-id trn:group:<group_path> \
-  -alias-source-id trn:managed_identity:<group_path>/<source_identity_name> \
+  -group-id "trn:group:<group_path>" \
+  -alias-source-id "trn:managed_identity:<group_path>/<source_identity_name>" \
   prod-identity-alias
 `
 }

@@ -118,8 +118,8 @@ func (*workspaceSetTerraformVarCommand) Usage() string {
 func (*workspaceSetTerraformVarCommand) Example() string {
 	return `
 tharsis workspace set-terraform-var \
-  -key region \
-  -value us-east-1 \
+  -key "region" \
+  -value "us-east-1" \
   trn:workspace:<workspace_path>
 `
 }

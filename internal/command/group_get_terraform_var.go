@@ -106,7 +106,7 @@ func (*groupGetTerraformVarCommand) Usage() string {
 func (*groupGetTerraformVarCommand) Example() string {
 	return `
 tharsis group get-terraform-var \
-  -key region \
+  -key "region" \
   trn:group:<group_path>
 `
 }

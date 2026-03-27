@@ -160,7 +160,7 @@ func (*destroyCommand) Usage() string {
 
 func (*destroyCommand) Example() string {
 	return `
-tharsis destroy -directory-path ./terraform trn:workspace:<workspace_path>
+tharsis destroy -directory-path "./terraform" trn:workspace:<workspace_path>
 `
 }
 

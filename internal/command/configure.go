@@ -200,8 +200,8 @@ func (c *configureCommand) Description() string {
 func (c *configureCommand) Example() string {
 	return `
 tharsis configure \
-  -http-endpoint https://api.tharsis.example.com \
-  -profile prod-example
+  -http-endpoint "https://api.tharsis.example.com" \
+  -profile "prod-example"
 `
 }
 

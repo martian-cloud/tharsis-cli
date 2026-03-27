@@ -92,7 +92,7 @@ Terraform variables may be passed in via supported
 options or from the environment with a 'TF_VAR_' prefix.
   
 ```bash
-tharsis apply -directory-path ./terraform trn:workspace:<workspace_path>
+tharsis apply -directory-path "./terraform" trn:workspace:<workspace_path>
 ```
   
 #### Options
@@ -187,8 +187,8 @@ options are specified, the command prompts for values.
   
 ```bash
 tharsis configure \
-  -http-endpoint https://api.tharsis.example.com \
-  -profile prod-example
+  -http-endpoint "https://api.tharsis.example.com" \
+  -profile "prod-example"
 ```
   
 #### Options
@@ -245,7 +245,7 @@ Terraform variables may be passed in via supported
 options or from the environment with a 'TF_VAR_' prefix.
   
 ```bash
-tharsis destroy -directory-path ./terraform trn:workspace:<workspace_path>
+tharsis destroy -directory-path "./terraform" trn:workspace:<workspace_path>
 ```
   
 #### Options
@@ -342,8 +342,8 @@ Exactly one of -user-id, -service-account-id, or -team-id must be specified.
   
 ```bash
 tharsis group add-membership \
-  -role-id trn:role:<role_name> \
-  -user-id trn:user:<username> \
+  -role-id "trn:role:<role_name>" \
+  -user-id "trn:user:<username>" \
   trn:group:<group_path>
 ```
   
@@ -397,7 +397,7 @@ output as JSON, if specified. Idempotent when used with
   
 ```bash
 tharsis group create \
-  -parent-group-id trn:group:<group_path> \
+  -parent-group-id "trn:group:<group_path>" \
   -description "Operations group" \
   <name>
 ```
@@ -456,7 +456,7 @@ The group delete-terraform-var command deletes a terraform variable from a group
   
 ```bash
 tharsis group delete-terraform-var \
-  -key region \
+  -key "region" \
   trn:group:<group_path>
 ```
   
@@ -500,7 +500,7 @@ The group get-membership command retrieves details about a specific group member
   
 ```bash
 tharsis group get-membership \
-  -user-id trn:user:<username> \
+  -user-id "trn:user:<username>" \
   trn:group:<group_path>
 ```
   
@@ -542,7 +542,7 @@ The group get-terraform-var command retrieves a terraform variable for a group.
   
 ```bash
 tharsis group get-terraform-var \
-  -key region \
+  -key "region" \
   trn:group:<group_path>
 ```
   
@@ -573,8 +573,8 @@ sorting the output.
   
 ```bash
 tharsis group list \
-  -parent-id trn:group:<parent_group_path> \
-  -sort-by FULL_PATH_ASC \
+  -parent-id "trn:group:<parent_group_path>" \
+  -sort-by "FULL_PATH_ASC" \
   -limit 5 \
   -json
 ```
@@ -696,7 +696,7 @@ Omit -new-parent-id to migrate to top-level.
   
 ```bash
 tharsis group migrate \
-  -new-parent-id trn:group:<parent_group_path> \
+  -new-parent-id "trn:group:<parent_group_path>" \
   trn:group:<group_path>
 ```
   
@@ -749,7 +749,7 @@ Note: This command does not support sensitive variables.
   
 ```bash
 tharsis group set-environment-vars \
-  -env-var-file vars.env \
+  -env-var-file "vars.env" \
   trn:group:<group_path>
 ```
   
@@ -768,8 +768,8 @@ The group set-terraform-var command creates or updates a terraform variable for 
   
 ```bash
 tharsis group set-terraform-var \
-  -key region \
-  -value us-east-1 \
+  -key "region" \
+  -value "us-east-1" \
   trn:group:<group_path>
 ```
   
@@ -799,7 +799,7 @@ Note: This command does not support sensitive variables.
   
 ```bash
 tharsis group set-terraform-vars \
-  -tf-var-file terraform.tfvars \
+  -tf-var-file "terraform.tfvars" \
   trn:group:<group_path>
 ```
   
@@ -848,7 +848,7 @@ The group update-membership command updates a group membership's role.
   
 ```bash
 tharsis group update-membership \
-  -role-id trn:role:<role_name> \
+  -role-id "trn:role:<role_name>" \
   <id>
 ```
   
@@ -897,9 +897,9 @@ The managed-identity create command creates a new managed identity.
   
 ```bash
 tharsis managed-identity create \
-  -group-id trn:group:<group_path> \
-  -type aws_federated \
-  -aws-federated-role arn:aws:iam::123456789012:role/MyRole \
+  -group-id "trn:group:<group_path>" \
+  -type "aws_federated" \
+  -aws-federated-role "arn:aws:iam::123456789012:role/MyRole" \
   -description "AWS production role" \
   aws-prod
 ```
@@ -1004,7 +1004,7 @@ Shows final output as JSON, if specified.
 ```bash
 tharsis managed-identity update \
   -description "Updated AWS production role" \
-  -aws-federated-role arn:aws:iam::123456789012:role/UpdatedRole \
+  -aws-federated-role "arn:aws:iam::123456789012:role/UpdatedRole" \
   trn:managed_identity:<group_path>/<managed_identity_name>
 ```
   
@@ -1064,11 +1064,11 @@ The managed-identity-access-rule create command creates a new managed identity a
   
 ```bash
 tharsis managed-identity-access-rule create \
-  -managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name> \
-  -rule-type eligible_principals \
-  -run-stage plan \
-  -allowed-user trn:user:<username> \
-  -allowed-team trn:team:<team_name>
+  -managed-identity-id "trn:managed_identity:<group_path>/<managed_identity_name>" \
+  -rule-type "eligible_principals" \
+  -run-stage "plan" \
+  -allowed-user "trn:user:<username>" \
+  -allowed-team "trn:team:<team_name>"
 ```
   
 #### Options
@@ -1156,7 +1156,7 @@ access rules for a specific managed identity.
   
 ```bash
 tharsis managed-identity-access-rule list \
-  -managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name>
+  -managed-identity-id "trn:managed_identity:<group_path>/<managed_identity_name>"
 ```
   
 #### Options
@@ -1184,7 +1184,7 @@ The managed-identity-access-rule update command updates an existing managed iden
   
 ```bash
 tharsis managed-identity-access-rule update \
-  -allowed-user trn:user:<username> \
+  -allowed-user "trn:user:<username>" \
   <id>
 ```
   
@@ -1236,8 +1236,8 @@ The managed-identity-alias create command creates a new managed identity alias.
   
 ```bash
 tharsis managed-identity-alias create \
-  -group-id trn:group:<group_path> \
-  -alias-source-id trn:managed_identity:<group_path>/<source_identity_name> \
+  -group-id "trn:group:<group_path>" \
+  -alias-source-id "trn:managed_identity:<group_path>/<source_identity_name>" \
   prod-identity-alias
 ```
   
@@ -1428,8 +1428,8 @@ output as JSON, if specified. Idempotent when used with
   
 ```bash
 tharsis module create \
-  -group-id trn:group:<group_path> \
-  -repository-url https://github.com/example/terraform-aws-vpc \
+  -group-id "trn:group:<group_path>" \
+  -repository-url "https://github.com/example/terraform-aws-vpc" \
   -private \
   vpc/aws
 ```
@@ -1469,7 +1469,7 @@ The module create-attestation command creates a new module attestation.
 ```bash
 tharsis module create-attestation \
   -description "Attestation for v1.0.0" \
-  -data aGVsbG8sIHdvcmxk \
+  -data "aGVsbG8sIHdvcmxk" \
   trn:terraform_module:<module_path>
 ```
   
@@ -1577,9 +1577,9 @@ sorting the output.
   
 ```bash
 tharsis module list \
-  -group-id trn:group:<group_path> \
+  -group-id "trn:group:<group_path>" \
   -include-inherited \
-  -sort-by UPDATED_AT_DESC \
+  -sort-by "UPDATED_AT_DESC" \
   -limit 5 \
   -json
 ```
@@ -1633,7 +1633,7 @@ for a specific module. Supports pagination, filtering and sorting.
   
 ```bash
 tharsis module list-attestations \
-  -sort-by CREATED_AT_DESC \
+  -sort-by "CREATED_AT_DESC" \
   -limit 10 \
   trn:terraform_module:<group_path>/<module_name>/<system>
 ```
@@ -1678,8 +1678,8 @@ of a specific module. Supports pagination, filtering and sorting.
   
 ```bash
 tharsis module list-versions \
-  -search 1.0 \
-  -sort-by CREATED_AT_DESC \
+  -search "1.0" \
+  -sort-by "CREATED_AT_DESC" \
   -limit 10 \
   trn:terraform_module:<group_path>/<module_name>/<system>
 ```
@@ -1733,7 +1733,7 @@ private flag. Shows final output as JSON, if specified.
   
 ```bash
 tharsis module update \
-  -repository-url https://github.com/example/terraform-aws-vpc-v2 \
+  -repository-url "https://github.com/example/terraform-aws-vpc-v2" \
   -private true \
   trn:terraform_module:<group_path>/<module_name>/<system>
 ```
@@ -1791,8 +1791,8 @@ module version to the module registry.
   
 ```bash
 tharsis module upload-version \
-  -version 1.0.0 \
-  -directory-path ./my-module \
+  -version "1.0.0" \
+  -directory-path "./my-module" \
   trn:terraform_module:<group_path>/<module_name>/<system>
 ```
   
@@ -1833,7 +1833,7 @@ Variable parsing precedence:
 NOTE: If the same variable is assigned multiple values, the last value found will be used.
   
 ```bash
-tharsis plan -directory-path ./terraform trn:workspace:<workspace_path>
+tharsis plan -directory-path "./terraform" trn:workspace:<workspace_path>
 ```
   
 #### Options
@@ -1957,11 +1957,11 @@ The runner-agent create command creates a new runner agent.
   
 ```bash
 tharsis runner-agent create \
-  -group-id trn:group:<group_path> \
+  -group-id "trn:group:<group_path>" \
   -description "Production runner" \
   -run-untagged-jobs \
-  -tag prod \
-  -tag us-east-1 \
+  -tag "prod" \
+  -tag "us-east-1" \
   prod-runner
 ```
   
@@ -2061,8 +2061,8 @@ The runner-agent update command updates an existing runner agent.
 tharsis runner-agent update \
   -description "Updated description" \
   -disabled true \
-  -tag prod \
-  -tag us-west-2 \
+  -tag "prod" \
+  -tag "us-west-2" \
   trn:runner:<group_path>/<runner_name>
 ```
   
@@ -2116,7 +2116,7 @@ The output token can be used to authenticate with the API.
   
 ```bash
 tharsis service-account create-token \
-  -token <oidc-token> \
+  -token "<oidc-token>" \
   trn:service_account:<group_path>/<service_account_name>
 ```
   
@@ -2179,8 +2179,8 @@ The terraform-provider create command creates a new terraform provider.
   
 ```bash
 tharsis terraform-provider create \
-  -group-id trn:group:<group_path> \
-  -repository-url https://github.com/example/terraform-provider-example \
+  -group-id "trn:group:<group_path>" \
+  -repository-url "https://github.com/example/terraform-provider-example" \
   my-provider
 ```
   
@@ -2214,7 +2214,7 @@ Terraform provider version to the provider registry.
   
 ```bash
 tharsis terraform-provider upload-version \
-  -directory ./my-provider \
+  -directory "./my-provider" \
   trn:terraform_provider:<group_path>/<name>
 ```
   
@@ -2307,9 +2307,9 @@ filtering and sorting.
   
 ```bash
 tharsis terraform-provider-mirror list-platforms \
-  -os linux \
-  -architecture amd64 \
-  -sort-by CREATED_AT_DESC \
+  -os "linux" \
+  -architecture "amd64" \
+  -sort-by "CREATED_AT_DESC" \
   trn:terraform_provider_version_mirror:<group_path>/<provider_namespace>/<provider_name>/<semantic_version>
 ```
   
@@ -2353,7 +2353,7 @@ and sorting.
   
 ```bash
 tharsis terraform-provider-mirror list-versions \
-  -sort-by CREATED_AT_DESC \
+  -sort-by "CREATED_AT_DESC" \
   -limit 10 \
   <namespace_path>
 ```
@@ -2392,7 +2392,7 @@ Sort in this direction.\
   
 The terraform-provider-mirror sync command downloads Terraform
 provider platform packages from a registry and uploads them to
-the Tharsis provider mirror. The --platform option can be used
+the Tharsis provider mirror. The -platform option can be used
 multiple times to specify more than one platform. By default,
 this command will sync all platforms for the latest version.
 
@@ -2419,9 +2419,9 @@ Examples: registry.terraform.io/hashicorp/aws, hashicorp/aws
   
 ```bash
 tharsis terraform-provider-mirror sync \
-  -group-id my-group \
-  -version 1.0.0 \
-  -platform linux_amd64 \
+  -group-id "my-group" \
+  -version "1.0.0" \
+  -platform "linux_amd64" \
   hashicorp/aws
 ```
   
@@ -2507,8 +2507,8 @@ Exactly one of -user-id, -service-account-id, or -team-id must be specified.
   
 ```bash
 tharsis workspace add-membership \
-  -role-id trn:role:owner \
-  -user-id trn:user:john.smith \
+  -role-id "trn:role:owner" \
+  -user-id "trn:user:john.smith" \
   trn:workspace:<workspace_path>
 ```
   
@@ -2575,14 +2575,14 @@ output as JSON, if specified. Idempotent when used with
   
 ```bash
 tharsis workspace create \
-  -parent-group-id trn:group:<group_path> \
+  -parent-group-id "trn:group:<group_path>" \
   -description "Production workspace" \
   -terraform-version "1.5.0" \
   -max-job-duration 60 \
   -prevent-destroy-plan \
-  -managed-identity trn:managed_identity:<group_path>/<identity_name> \
-  -label env=prod \
-  -label team=platform \
+  -managed-identity "trn:managed_identity:<group_path>/<identity_name>" \
+  -label "env=prod" \
+  -label "team=platform" \
   <name>
 ```
   
@@ -2661,7 +2661,7 @@ The workspace delete-terraform-var command deletes a terraform variable from a w
   
 ```bash
 tharsis workspace delete-terraform-var \
-  -key region \
+  -key "region" \
   trn:workspace:<workspace_path>
 ```
   
@@ -2721,7 +2721,7 @@ The workspace get-membership command retrieves details about a specific workspac
   
 ```bash
 tharsis workspace get-membership \
-  -user-id trn:user:<username> \
+  -user-id "trn:user:<username>" \
   trn:workspace:<workspace_path>
 ```
   
@@ -2763,7 +2763,7 @@ The workspace get-terraform-var command retrieves a terraform variable for a wor
   
 ```bash
 tharsis workspace get-terraform-var \
-  -key region \
+  -key "region" \
   trn:workspace:<workspace_path>
 ```
   
@@ -2826,10 +2826,10 @@ sorting the output.
   
 ```bash
 tharsis workspace list \
-  -group-id trn:group:<group_path> \
-  -label env=prod \
-  -label team=platform \
-  -sort-by FULL_PATH_ASC \
+  -group-id "trn:group:<group_path>" \
+  -label "env=prod" \
+  -label "team=platform" \
+  -sort-by "FULL_PATH_ASC" \
   -limit 5 \
   -json
 ```
@@ -2953,7 +2953,7 @@ The workspace migrate command migrates a workspace to a different group.
   
 ```bash
 tharsis workspace migrate \
-  -new-group-id trn:group:<group_path> \
+  -new-group-id "trn:group:<group_path>" \
   trn:workspace:<workspace_path>
 ```
   
@@ -3032,7 +3032,7 @@ Note: This command does not support sensitive variables.
   
 ```bash
 tharsis workspace set-environment-vars \
-  -env-var-file vars.env \
+  -env-var-file "vars.env" \
   trn:workspace:<workspace_path>
 ```
   
@@ -3051,8 +3051,8 @@ The workspace set-terraform-var command creates or updates a terraform variable 
   
 ```bash
 tharsis workspace set-terraform-var \
-  -key region \
-  -value us-east-1 \
+  -key "region" \
+  -value "us-east-1" \
   trn:workspace:<workspace_path>
 ```
   
@@ -3082,7 +3082,7 @@ Note: This command does not support sensitive variables.
   
 ```bash
 tharsis workspace set-terraform-vars \
-  -tf-var-file terraform.tfvars \
+  -tf-var-file "terraform.tfvars" \
   trn:workspace:<workspace_path>
 ```
   
@@ -3163,7 +3163,7 @@ The workspace update-membership command updates a workspace membership's role.
   
 ```bash
 tharsis workspace update-membership \
-  -role-id trn:role:<role_name> \
+  -role-id "trn:role:<role_name>" \
   <id>
 ```
   

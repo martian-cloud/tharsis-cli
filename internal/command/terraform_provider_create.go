@@ -108,8 +108,8 @@ func (*terraformProviderCreateCommand) Usage() string {
 func (*terraformProviderCreateCommand) Example() string {
 	return `
 tharsis terraform-provider create \
-  -group-id trn:group:<group_path> \
-  -repository-url https://github.com/example/terraform-provider-example \
+  -group-id "trn:group:<group_path>" \
+  -repository-url "https://github.com/example/terraform-provider-example" \
   my-provider
 `
 }

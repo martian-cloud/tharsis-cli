@@ -82,7 +82,7 @@ func (*moduleCreateAttestationCommand) Example() string {
 	return `
 tharsis module create-attestation \
   -description "Attestation for v1.0.0" \
-  -data aGVsbG8sIHdvcmxk \
+  -data "aGVsbG8sIHdvcmxk" \
   trn:terraform_module:<module_path>
 `
 }

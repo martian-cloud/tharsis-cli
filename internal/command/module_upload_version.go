@@ -237,8 +237,8 @@ func (*moduleUploadVersionCommand) Usage() string {
 func (*moduleUploadVersionCommand) Example() string {
 	return `
 tharsis module upload-version \
-  -version 1.0.0 \
-  -directory-path ./my-module \
+  -version "1.0.0" \
+  -directory-path "./my-module" \
   trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }

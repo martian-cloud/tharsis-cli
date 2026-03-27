@@ -122,8 +122,8 @@ func (*groupSetTerraformVarCommand) Usage() string {
 func (*groupSetTerraformVarCommand) Example() string {
 	return `
 tharsis group set-terraform-var \
-  -key region \
-  -value us-east-1 \
+  -key "region" \
+  -value "us-east-1" \
   trn:group:<group_path>
 `
 }

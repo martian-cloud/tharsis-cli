@@ -90,8 +90,8 @@ func (*groupAddMembershipCommand) Usage() string {
 func (*groupAddMembershipCommand) Example() string {
 	return `
 tharsis group add-membership \
-  -role-id trn:role:<role_name> \
-  -user-id trn:user:<username> \
+  -role-id "trn:role:<role_name>" \
+  -user-id "trn:user:<username>" \
   trn:group:<group_path>
 `
 }

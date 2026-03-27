@@ -127,7 +127,7 @@ func (*groupCreateCommand) Description() string {
 func (*groupCreateCommand) Example() string {
 	return `
 tharsis group create \
-  -parent-group-id trn:group:<group_path> \
+  -parent-group-id "trn:group:<group_path>" \
   -description "Operations group" \
   <name>
 `

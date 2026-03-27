@@ -413,7 +413,7 @@ func (*terraformProviderMirrorSyncCommand) Description() string {
 	return `
    The terraform-provider-mirror sync command downloads Terraform
    provider platform packages from a registry and uploads them to
-   the Tharsis provider mirror. The --platform option can be used
+   the Tharsis provider mirror. The -platform option can be used
    multiple times to specify more than one platform. By default,
    this command will sync all platforms for the latest version.
 
@@ -447,9 +447,9 @@ func (*terraformProviderMirrorSyncCommand) Usage() string {
 func (*terraformProviderMirrorSyncCommand) Example() string {
 	return `
 tharsis terraform-provider-mirror sync \
-  -group-id my-group \
-  -version 1.0.0 \
-  -platform linux_amd64 \
+  -group-id "my-group" \
+  -version "1.0.0" \
+  -platform "linux_amd64" \
   hashicorp/aws
 `
 }

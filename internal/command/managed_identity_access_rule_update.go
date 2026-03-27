@@ -96,7 +96,7 @@ func (*managedIdentityAccessRuleUpdateCommand) Description() string {
 func (*managedIdentityAccessRuleUpdateCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule update \
-  -allowed-user trn:user:<username> \
+  -allowed-user "trn:user:<username>" \
   <id>
 `
 }

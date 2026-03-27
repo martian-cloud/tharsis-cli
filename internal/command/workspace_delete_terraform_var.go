@@ -86,7 +86,7 @@ func (*workspaceDeleteTerraformVarCommand) Usage() string {
 func (*workspaceDeleteTerraformVarCommand) Example() string {
 	return `
 tharsis workspace delete-terraform-var \
-  -key region \
+  -key "region" \
   trn:workspace:<workspace_path>
 `
 }

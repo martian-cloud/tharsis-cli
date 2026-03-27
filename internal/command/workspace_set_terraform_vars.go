@@ -104,7 +104,7 @@ func (*workspaceSetTerraformVarsCommand) Usage() string {
 func (*workspaceSetTerraformVarsCommand) Example() string {
 	return `
 tharsis workspace set-terraform-vars \
-  -tf-var-file terraform.tfvars \
+  -tf-var-file "terraform.tfvars" \
   trn:workspace:<workspace_path>
 `
 }
