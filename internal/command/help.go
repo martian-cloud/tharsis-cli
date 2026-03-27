@@ -68,7 +68,7 @@ func (c *helpCommand) PredictArgs() complete.Predictor {
 func (c *helpCommand) HelpTemplate() string {
 	return output.PrimaryColor().Sprint("{{.Name}}") + ` [global options] {{.SubcommandName}} <subcommand> [options] <args>
 
-{{indent 2 (trim .Help)}}
+{{.Help}}
 {{if gt (len .Subcommands) 0}}
 ` + color.New(color.Bold).Sprint("Subcommands:") + `
 {{- range $value := .Subcommands }}
