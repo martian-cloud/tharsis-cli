@@ -15,20 +15,6 @@ const (
 	MarkerRepeatable Marker = "..."
 )
 
-// Color returns the display color name for the marker.
-func (m Marker) Color() string {
-	switch m {
-	case MarkerRequired:
-		return "red"
-	case MarkerDeprecated:
-		return "orange"
-	case MarkerRepeatable:
-		return "green"
-	default:
-		return ""
-	}
-}
-
 // String returns the marker symbol.
 func (m Marker) String() string {
 	return string(m)

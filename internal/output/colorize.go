@@ -12,10 +12,9 @@ import (
 
 var (
 	reHelpHeader = regexp.MustCompile(`^[a-zA-Z0-9_-].*:$`)                      // matches "Section:" style headers
-	reHelpFlag   = regexp.MustCompile(`(\s|^|")(-[\w-]+)(\W|$)`)                 // matches -flag style options
-	reCodeBlock  = regexp.MustCompile("(?s)([ ]*)```(\\w*)\\n(.*?)```")          // matches ```lang\ncode``` with optional indent
-	reFlagName   = regexp.MustCompile(`^  -[\w-]+`)                              // matches flag definition lines
 	reFlagMeta   = regexp.MustCompile(`^      (Values|Default|Deprecated|Env):`) // matches metadata labels
+	reCodeBlock  = regexp.MustCompile("(?s)([ ]*)```(\\w+)\\n(.*?)```")          // matches ```lang\ncode``` blocks
+	reFlagToken  = regexp.MustCompile(`(\s)-(\w[\w-]*)`)                         // matches -flag tokens in command lines
 )
 
 // PrimaryColor returns a new Color instance with the primary brand color.
@@ -35,6 +34,10 @@ type colorizer struct {
 // flags, section headers, code blocks, and quoted command references.
 // Returns the input unchanged when color is disabled.
 func Colorize(raw, productName string) string {
+	// Process code blocks: strip ``` markers and apply syntax highlighting.
+	// Runs before NoColor check because marker removal is structural.
+	raw = processCodeBlocks(raw)
+
 	if color.NoColor {
 		return raw
 	}
@@ -55,11 +58,10 @@ func Colorize(raw, productName string) string {
 func (c *colorizer) colorize(raw string) string {
 	var buf bytes.Buffer
 
-	seenHeader := false
 	productPrefix := c.productName + " "
 
 	// Lines are processed individually because colorization rules are
-	// context-dependent (e.g. flag highlighting stops after the first header).
+	// context-dependent (e.g. section headers affect subsequent lines).
 	// Newlines are written as separators to preserve the input's structure exactly.
 	first := true
 	for line := range strings.SplitSeq(raw, "\n") {
@@ -72,14 +74,10 @@ func (c *colorizer) colorize(raw string) string {
 		switch {
 		case c.productName != "" && strings.HasPrefix(line, productPrefix):
 			buf.WriteString(c.highlight.Sprint(c.productName))
-			buf.WriteString(line[len(c.productName):])
+			buf.WriteString(c.colorizeFlags(line[len(c.productName):]))
 
 		case reHelpHeader.MatchString(line):
-			seenHeader = true
 			buf.WriteString(c.bold.Sprint(line))
-
-		case reFlagName.MatchString(line):
-			buf.WriteString(c.colorizeFlagDef(line))
 
 		case reFlagMeta.MatchString(line):
 			buf.WriteString(c.colorizeFlagMeta(line))
@@ -92,60 +90,33 @@ func (c *colorizer) colorize(raw string) string {
 				}
 			}
 
-			if !seenHeader {
-				if s, ok := c.colorizeFlags(line); ok {
-					buf.WriteString(s)
-					break
-				}
-			}
-
-			buf.WriteString(c.highlightCode(line))
+			buf.WriteString(c.colorizeFlags(line))
 		}
 	}
 
 	return buf.String()
 }
 
-// colorizeFlagDef highlights flag names in green and markers in their colors.
-// Input: "  -name, -alias * ..."
-func (c *colorizer) colorizeFlagDef(line string) string {
-	warn := color.New(color.FgYellow)
-	danger := color.New(color.FgRed)
-
-	markerColors := map[flag.Marker]*color.Color{
-		flag.MarkerRequired:   danger,
-		flag.MarkerDeprecated: warn,
-		flag.MarkerRepeatable: c.highlight,
+// colorizeFlags highlights -flag tokens in green and markers in their colors.
+func (c *colorizer) colorizeFlags(s string) string {
+	markerColors := map[string]*color.Color{
+		flag.MarkerRequired.String():   color.New(color.FgRed),
+		flag.MarkerDeprecated.String(): color.New(color.FgYellow),
+		flag.MarkerRepeatable.String(): c.highlight,
 	}
 
-	// Split into the flag names part and any trailing markers.
-	trimmed := strings.TrimSpace(line)
-	parts := strings.Fields(trimmed)
+	// Highlight -flag tokens.
+	s = reFlagToken.ReplaceAllStringFunc(s, func(match string) string {
+		i := strings.Index(match, "-")
+		return match[:i] + c.highlight.Sprint(match[i:])
+	})
 
-	var result strings.Builder
-	result.WriteString("  ")
-
-	for i, part := range parts {
-		if i > 0 {
-			result.WriteByte(' ')
-		}
-
-		if strings.HasPrefix(part, "-") {
-			// Flag name or alias — highlight in green.
-			// Preserve trailing comma if present.
-			name := strings.TrimSuffix(part, ",")
-			result.WriteString(c.highlight.Sprint(name))
-			if strings.HasSuffix(part, ",") {
-				result.WriteByte(',')
-			}
-		} else if mc, ok := markerColors[flag.Marker(part)]; ok {
-			result.WriteString(mc.Sprint(part))
-		} else {
-			result.WriteString(part)
-		}
+	// Highlight markers.
+	for marker, mc := range markerColors {
+		s = strings.ReplaceAll(s, " "+marker, " "+mc.Sprint(marker))
 	}
 
-	return result.String()
+	return s
 }
 
 // colorizeFlagMeta bolds the label portion of metadata lines.
@@ -194,51 +165,33 @@ func (c *colorizer) colorizeCmdRefs(line string) (string, bool) {
 	return buf.String(), true
 }
 
-// colorizeFlags highlights -flag tokens in lines before the first header.
-func (c *colorizer) colorizeFlags(line string) (string, bool) {
-	matches := reHelpFlag.FindAllStringSubmatchIndex(line, -1)
-	if len(matches) == 0 {
-		return "", false
+// processCodeBlocks strips ```lang markers and applies syntax highlighting.
+func processCodeBlocks(s string) string {
+	if !reCodeBlock.MatchString(s) {
+		return s
 	}
 
-	var buf strings.Builder
-	idx := 0
-	for _, m := range matches {
-		start, end := m[4], m[5]
-		buf.WriteString(line[idx:start])
-		buf.WriteString(c.highlight.Sprint(line[start:end]))
-		idx = end
-	}
+	return reCodeBlock.ReplaceAllStringFunc(s, func(match string) string {
+		parts := reCodeBlock.FindStringSubmatch(match)
+		if len(parts) < 4 {
+			return match
+		}
 
-	buf.WriteString(line[idx:])
-
-	return buf.String(), true
+		return chromaHighlight(parts[3], parts[2])
+	})
 }
 
-// highlightCode applies syntax highlighting to code blocks and shell commands.
-func (c *colorizer) highlightCode(s string) string {
-	if reCodeBlock.MatchString(s) {
-		return reCodeBlock.ReplaceAllStringFunc(s, func(match string) string {
-			parts := reCodeBlock.FindStringSubmatch(match)
-			if len(parts) < 4 || parts[2] == "" {
-				return parts[3]
-			}
-
-			return chromaHighlight(parts[3], parts[2])
-		})
-	}
-
-	trimmed := strings.TrimSpace(s)
-	if c.productName != "" && (strings.HasPrefix(trimmed, c.productName+" ") || strings.HasPrefix(trimmed, "./"+c.productName+" ")) {
-		return chromaHighlight(trimmed, "bash")
-	}
-
-	return s
-}
-
+// chromaHighlight returns plain code when NoColor is set or
+// highlights the code otherwise.
 func chromaHighlight(code, lang string) string {
+	code = strings.TrimSpace(code)
+
+	if color.NoColor {
+		return code
+	}
+
 	var buf bytes.Buffer
-	if err := quick.Highlight(&buf, strings.TrimSpace(code), lang, "terminal16m", "monokai"); err != nil {
+	if err := quick.Highlight(&buf, code, lang, "terminal16m", "monokai"); err != nil {
 		return code
 	}
 
