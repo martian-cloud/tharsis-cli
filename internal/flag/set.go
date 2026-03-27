@@ -380,11 +380,11 @@ func (fs *Set) Parse(arguments []string) error {
 	}
 
 	if len(missing) == 1 {
-		return fmt.Errorf("flag %s is required", missing[0])
+		return fmt.Errorf("flag -%s is required", missing[0])
 	}
 
 	if len(missing) > 1 {
-		return fmt.Errorf("flags %s are required", strings.Join(missing, ", "))
+		return fmt.Errorf("flags -%s are required", strings.Join(missing, ", -"))
 	}
 
 	return nil
@@ -414,12 +414,12 @@ func (fs *Set) register(name string, usage string, args []any) *Flag {
 
 	// Specifying a default means the flag isn't required or vice-versa.
 	if f.required && f.defaultVal != nil {
-		panic(fmt.Sprintf("flag %s: cannot be both required and have a default", name))
+		panic(fmt.Sprintf("flag %q: cannot be both required and have a default", name))
 	}
 
 	// Deprecated flags should always be optional since they're being replaced by another.
 	if f.required && f.deprecationMessage != "" {
-		panic(fmt.Sprintf("flag %s: cannot be both required and deprecated", name))
+		panic(fmt.Sprintf("flag %q: cannot be both required and deprecated", name))
 	}
 
 	fs.flags[name] = f
@@ -468,7 +468,7 @@ func setDefault[T any](fs *Set, f *Flag, p **T) {
 
 	v, ok := f.defaultVal.(T)
 	if !ok {
-		panic(fmt.Sprintf("flag %s: default value has type %T, expected %T", f.Name, f.defaultVal, *new(T)))
+		panic(fmt.Sprintf("flag %q: default value has type %T, expected %T", f.Name, f.defaultVal, *new(T)))
 	}
 
 	*p = &v

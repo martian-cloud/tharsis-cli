@@ -35,6 +35,7 @@ func (c *groupAddMembershipCommand) validate() error {
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
 		),
+		validation.Field(&c.roleID, validation.Required, validation.NotNil),
 	)
 }
 

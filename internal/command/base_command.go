@@ -13,6 +13,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
+
 	"github.com/hashicorp/go-hclog"
 	"github.com/mitchellh/cli"
 	"github.com/posener/complete"
@@ -40,9 +42,6 @@ type baseOptions struct {
 	confirmPrompt  string
 }
 
-// BaseOptionsFunc is an alias that allows setting baseOptions.
-type BaseOptionsFunc func(*baseOptions) error
-
 // isForceFlagSet checks if the -force flag is set in the parsed flags.
 func (o *baseOptions) isForceFlagSet() bool {
 	if o.flags == nil {
@@ -52,6 +51,9 @@ func (o *baseOptions) isForceFlagSet() bool {
 	f := o.flags.Lookup("force")
 	return f != nil && f.Value() == "true"
 }
+
+// BaseOptionsFunc is an alias that allows setting baseOptions.
+type BaseOptionsFunc func(*baseOptions) error
 
 // WithFlags sets the FlagSet that needs to be parsed. Return
 // values are often set as fields on the caller command's struct.
@@ -103,9 +105,9 @@ func WithClient(withAuth bool) BaseOptionsFunc {
 	}
 }
 
-// WithForcePrompt prompts for confirmation in interactive mode when
-// the -force flag is set, to prevent accidental destructive actions.
-func WithForcePrompt(prompt string) BaseOptionsFunc {
+// WithWarningPrompt displays a warning and prompts for confirmation
+// in interactive mode when the -force flag is set.
+func WithWarningPrompt(prompt string) BaseOptionsFunc {
 	return func(o *baseOptions) error {
 		o.confirmPrompt = prompt
 		return nil
@@ -180,14 +182,16 @@ func (c *BaseCommand) OutputList(data any, toJSON *bool) int {
 	c.UI.Table(output.ProtoToTable(items))
 
 	if pageInfo != nil {
+		c.UI.Output("---")
+
+		bold := color.New(color.Bold)
 		values := []terminal.NamedValue{
-			{Name: "Total count", Value: pageInfo.TotalCount},
-			{Name: "Has Next Page", Value: pageInfo.HasNextPage},
+			{Name: bold.Sprint("Total"), Value: pageInfo.TotalCount},
 		}
 
-		if pageInfo.EndCursor != nil {
+		if pageInfo.HasNextPage && pageInfo.EndCursor != nil {
 			values = append(values, terminal.NamedValue{
-				Name:  "Cursor",
+				Name:  bold.Sprint("Next page"),
 				Value: pageInfo.GetEndCursor(),
 			})
 		}
@@ -260,7 +264,8 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 
 	// Prompt for confirmation in interactive mode when -force is true.
 	if o.confirmPrompt != "" && c.UI.Interactive() && o.isForceFlagSet() {
-		confirmed, err := c.UI.Confirm(o.confirmPrompt)
+		c.UI.Warnf(o.confirmPrompt)
+		confirmed, err := c.UI.Confirm("Continue?")
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to confirm")
 			return 1

@@ -40,7 +40,7 @@ func (c *runCancelCommand) Run(args []string) int {
 		WithCommandName("run cancel"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to cancel this run?"),
+		WithWarningPrompt("This will forcefully cancel the run, which may leave resources in an inconsistent state."),
 	); code != 0 {
 		return code
 	}

@@ -27,7 +27,7 @@ func TestStringVar(t *testing.T) {
 			name:      "required and missing",
 			args:      []string{},
 			opts:      []any{Required()},
-			expectErr: "flag name is required",
+			expectErr: "flag -name is required",
 		},
 		{
 			name:      "optional not set",
@@ -690,7 +690,7 @@ func TestParse(t *testing.T) {
 		{
 			name:            "missing required flag",
 			args:            []string{"-json"},
-			expectErrorCode: "flag name is required",
+			expectErrorCode: "flag -name is required",
 		},
 	}
 
