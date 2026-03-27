@@ -80,7 +80,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(createdRule, c.toJSON)
+	return c.Output(createdRule, c.toJSON)
 }
 
 func (*managedIdentityAccessRuleCreateCommand) Synopsis() string {

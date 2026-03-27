@@ -72,7 +72,7 @@ func (c *workspaceAddMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(membership, c.toJSON)
+	return c.Output(membership, c.toJSON)
 }
 
 func (*workspaceAddMembershipCommand) Synopsis() string {

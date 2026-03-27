@@ -63,7 +63,7 @@ func (c *moduleGetVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(version, c.toJSON)
+	return c.Output(version, c.toJSON)
 }
 
 func (*moduleGetVersionCommand) Synopsis() string {

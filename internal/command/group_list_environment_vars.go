@@ -98,7 +98,7 @@ func (c *groupListEnvironmentVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return c.OutputProtoList(environmentVars, c.toJSON)
+	return c.OutputList(environmentVars, c.toJSON)
 }
 
 func (*groupListEnvironmentVarsCommand) Synopsis() string {

@@ -54,7 +54,7 @@ func (c *terraformProviderMirrorGetVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(versionMirror, c.toJSON)
+	return c.Output(versionMirror, c.toJSON)
 }
 
 func (*terraformProviderMirrorGetVersionCommand) Synopsis() string {

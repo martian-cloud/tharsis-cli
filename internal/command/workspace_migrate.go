@@ -56,7 +56,7 @@ func (c *workspaceMigrateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(workspace, c.toJSON)
+	return c.Output(workspace, c.toJSON)
 }
 
 func (*workspaceMigrateCommand) Synopsis() string {

@@ -56,7 +56,7 @@ func (c *workspaceGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(workspace, c.toJSON)
+	return c.Output(workspace, c.toJSON)
 }
 
 func (*workspaceGetCommand) Synopsis() string {

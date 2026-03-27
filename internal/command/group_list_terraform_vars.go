@@ -99,7 +99,7 @@ func (c *groupListTerraformVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return c.OutputProtoList(terraformVars, c.toJSON)
+	return c.OutputList(terraformVars, c.toJSON)
 }
 
 func (*groupListTerraformVarsCommand) Synopsis() string {

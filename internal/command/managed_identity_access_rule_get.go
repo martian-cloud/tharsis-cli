@@ -53,7 +53,7 @@ func (c *managedIdentityAccessRuleGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(rule, c.toJSON)
+	return c.Output(rule, c.toJSON)
 }
 
 func (*managedIdentityAccessRuleGetCommand) Synopsis() string {

@@ -94,7 +94,7 @@ func (c *workspaceListEnvironmentVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return c.OutputProtoList(environmentVars, c.toJSON)
+	return c.OutputList(environmentVars, c.toJSON)
 }
 
 func (*workspaceListEnvironmentVarsCommand) Synopsis() string {

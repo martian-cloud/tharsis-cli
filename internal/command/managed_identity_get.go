@@ -56,7 +56,7 @@ func (c *managedIdentityGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(identity, c.toJSON)
+	return c.Output(identity, c.toJSON)
 }
 
 func (*managedIdentityGetCommand) Synopsis() string {

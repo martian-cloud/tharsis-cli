@@ -57,7 +57,7 @@ func (c *moduleUpdateAttestationCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(updatedAttestation, c.toJSON)
+	return c.Output(updatedAttestation, c.toJSON)
 }
 
 func (*moduleUpdateAttestationCommand) Synopsis() string {

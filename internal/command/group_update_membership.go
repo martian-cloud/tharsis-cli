@@ -59,7 +59,7 @@ func (c *groupUpdateMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(membership, c.toJSON)
+	return c.Output(membership, c.toJSON)
 }
 
 func (*groupUpdateMembershipCommand) Synopsis() string {

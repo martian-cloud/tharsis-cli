@@ -88,7 +88,7 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputProto(provider, c.toJSON)
+	return c.Output(provider, c.toJSON)
 }
 
 func (*terraformProviderCreateCommand) Synopsis() string {

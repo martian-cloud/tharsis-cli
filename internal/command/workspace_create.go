@@ -87,7 +87,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 
 		if workspace != nil {
 			c.Logger.Debug("workspace already exists, returning existing workspace")
-			return c.OutputProto(workspace, c.toJSON)
+			return c.Output(workspace, c.toJSON)
 		}
 	}
 
@@ -119,7 +119,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 		}
 	}
 
-	return c.OutputProto(createdWorkspace, c.toJSON)
+	return c.Output(createdWorkspace, c.toJSON)
 }
 
 func (*workspaceCreateCommand) Synopsis() string {
