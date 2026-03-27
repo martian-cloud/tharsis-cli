@@ -91,7 +91,7 @@ Supports setting run-scoped Terraform / environment variables.
 Terraform variables may be passed in via supported
 options or from the environment with a 'TF_VAR_' prefix.
   
-```shell
+```bash
 tharsis apply -directory-path ./terraform trn:workspace:<workspace_path>
 ```
   
@@ -161,7 +161,7 @@ The path to a .tfvars variables file.
 The caller-identity command returns information about the
 authenticated caller (User or ServiceAccount).
   
-```shell
+```bash
 tharsis caller-identity
 ```
   
@@ -185,7 +185,7 @@ Show output as JSON.\
 The configure command creates or updates a profile. If no
 options are specified, the command prompts for values.
   
-```shell
+```bash
 tharsis configure \
   -http-endpoint https://api.tharsis.example.com \
   -profile prod-example
@@ -219,7 +219,7 @@ The name of the profile to set.
 The configure delete command removes a profile and its
 credentials with the given name.
   
-```shell
+```bash
 tharsis configure delete prod-example
 ```
   
@@ -229,7 +229,7 @@ tharsis configure delete prod-example
   
 The configure list command prints information about all profiles.
   
-```shell
+```bash
 tharsis configure list
 ```
   
@@ -244,7 +244,7 @@ Supports setting run-scoped Terraform / environment variables.
 Terraform variables may be passed in via supported
 options or from the environment with a 'TF_VAR_' prefix.
   
-```shell
+```bash
 tharsis destroy -directory-path ./terraform trn:workspace:<workspace_path>
 ```
   
@@ -340,7 +340,7 @@ migrate groups between parents.
 The group add-membership command adds a membership to a group.
 Exactly one of -user-id, -service-account-id, or -team-id must be specified.
   
-```shell
+```bash
 tharsis group add-membership \
   -role-id trn:role:<role_name> \
   -user-id trn:user:<username> \
@@ -395,7 +395,7 @@ setting a group's description (optional). Shows final
 output as JSON, if specified. Idempotent when used with
 -if-not-exists option.
   
-```shell
+```bash
 tharsis group create \
   -parent-group-id trn:group:<group_path> \
   -description "Operations group" \
@@ -431,7 +431,7 @@ The group delete command deletes a group by its ID. Includes
 a force flag to delete the group even if resources are
 deployed (dangerous!).
   
-```shell
+```bash
 tharsis group delete \
   -force \
   trn:group:<group_path>
@@ -454,7 +454,7 @@ Metadata version of the resource to be deleted. In most cases, this is not requi
   
 The group delete-terraform-var command deletes a terraform variable from a group.
   
-```shell
+```bash
 tharsis group delete-terraform-var \
   -key region \
   trn:group:<group_path>
@@ -478,7 +478,7 @@ Metadata version of the resource to be deleted. In most cases, this is not requi
 The group get command retrieves a single group by its ID.
 Shows output as JSON, if specified.
   
-```shell
+```bash
 tharsis group get \
   -json \
   trn:tharsis:group:<group_path>
@@ -498,7 +498,7 @@ Show output as JSON.\
   
 The group get-membership command retrieves details about a specific group membership.
   
-```shell
+```bash
 tharsis group get-membership \
   -user-id trn:user:<username> \
   trn:group:<group_path>
@@ -540,7 +540,7 @@ Username to find the group membership for.\
   
 The group get-terraform-var command retrieves a terraform variable for a group.
   
-```shell
+```bash
 tharsis group get-terraform-var \
   -key region \
   trn:group:<group_path>
@@ -571,7 +571,7 @@ The group list command prints information about (likely
 multiple) groups. Supports pagination, filtering and
 sorting the output.
   
-```shell
+```bash
 tharsis group list \
   -parent-id trn:group:<parent_group_path> \
   -sort-by FULL_PATH_ASC \
@@ -627,7 +627,7 @@ Sort in this direction.\
 The group list-environment-vars command retrieves all terraform
 variables from a group and its parent groups.
   
-```shell
+```bash
 tharsis group list-environment-vars -show-sensitive trn:group:<group_path>
 ```
   
@@ -651,7 +651,7 @@ Show the actual values of sensitive variables (requires appropriate permissions)
 The group list-memberships command prints information about
 memberships for a specific group.
   
-```shell
+```bash
 tharsis group list-memberships trn:group:<group_path>
 ```
   
@@ -670,7 +670,7 @@ Show final output as JSON.\
 The group list-terraform-vars command retrieves all terraform
 variables from a group and its parent groups.
   
-```shell
+```bash
 tharsis group list-terraform-vars -show-sensitive trn:group:<group_path>
 ```
   
@@ -694,7 +694,7 @@ Show the actual values of sensitive variables (requires appropriate permissions)
 The group migrate command migrates a group to another parent group or to top-level.
 Omit -new-parent-id to migrate to top-level.
   
-```shell
+```bash
 tharsis group migrate \
   -new-parent-id trn:group:<parent_group_path> \
   trn:group:<group_path>
@@ -728,7 +728,7 @@ Migrate group to top level.\
   
 The group remove-membership command removes a membership from a group.
   
-```shell
+```bash
 tharsis group remove-membership <id>
 ```
   
@@ -747,7 +747,7 @@ The group set-environment-vars command sets environment variables for a group.
 Command will overwrite any existing environment variables in the target group!
 Note: This command does not support sensitive variables.
   
-```shell
+```bash
 tharsis group set-environment-vars \
   -env-var-file vars.env \
   trn:group:<group_path>
@@ -766,7 +766,7 @@ Path to an environment variables file.
   
 The group set-terraform-var command creates or updates a terraform variable for a group.
   
-```shell
+```bash
 tharsis group set-terraform-var \
   -key region \
   -value us-east-1 \
@@ -797,7 +797,7 @@ The group set-terraform-vars command sets terraform variables for a group.
 Command will overwrite any existing Terraform variables in the target group!
 Note: This command does not support sensitive variables.
   
-```shell
+```bash
 tharsis group set-terraform-vars \
   -tf-var-file terraform.tfvars \
   trn:group:<group_path>
@@ -818,7 +818,7 @@ The group update command updates a group. Currently, it
 supports updating the description. Shows final output
 as JSON, if specified.
   
-```shell
+```bash
 tharsis group update \
   -description "Updated operations group" \
   trn:group:<group_path>
@@ -846,7 +846,7 @@ Metadata version of the resource to be updated. In most cases, this is not requi
   
 The group update-membership command updates a group membership's role.
   
-```shell
+```bash
 tharsis group update-membership \
   -role-id trn:role:<role_name> \
   <id>
@@ -895,7 +895,7 @@ managed identities.
   
 The managed-identity create command creates a new managed identity.
   
-```shell
+```bash
 tharsis managed-identity create \
   -group-id trn:group:<group_path> \
   -type aws_federated \
@@ -963,7 +963,7 @@ The managed-identity delete command deletes a managed identity.
 
 Use with caution as deleting a managed identity is irreversible!
   
-```shell
+```bash
 tharsis managed-identity delete -force trn:managed_identity:<group_path>/<managed_identity_name>
 ```
   
@@ -981,7 +981,7 @@ Force delete the managed identity.
 The managed-identity get command prints information about one
 managed identity.
   
-```shell
+```bash
 tharsis managed-identity get trn:managed_identity:<group_path>/<managed_identity_name>
 ```
   
@@ -1001,7 +1001,7 @@ The managed-identity update command updates a managed identity.
 Currently, it supports updating the description and data.
 Shows final output as JSON, if specified.
   
-```shell
+```bash
 tharsis managed-identity update \
   -description "Updated AWS production role" \
   -aws-federated-role arn:aws:iam::123456789012:role/UpdatedRole \
@@ -1062,7 +1062,7 @@ commands to create, update, delete, list, and get access rules.
   
 The managed-identity-access-rule create command creates a new managed identity access rule.
   
-```shell
+```bash
 tharsis managed-identity-access-rule create \
   -managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name> \
   -rule-type eligible_principals \
@@ -1125,7 +1125,7 @@ Verify state lineage.\
   
 The managed-identity-access-rule delete command deletes a managed identity access rule.
   
-```shell
+```bash
 tharsis managed-identity-access-rule delete <id>
 ```
   
@@ -1135,7 +1135,7 @@ tharsis managed-identity-access-rule delete <id>
   
 The managed-identity-access-rule get command gets a managed identity access rule by ID.
   
-```shell
+```bash
 tharsis managed-identity-access-rule get <id>
 ```
   
@@ -1154,7 +1154,7 @@ Show final output as JSON.\
 The managed-identity-access-rule list command prints information about
 access rules for a specific managed identity.
   
-```shell
+```bash
 tharsis managed-identity-access-rule list \
   -managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name>
 ```
@@ -1182,7 +1182,7 @@ Resource path of the managed identity to get access rules for.\
   
 The managed-identity-access-rule update command updates an existing managed identity access rule.
   
-```shell
+```bash
 tharsis managed-identity-access-rule update \
   -allowed-user trn:user:<username> \
   <id>
@@ -1234,7 +1234,7 @@ Use these commands to create and delete managed identity aliases.
   
 The managed-identity-alias create command creates a new managed identity alias.
   
-```shell
+```bash
 tharsis managed-identity-alias create \
   -group-id trn:group:<group_path> \
   -alias-source-id trn:managed_identity:<group_path>/<source_identity_name> \
@@ -1278,7 +1278,7 @@ The name of the managed identity alias.\
   
 The managed-identity-alias delete command deletes a managed identity alias.
   
-```shell
+```bash
 tharsis managed-identity-alias delete trn:managed_identity:<group_path>/<managed_identity_name>
 ```
   
@@ -1426,7 +1426,7 @@ in the format: module-name/system (e.g., vpc/aws). Shows final
 output as JSON, if specified. Idempotent when used with
 -if-not-exists option.
   
-```shell
+```bash
 tharsis module create \
   -group-id trn:group:<group_path> \
   -repository-url https://github.com/example/terraform-aws-vpc \
@@ -1466,7 +1466,7 @@ The repository URL for the module.
   
 The module create-attestation command creates a new module attestation.
   
-```shell
+```bash
 tharsis module create-attestation \
   -description "Attestation for v1.0.0" \
   -data aGVsbG8sIHdvcmxk \
@@ -1495,7 +1495,7 @@ Show final output as JSON.\
   
 The module delete command deletes a Terraform module.
   
-```shell
+```bash
 tharsis module delete trn:terraform_module:<group_path>/<module_name>/<system>
 ```
   
@@ -1505,7 +1505,7 @@ tharsis module delete trn:terraform_module:<group_path>/<module_name>/<system>
   
 The module delete-attestation command deletes a module attestation.
   
-```shell
+```bash
 tharsis module delete-attestation trn:terraform_module_attestation:<group_path>/<module_name>/<module_system>/<sha_sum>
 ```
   
@@ -1515,7 +1515,7 @@ tharsis module delete-attestation trn:terraform_module_attestation:<group_path>/
   
 The module delete-version command deletes a module version.
   
-```shell
+```bash
 tharsis module delete-version trn:terraform_module_version:<group_path>/<module_name>/<system>/<semantic_version>
 ```
   
@@ -1532,7 +1532,7 @@ Metadata version of the resource to be deleted. In most cases, this is not requi
   
 The module get command prints information about one Terraform module.
   
-```shell
+```bash
 tharsis module get trn:terraform_module:<group_path>/<module_name>/<system>
 ```
   
@@ -1550,7 +1550,7 @@ Show final output as JSON.\
   
 The module get-version command retrieves details about a specific module version.
   
-```shell
+```bash
 tharsis module get-version trn:terraform_module_version:<group_path>/<module_name>/<system>/<version>
 ```
   
@@ -1575,7 +1575,7 @@ The module list command prints information about (likely
 multiple) modules. Supports pagination, filtering and
 sorting the output.
   
-```shell
+```bash
 tharsis module list \
   -group-id trn:group:<group_path> \
   -include-inherited \
@@ -1631,7 +1631,7 @@ Sort in this direction.\
 The module list-attestations command prints information about attestations
 for a specific module. Supports pagination, filtering and sorting.
   
-```shell
+```bash
 tharsis module list-attestations \
   -sort-by CREATED_AT_DESC \
   -limit 10 \
@@ -1676,7 +1676,7 @@ Sort in this direction.\
 The module list-versions command prints information about versions
 of a specific module. Supports pagination, filtering and sorting.
   
-```shell
+```bash
 tharsis module list-versions \
   -search 1.0 \
   -sort-by CREATED_AT_DESC \
@@ -1731,7 +1731,7 @@ The module update command updates a Terraform module.
 Currently, it supports updating the repository URL and
 private flag. Shows final output as JSON, if specified.
   
-```shell
+```bash
 tharsis module update \
   -repository-url https://github.com/example/terraform-aws-vpc-v2 \
   -private true \
@@ -1764,7 +1764,7 @@ Metadata version of the resource to be updated. In most cases, this is not requi
   
 The module update-attestation command updates an existing module attestation.
   
-```shell
+```bash
 tharsis module update-attestation \
   -description "Updated description" \
   trn:terraform_module_attestation:<group_path>/<module_name>/<system>/<sha_sum>
@@ -1789,7 +1789,7 @@ Show final output as JSON.\
 The module upload-version command uploads a new
 module version to the module registry.
   
-```shell
+```bash
 tharsis module upload-version \
   -version 1.0.0 \
   -directory-path ./my-module \
@@ -1832,7 +1832,7 @@ Variable parsing precedence:
 
 NOTE: If the same variable is assigned multiple values, the last value found will be used.
   
-```shell
+```bash
 tharsis plan -directory-path ./terraform trn:workspace:<workspace_path>
 ```
   
@@ -1908,7 +1908,7 @@ runs gracefully or forcefully.
   
 The run cancel command cancels a run. Supports forced cancellation which is useful when a graceful cancel is not enough.
   
-```shell
+```bash
 tharsis run cancel -force <id>
 ```
   
@@ -1943,7 +1943,7 @@ and assign or unassign service accounts.
   
 The runner-agent assign-service-account command assigns a service account to a runner agent.
   
-```shell
+```bash
 tharsis runner-agent assign-service-account \
   trn:service_account:<group_path>/<service_account_name> \
   trn:runner:<group_path>/<runner_name>
@@ -1955,7 +1955,7 @@ tharsis runner-agent assign-service-account \
   
 The runner-agent create command creates a new runner agent.
   
-```shell
+```bash
 tharsis runner-agent create \
   -group-id trn:group:<group_path> \
   -description "Production runner" \
@@ -2010,7 +2010,7 @@ Tag for the runner agent.
   
 The runner-agent delete command deletes a runner agent.
   
-```shell
+```bash
 tharsis runner-agent delete trn:runner:<group_path>/<runner_name>
 ```
   
@@ -2027,7 +2027,7 @@ Metadata version of the resource to be deleted. In most cases, this is not requi
   
 The runner-agent get command gets a runner agent by ID.
   
-```shell
+```bash
 tharsis runner-agent get trn:runner:<group_path>/<runner_name>
 ```
   
@@ -2045,7 +2045,7 @@ Show final output as JSON.\
   
 The runner-agent unassign-service-account command removes a service account from a runner agent.
   
-```shell
+```bash
 tharsis runner-agent unassign-service-account \
   trn:service_account:<group_path>/<service_account_name> \
   trn:runner:<group_path>/<runner_name>
@@ -2057,7 +2057,7 @@ tharsis runner-agent unassign-service-account \
   
 The runner-agent update command updates an existing runner agent.
   
-```shell
+```bash
 tharsis runner-agent update \
   -description "Updated description" \
   -disabled true \
@@ -2114,7 +2114,7 @@ The service-account create-token command creates a token for a service account u
 The input token is issued by an identity provider specified in the service account's trust policy.
 The output token can be used to authenticate with the API.
   
-```shell
+```bash
 tharsis service-account create-token \
   -token <oidc-token> \
   trn:service_account:<group_path>/<service_account_name>
@@ -2154,7 +2154,7 @@ the user can sign in. If there is an SSO scheme active,
 that will sign in the user. The login command captures
 the authentication token for use in subsequent commands.
   
-```shell
+```bash
 tharsis sso login
 ```
   
@@ -2177,7 +2177,7 @@ upload provider versions to the registry.
   
 The terraform-provider create command creates a new terraform provider.
   
-```shell
+```bash
 tharsis terraform-provider create \
   -group-id trn:group:<group_path> \
   -repository-url https://github.com/example/terraform-provider-example \
@@ -2212,7 +2212,7 @@ The repository URL for this terraform provider.
 The terraform-provider upload-version command uploads a new
 Terraform provider version to the provider registry.
   
-```shell
+```bash
 tharsis terraform-provider upload-version \
   -directory ./my-provider \
   trn:terraform_provider:<group_path>/<name>
@@ -2254,7 +2254,7 @@ The terraform-provider-mirror delete-platform command deletes a terraform provid
 platform from a group's mirror. The package will no longer be available for the
 associated provider's version and platform.
   
-```shell
+```bash
 tharsis terraform-provider-mirror delete-platform <platform-mirror-id>
 ```
   
@@ -2267,7 +2267,7 @@ version and any associated platform binaries from a group's mirror. The -force
 option must be used when deleting a provider version which actively hosts
 platform binaries.
   
-```shell
+```bash
 tharsis terraform-provider-mirror delete-version -force <version-mirror-id>
 ```
   
@@ -2285,7 +2285,7 @@ Skip confirmation prompt.
 The terraform-provider-mirror get-version command retrieves a terraform provider
 version from the provider mirror.
   
-```shell
+```bash
 tharsis terraform-provider-mirror get-version <version-mirror-id>
 ```
   
@@ -2305,7 +2305,7 @@ The terraform-provider-mirror list-platforms command prints information
 about provider platform mirrors for a version mirror. Supports pagination,
 filtering and sorting.
   
-```shell
+```bash
 tharsis terraform-provider-mirror list-platforms \
   -os linux \
   -architecture amd64 \
@@ -2351,7 +2351,7 @@ The terraform-provider-mirror list-versions command prints information
 about provider version mirrors for a namespace. Supports pagination
 and sorting.
   
-```shell
+```bash
 tharsis terraform-provider-mirror list-versions \
   -sort-by CREATED_AT_DESC \
   -limit 10 \
@@ -2417,7 +2417,7 @@ public Terraform registry (registry.terraform.io).
 
 Examples: registry.terraform.io/hashicorp/aws, hashicorp/aws
   
-```shell
+```bash
 tharsis terraform-provider-mirror sync \
   -group-id my-group \
   -version 1.0.0 \
@@ -2451,7 +2451,7 @@ The provider version to sync. If not specified, uses the latest version.
   
 The tharsis version command returns the CLI's version.
   
-```shell
+```bash
 tharsis version -json
 ```
   
@@ -2505,7 +2505,7 @@ variables, manage memberships, and view workspace outputs.
 The workspace add-membership command adds a membership to a workspace.
 Exactly one of -user-id, -service-account-id, or -team-id must be specified.
   
-```shell
+```bash
 tharsis workspace add-membership \
   -role-id trn:role:owner \
   -user-id trn:user:john.smith \
@@ -2557,7 +2557,7 @@ Username for the new membership.\
   
 The workspace assign-managed-identity command assigns a managed identity to a workspace.
   
-```shell
+```bash
 tharsis workspace assign-managed-identity \
   trn:workspace:<workspace_path> \
   trn:managed_identity:<group_path>/<identity_name>
@@ -2573,7 +2573,7 @@ maximum job duration and managed identities. Shows final
 output as JSON, if specified. Idempotent when used with
 -if-not-exists option.
   
-```shell
+```bash
 tharsis workspace create \
   -parent-group-id trn:group:<group_path> \
   -description "Production workspace" \
@@ -2638,7 +2638,7 @@ deployed (dangerous!).
 
 Use with caution as deleting a workspace is irreversible!
   
-```shell
+```bash
 tharsis workspace delete -force trn:workspace:<workspace_path>
 ```
   
@@ -2659,7 +2659,7 @@ Metadata version of the resource to be deleted. In most cases, this is not requi
   
 The workspace delete-terraform-var command deletes a terraform variable from a workspace.
   
-```shell
+```bash
 tharsis workspace delete-terraform-var \
   -key region \
   trn:workspace:<workspace_path>
@@ -2683,7 +2683,7 @@ Metadata version of the resource to be deleted. In most cases, this is not requi
 The workspace get command prints information about one
 workspace.
   
-```shell
+```bash
 tharsis workspace get trn:workspace:<workspace_path>
 ```
   
@@ -2701,7 +2701,7 @@ Show final output as JSON.\
   
 The workspace get-assigned-managed-identities command lists managed identities assigned to a workspace.
   
-```shell
+```bash
 tharsis workspace get-assigned-managed-identities trn:workspace:<workspace_path>
 ```
   
@@ -2719,7 +2719,7 @@ Output in JSON format.\
   
 The workspace get-membership command retrieves details about a specific workspace membership.
   
-```shell
+```bash
 tharsis workspace get-membership \
   -user-id trn:user:<username> \
   trn:workspace:<workspace_path>
@@ -2761,7 +2761,7 @@ Username to find the workspace membership for.\
   
 The workspace get-terraform-var command retrieves a terraform variable for a workspace.
   
-```shell
+```bash
 tharsis workspace get-terraform-var \
   -key region \
   trn:workspace:<workspace_path>
@@ -2795,7 +2795,7 @@ Label operations:
 key=value  Add or update a label
 key-       Remove a label (not allowed with -overwrite)
   
-```shell
+```bash
 tharsis workspace label \
   -overwrite \
   trn:workspace:<workspace_path> \
@@ -2824,7 +2824,7 @@ The workspace list command prints information about (likely
 multiple) workspaces. Supports pagination, filtering and
 sorting the output.
   
-```shell
+```bash
 tharsis workspace list \
   -group-id trn:group:<group_path> \
   -label env=prod \
@@ -2885,7 +2885,7 @@ Sort in this direction.\
 The workspace list-environment-vars command retrieves all environment
 variables from a workspace and its parent groups.
   
-```shell
+```bash
 tharsis workspace list-environment-vars -show-sensitive trn:workspace:<workspace_path>
 ```
   
@@ -2909,7 +2909,7 @@ Show the actual values of sensitive variables (requires appropriate permissions)
 The workspace list-memberships command prints information about
 memberships for a specific workspace.
   
-```shell
+```bash
 tharsis workspace list-memberships trn:workspace:<workspace_path>
 ```
   
@@ -2928,7 +2928,7 @@ Show final output as JSON.\
 The workspace list-terraform-vars command retrieves all terraform
 variables from a workspace and its parent groups.
   
-```shell
+```bash
 tharsis workspace list-terraform-vars -show-sensitive trn:workspace:<workspace_path>
 ```
   
@@ -2951,7 +2951,7 @@ Show the actual values of sensitive variables (requires appropriate permissions)
   
 The workspace migrate command migrates a workspace to a different group.
   
-```shell
+```bash
 tharsis workspace migrate \
   -new-group-id trn:group:<group_path> \
   trn:workspace:<workspace_path>
@@ -2984,7 +2984,7 @@ In addition, it supports filtering the output for each of the supported types ab
 
 Combining -raw and -json is not allowed.
   
-```shell
+```bash
 tharsis workspace outputs trn:workspace:<workspace_path>
 ```
   
@@ -3011,7 +3011,7 @@ For any value that can be converted to a string, output just the raw value.\
   
 The workspace remove-membership command removes a membership from a workspace.
   
-```shell
+```bash
 tharsis workspace remove-membership <id>
 ```
   
@@ -3030,7 +3030,7 @@ The workspace set-environment-vars command sets environment variables for a work
 Command will overwrite any existing environment variables in the target workspace!
 Note: This command does not support sensitive variables.
   
-```shell
+```bash
 tharsis workspace set-environment-vars \
   -env-var-file vars.env \
   trn:workspace:<workspace_path>
@@ -3049,7 +3049,7 @@ Path to an environment variables file.
   
 The workspace set-terraform-var command creates or updates a terraform variable for a workspace.
   
-```shell
+```bash
 tharsis workspace set-terraform-var \
   -key region \
   -value us-east-1 \
@@ -3080,7 +3080,7 @@ The workspace set-terraform-vars command sets terraform variables for a workspac
 Command will overwrite any existing Terraform variables in the target workspace!
 Note: This command does not support sensitive variables.
   
-```shell
+```bash
 tharsis workspace set-terraform-vars \
   -tf-var-file terraform.tfvars \
   trn:workspace:<workspace_path>
@@ -3099,7 +3099,7 @@ Path to a .tfvars file.
   
 The workspace unassign-managed-identity command removes a managed identity from a workspace.
   
-```shell
+```bash
 tharsis workspace unassign-managed-identity \
   trn:workspace:<workspace_path> \
   trn:managed_identity:<group_path>/<identity_name>
@@ -3114,7 +3114,7 @@ Currently, it supports updating the description and the
 maximum job duration. Shows final output as JSON, if
 specified.
   
-```shell
+```bash
 tharsis workspace update \
   -description "Updated production workspace" \
   -terraform-version "1.6.0" \
@@ -3161,7 +3161,7 @@ Metadata version of the resource to be updated. In most cases, this is not requi
   
 The workspace update-membership command updates a workspace membership's role.
   
-```shell
+```bash
 tharsis workspace update-membership \
   -role-id trn:role:<role_name> \
   <id>

@@ -268,7 +268,7 @@ func writeExample(m *md.Markdown, example string) {
 	if strings.Contains(example, "```") {
 		m.PlainText(example).LF()
 	} else {
-		m.CodeBlocks(md.SyntaxHighlightShell, example).LF()
+		m.CodeBlocks("bash", example).LF()
 	}
 }
 
