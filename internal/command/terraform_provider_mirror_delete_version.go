@@ -89,6 +89,7 @@ func (c *terraformProviderMirrorDeleteVersionCommand) Flags() *flag.Set {
 		&c.force,
 		"force",
 		"Skip confirmation prompt.",
+		flag.Aliases("f"),
 	)
 
 	return f

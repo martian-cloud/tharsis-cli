@@ -83,7 +83,7 @@ func (c *terraformProviderMirrorGetVersionCommand) Flags() *flag.Set {
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		"Output in JSON format.",
+		"Show final output as JSON.",
 		flag.Default(false),
 	)
 

@@ -98,6 +98,7 @@ func (c *groupDeleteCommand) Flags() *flag.Set {
 		&c.force,
 		"force",
 		"Force delete the group.",
+		flag.Aliases("f"),
 	)
 
 	return f
