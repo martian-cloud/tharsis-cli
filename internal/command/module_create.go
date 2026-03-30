@@ -177,7 +177,6 @@ func (c *moduleCreateCommand) Flags() *flag.Set {
 		&c.toJSON,
 		"json",
 		"Show final output as JSON.",
-		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.ifNotExists,

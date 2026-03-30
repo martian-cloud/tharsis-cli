@@ -169,8 +169,7 @@ tharsis caller-identity
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -351,8 +350,7 @@ tharsis group add-membership \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### role <span style={{color:'orange'}}>!</span>
 
@@ -415,8 +413,7 @@ Create a group if it does not already exist.\
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### parent-group-id
 
@@ -488,8 +485,7 @@ tharsis group get \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -508,8 +504,7 @@ tharsis group get-membership \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### service-account-id
 
@@ -550,8 +545,7 @@ tharsis group get-terraform-var \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### key <span style={{color:'red'}}>*</span>
 
@@ -587,8 +581,7 @@ The cursor string for manual pagination.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### limit
 
@@ -635,8 +628,7 @@ tharsis group list-environment-vars -show-sensitive trn:group:<group_path>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### show-sensitive
 
@@ -659,8 +651,7 @@ tharsis group list-memberships trn:group:<group_path>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -678,8 +669,7 @@ tharsis group list-terraform-vars -show-sensitive trn:group:<group_path>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### show-sensitive
 
@@ -704,8 +694,7 @@ tharsis group migrate \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### new-parent-id
 
@@ -832,8 +821,7 @@ Description for the group.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### version
 
@@ -856,8 +844,7 @@ tharsis group update-membership \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### role <span style={{color:'orange'}}>!</span>
 
@@ -933,8 +920,7 @@ The group path where the managed identity will be created.\
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### kubernetes-federated-audience
 
@@ -989,8 +975,7 @@ tharsis managed-identity get trn:managed_identity:<group_path>/<managed_identity
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -1028,8 +1013,7 @@ Description for the managed identity.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### kubernetes-federated-audience
 
@@ -1087,8 +1071,7 @@ Allowed user ID.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### managed-identity-id
 
@@ -1143,8 +1126,7 @@ tharsis managed-identity-access-rule get <id>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -1163,8 +1145,7 @@ tharsis managed-identity-access-rule list \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### managed-identity-id
 
@@ -1204,8 +1185,7 @@ Allowed user ID.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### module-attestation-policy <span style={{color:'green'}}>...</span>
 
@@ -1263,8 +1243,7 @@ Full path of the group where the managed identity alias will be created.\
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### name <span style={{color:'orange'}}>!</span>
 
@@ -1447,8 +1426,7 @@ Create a module if it does not already exist.\
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### private
 
@@ -1485,8 +1463,7 @@ Description for the attestation.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -1540,8 +1517,7 @@ tharsis module get trn:terraform_module:<group_path>/<module_name>/<system>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -1558,8 +1534,7 @@ tharsis module get-version trn:terraform_module_version:<group_path>/<module_nam
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### version <span style={{color:'orange'}}>!</span>
 
@@ -1601,8 +1576,7 @@ Include modules inherited from parent groups.\
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### limit
 
@@ -1650,8 +1624,7 @@ Filter to attestations with this digest.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### limit
 
@@ -1692,8 +1665,7 @@ The cursor string for manual pagination.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### latest
 
@@ -1742,8 +1714,7 @@ tharsis module update \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### private
 
@@ -1778,8 +1749,7 @@ Description for the attestation.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -1986,8 +1956,7 @@ Full path of group where runner will be created.\
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### run-untagged-jobs
 
@@ -2035,8 +2004,7 @@ tharsis runner-agent get trn:runner:<group_path>/<runner_name>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -2078,8 +2046,7 @@ Enable or disable the runner agent.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### run-untagged-jobs
 
@@ -2192,8 +2159,7 @@ The ID of the group to create the provider in.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### private
 
@@ -2293,8 +2259,7 @@ tharsis terraform-provider-mirror get-version <version-mirror-id>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -2325,8 +2290,7 @@ The cursor string for manual pagination.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### limit
 
@@ -2366,8 +2330,7 @@ The cursor string for manual pagination.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### limit
 
@@ -2516,8 +2479,7 @@ tharsis workspace add-membership \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### role <span style={{color:'orange'}}>!</span>
 
@@ -2599,8 +2561,7 @@ Create a workspace if it does not already exist.\
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### label <span style={{color:'green'}}>...</span>
 
@@ -2691,8 +2652,7 @@ tharsis workspace get trn:workspace:<workspace_path>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -2709,8 +2669,7 @@ tharsis workspace get-assigned-managed-identities trn:workspace:<workspace_path>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -2729,8 +2688,7 @@ tharsis workspace get-membership \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### service-account-id
 
@@ -2771,8 +2729,7 @@ tharsis workspace get-terraform-var \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### key <span style={{color:'red'}}>*</span>
 
@@ -2807,8 +2764,7 @@ tharsis workspace label \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### overwrite
 
@@ -2851,8 +2807,7 @@ Filter to only workspaces in this group path.\
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### label <span style={{color:'green'}}>...</span>
 
@@ -2893,8 +2848,7 @@ tharsis workspace list-environment-vars -show-sensitive trn:workspace:<workspace
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### show-sensitive
 
@@ -2917,8 +2871,7 @@ tharsis workspace list-memberships trn:workspace:<workspace_path>
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 
 ---
@@ -2936,8 +2889,7 @@ tharsis workspace list-terraform-vars -show-sensitive trn:workspace:<workspace_p
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### show-sensitive
 
@@ -2961,8 +2913,7 @@ tharsis workspace migrate \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### new-group-id <span style={{color:'red'}}>*</span>
 
@@ -3131,8 +3082,7 @@ Description for the workspace.
 
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### label <span style={{color:'green'}}>...</span>
 
@@ -3171,8 +3121,7 @@ tharsis workspace update-membership \
   
 #### json
 
-Show final output as JSON.\
-**Default:** `false`
+Show final output as JSON.
 
 #### role <span style={{color:'orange'}}>!</span>
 

@@ -200,7 +200,6 @@ func (c *workspaceCreateCommand) Flags() *flag.Set {
 		&c.toJSON,
 		"json",
 		"Show final output as JSON.",
-		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.ifNotExists,

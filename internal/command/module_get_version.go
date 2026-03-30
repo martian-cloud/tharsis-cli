@@ -92,7 +92,6 @@ func (c *moduleGetVersionCommand) Flags() *flag.Set {
 		&c.toJSON,
 		"json",
 		"Show final output as JSON.",
-		flag.Default(false),
 	)
 	f.StringVar(
 		&c.version,
