@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/common-nighthawk/go-figure"
 	"github.com/fatih/color"
 	"github.com/mitchellh/cli"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
@@ -21,14 +22,23 @@ func helpFunc(globalFlags *flag.Set) cli.HelpFunc {
 
 		var buf bytes.Buffer
 
-		// Header.
-		fmt.Fprint(&buf, color.New(color.Bold, color.FgHiGreen).Sprint("Welcome to Tharsis"))
-		fmt.Fprintln(&buf, " - An open-source Terraform platform.")
-		fmt.Fprint(&buf, bold.Sprint("Documentation:"))
-		fmt.Fprintln(&buf, " https://tharsis.martian-cloud.io")
-		fmt.Fprint(&buf, green.Sprint("Version:"))
-		fmt.Fprintln(&buf, " "+Version)
-		fmt.Fprintln(&buf)
+		// Logo.
+		logoLines := strings.Split(strings.TrimRight(figure.NewFigure("THARSIS", "block", true).String(), "\n"), "\n")
+		shades := []*color.Color{
+			color.New(color.FgHiGreen, color.Bold),
+			color.New(color.FgHiGreen),
+			color.New(color.FgGreen, color.Bold),
+			color.New(color.FgGreen),
+			color.New(color.FgGreen),
+		}
+
+		for i, line := range logoLines {
+			fmt.Fprintln(&buf, shades[i%len(shades)].Sprint(line))
+		}
+
+		dim := color.New(color.Faint)
+		fmt.Fprintf(&buf, "  %s %s\n", dim.Sprint("Version:"), Version)
+		fmt.Fprintf(&buf, "  %s %s\n\n", dim.Sprint("Docs:"), "https://tharsis.martian-cloud.io")
 
 		// Usage.
 		fmt.Fprintf(&buf, "%s [global options] <command> [options] <args>\n\n", green.Sprint("tharsis"))

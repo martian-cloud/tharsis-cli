@@ -8,6 +8,7 @@ require (
 	github.com/aws/smithy-go v1.24.0
 	github.com/bgentry/speakeasy v0.1.0
 	github.com/briandowns/spinner v1.11.1
+	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 	github.com/containerd/console v1.0.3
 	github.com/fatih/color v1.18.0
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
@@ -15,6 +16,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hashicorp/go-slug v0.16.4
 	github.com/hashicorp/go-uuid v1.0.3
+	github.com/hashicorp/go-version v1.9.0
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/hashicorp/terraform-registry-address v0.2.3
 	github.com/kr/text v0.2.0
