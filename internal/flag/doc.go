@@ -32,4 +32,5 @@
 //
 //	var labels map[string]string
 //	fs.MapVar(&labels, "label", "key=value pair")        // -label env=prod
+//	                                                     // -label env=- removes key
 package flag

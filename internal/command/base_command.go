@@ -52,6 +52,16 @@ func (o *baseOptions) isForceFlagSet() bool {
 	return f != nil && f.Value() == "true"
 }
 
+// isJSONFlagSet checks if the -json flag is set in the parsed flags.
+func (o *baseOptions) isJSONFlagSet() bool {
+	if o.flags == nil {
+		return false
+	}
+
+	f := o.flags.Lookup("json")
+	return f != nil && f.Value() == "true"
+}
+
 // BaseOptionsFunc is an alias that allows setting baseOptions.
 type BaseOptionsFunc func(*baseOptions) error
 
@@ -247,6 +257,12 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 		if err := o.flags.Parse(o.args); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to parse %s options", o.commandName)
 			return cli.RunResultHelp
+		}
+
+		if !o.isJSONFlagSet() {
+			for _, d := range o.flags.Deprecations() {
+				c.UI.Warnf("WARNING: %s", d)
+			}
 		}
 
 		c.arguments = o.flags.Args()
