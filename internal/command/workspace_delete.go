@@ -98,6 +98,7 @@ func (c *workspaceDeleteCommand) Flags() *flag.Set {
 		&c.force,
 		"force",
 		"Force the workspace to delete even if resources are deployed.",
+		flag.Aliases("f"),
 	)
 
 	return f

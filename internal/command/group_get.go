@@ -87,7 +87,7 @@ func (c *groupGetCommand) Flags() *flag.Set {
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		"Show output as JSON.",
+		"Show final output as JSON.",
 		flag.Default(false),
 	)
 

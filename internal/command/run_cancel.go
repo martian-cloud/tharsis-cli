@@ -119,6 +119,7 @@ func (c *runCancelCommand) Flags() *flag.Set {
 		&c.force,
 		"force",
 		"Force the run to cancel.",
+		flag.Aliases("f"),
 	)
 
 	return f

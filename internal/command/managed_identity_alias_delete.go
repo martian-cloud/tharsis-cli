@@ -88,6 +88,7 @@ func (c *managedIdentityAliasDeleteCommand) Flags() *flag.Set {
 		&c.force,
 		"force",
 		"Force delete the managed identity alias.",
+		flag.Aliases("f"),
 	)
 
 	return f
