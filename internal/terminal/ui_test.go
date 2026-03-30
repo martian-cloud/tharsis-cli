@@ -29,7 +29,6 @@ func TestNamedValues(t *testing.T) {
               a: test
              of: foo
   the_key_value: style
-
 `
 
 	require.Equal(strings.TrimLeft(expected, "\n"), buf.String())
@@ -56,7 +55,6 @@ func TestNamedValues_server(t *testing.T) {
   gRPC Address: 127.0.0.1:1234
   HTTP Address: 127.0.0.1:1235
    URL Service: api.alpha.waypoint.run:443 (account: token)
-
 `
 
 	require.Equal(expected, buf.String())

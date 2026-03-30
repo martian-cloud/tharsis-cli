@@ -3,6 +3,8 @@ package command
 import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/updater"
 )
 
 // versionCommand returns the remote API backend version this CLI connects to.
@@ -39,19 +41,41 @@ func (c *versionCommand) Run(args []string) int {
 		return code
 	}
 
-	version := struct {
-		CLI string `json:"cli"`
-	}{
-		CLI: c.Version,
+	update := updater.Check(c.Version)
+
+	type versionOutput struct {
+		CLI         string `json:"cli"`
+		Latest      string `json:"latest,omitempty"`
+		DownloadURL string `json:"download_url,omitempty"`
+	}
+
+	out := versionOutput{CLI: c.Version}
+	if update.Status == updater.StatusUpdateAvailable {
+		out.Latest = update.Latest
+		out.DownloadURL = update.DownloadURL
 	}
 
 	if *c.toJSON {
-		if err := c.UI.JSON(version); err != nil {
+		if err := c.UI.JSON(out); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
 		}
 	} else {
-		c.UI.Output(version.CLI)
+		values := []terminal.NamedValue{
+			{Name: "Version", Value: out.CLI},
+		}
+
+		switch update.Status {
+		case updater.StatusUpdateAvailable:
+			values = append(values,
+				terminal.NamedValue{Name: "Latest", Value: update.Latest},
+				terminal.NamedValue{Name: "Download", Value: update.DownloadURL},
+			)
+		case updater.StatusUpToDate:
+			values = append(values, terminal.NamedValue{Name: "Status", Value: "up to date"})
+		}
+
+		c.UI.NamedValues(values)
 	}
 
 	return 0
