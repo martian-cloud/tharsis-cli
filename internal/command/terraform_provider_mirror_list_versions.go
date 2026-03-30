@@ -1,7 +1,6 @@
 package command
 
 import (
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -33,10 +32,6 @@ func NewTerraformProviderMirrorListVersionsCommandFactory(baseCommand *BaseComma
 }
 
 func (c *terraformProviderMirrorListVersionsCommand) validate() error {
-	if c.sortBy != nil && c.sortOrder != nil {
-		return fmt.Errorf("cannot use both -sort-by and -sort-order")
-	}
-
 	const message = "namespace-path is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,

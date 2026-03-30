@@ -75,8 +75,7 @@ func (c *groupListCommand) Run(args []string) int {
 	}
 
 	if c.sortBy != nil {
-		value := pb.GroupSortableField(pb.GroupSortableField_value[*c.sortBy])
-		input.Sort = value.Enum()
+		input.Sort = pb.GroupSortableField(pb.GroupSortableField_value[*c.sortBy]).Enum()
 	}
 
 	result, err := c.grpcClient.GroupsClient.GetGroups(c.Context, input)
