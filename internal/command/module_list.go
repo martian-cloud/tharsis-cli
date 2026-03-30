@@ -82,7 +82,7 @@ func (c *moduleListCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON, "trn", "name", "system", "private")
 }
 
 func (*moduleListCommand) Synopsis() string {

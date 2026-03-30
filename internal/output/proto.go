@@ -18,25 +18,29 @@ import (
 )
 
 const (
-	// humanTimeFormat is the format used for displaying timestamps.
+	// humanTimeFormat is used instead of raw RFC3339 timestamps
+	// because ISO dates are hard to scan quickly in CLI output.
 	humanTimeFormat = "January 2 2006, 3:04:05 PM MST"
 
-	// maxValueLen is the maximum display length for a field value before truncation.
+	// maxValueLen prevents single field values from dominating
+	// the named-values display (e.g. long descriptions or paths).
 	maxValueLen = 120
+
+	// ellipsis is appended to truncated column values in table output.
+	ellipsis = "..."
 )
 
 var (
 	titleCaser = cases.Title(language.English)
 
-	// tableSkippedFields are proto fields hidden from table output to reduce clutter.
-	tableSkippedFields = map[string]struct{}{
-		"created_at": {},
-		"created_by": {},
-		"updated_at": {},
-		"version":    {},
-		"trn":        {},
+	// transparentFields are wrapper messages (like metadata) whose children
+	// should appear as top-level fields rather than nested under a prefix.
+	transparentFields = map[string]struct{}{
+		"metadata": {},
 	}
 
+	// jsonOpts emits zero-values so boolean false and empty strings
+	// are distinguishable from absent fields in the output.
 	jsonOpts = protojson.MarshalOptions{
 		EmitDefaultValues: true,
 		UseProtoNames:     true,
@@ -46,7 +50,7 @@ var (
 // field is a flattened proto field with a display name and raw value.
 type field struct {
 	name  string
-	key   string // original snake_case name
+	key   string // original snake_case name used for lookups
 	value any
 }
 
@@ -67,6 +71,7 @@ func ProtoToNamedValues(msg proto.Message) []terminal.NamedValue {
 		values = append(values, terminal.NamedValue{Name: f.name, Value: s})
 	}
 
+	// Shorter values first so the eye can scan key identifiers quickly.
 	sort.SliceStable(values, func(i, j int) bool {
 		return len(values[i].Value.(string)) < len(values[j].Value.(string))
 	})
@@ -75,63 +80,64 @@ func ProtoToNamedValues(msg proto.Message) []terminal.NamedValue {
 }
 
 // ProtoToTable builds a Table from a slice of proto messages.
-// Column headers come from field descriptors; tableSkippedFields are excluded.
-func ProtoToTable(msgs []proto.Message) *terminal.Table {
+// fields restricts and orders columns by their snake_case keys
+// (e.g. "full_path", "terraform_version"). When omitted, all fields are shown
+// as a fallback but callers should always specify the fields they need.
+func ProtoToTable(msgs []proto.Message, fields ...string) *terminal.Table {
 	if len(msgs) == 0 {
 		return nil
 	}
 
-	// Derive headers from descriptors, filtering skipped fields.
 	var headers []string
 	var headerKeys []string
 	for _, f := range protoFieldNames(msgs[0].ProtoReflect()) {
-		if _, skip := tableSkippedFields[f.key]; skip {
-			continue
-		}
-
 		headers = append(headers, f.name)
 		headerKeys = append(headerKeys, f.key)
 	}
 
-	// Build rows, keeping only non-skipped fields.
-	var rows [][]string
-	for _, msg := range msgs {
+	if len(fields) > 0 {
+		// Commands specify which columns to display so tables only contain
+		// relevant information and column order stays predictable regardless
+		// of proto field ordering.
+		index := make(map[string]int, len(headerKeys))
+		for i, k := range headerKeys {
+			index[k] = i
+		}
+
+		var fh, fk []string
+		for _, f := range fields {
+			if i, ok := index[f]; ok {
+				fh = append(fh, headers[i])
+				fk = append(fk, headerKeys[i])
+			}
+		}
+
+		headers, headerKeys = fh, fk
+	}
+
+	rows := make([][]string, len(msgs))
+	for i, msg := range msgs {
 		values := flattenProtoMap(msg)
 		row := make([]string, len(headerKeys))
-		for i, key := range headerKeys {
-			row[i] = formatValue(values[key])
+		for j, key := range headerKeys {
+			row[j] = formatValue(values[key])
 		}
 
-		rows = append(rows, row)
+		rows[i] = row
 	}
 
-	// Only truncate if content exceeds terminal width.
-	colWidth := 0
-	if n := len(headers); n > 0 {
-		totalWidth := n * 3
-		for i, h := range headers {
-			w := len(h)
-			for _, row := range rows {
-				if len(row[i]) > w {
-					w = len(row[i])
-				}
-			}
+	// Drop columns where every row is empty since they add visual
+	// noise without conveying information (e.g. unset optional fields
+	// like team_id on memberships).
+	headers, rows = dropEmptyColumns(headers, rows)
 
-			totalWidth += w
-		}
-
-		if termWidth := terminal.GetTerminalWidth(); totalWidth > termWidth {
-			colWidth = (termWidth - n*3) / n
-		}
-	}
+	colWidths := columnWidths(headers, rows)
 
 	t := terminal.NewTable(headers...)
 	for _, row := range rows {
-		if colWidth > 0 {
-			for i := range row {
-				if len(row[i]) > colWidth {
-					row[i] = row[i][:colWidth] + "..."
-				}
+		for i := range row {
+			if colWidths != nil && len(row[i]) > colWidths[i] {
+				row[i] = row[i][:colWidths[i]] + ellipsis
 			}
 		}
 
@@ -144,11 +150,11 @@ func ProtoToTable(msgs []proto.Message) *terminal.Table {
 // ExtractListFields extracts the repeated message items and optional PageInfo
 // from a proto response. Plain slices are returned as-is with no PageInfo.
 func ExtractListFields(data any) ([]proto.Message, *pb.PageInfo) {
-	if _, ok := data.(proto.Message); !ok {
+	msg, ok := data.(proto.Message)
+	if !ok {
 		return toProtoSlice(data), nil
 	}
 
-	msg := data.(proto.Message)
 	var items []proto.Message
 	var pageInfo *pb.PageInfo
 
@@ -176,7 +182,113 @@ func ExtractListFields(data any) ([]proto.Message, *pb.PageInfo) {
 	return items, pageInfo
 }
 
-// toProtoSlice converts a typed slice (e.g. []*pb.Group) to []proto.Message.
+func dropEmptyColumns(headers []string, rows [][]string) ([]string, [][]string) {
+	var keep []int
+	for i := range headers {
+		for _, row := range rows {
+			if row[i] != "" {
+				keep = append(keep, i)
+				break
+			}
+		}
+	}
+
+	if len(keep) == len(headers) {
+		return headers, rows
+	}
+
+	fh := make([]string, len(keep))
+	for j, i := range keep {
+		fh[j] = headers[i]
+	}
+
+	for r, row := range rows {
+		fr := make([]string, len(keep))
+		for j, i := range keep {
+			fr[j] = row[i]
+		}
+
+		rows[r] = fr
+	}
+
+	return fh, rows
+}
+
+// columnWidths returns per-column character limits to fit the table within
+// the terminal, or nil if no truncation is needed. Columns that naturally
+// fit within an equal share keep their width; the surplus is redistributed
+// to wider columns so narrow columns aren't needlessly truncated.
+func columnWidths(headers []string, rows [][]string) []int {
+	n := len(headers)
+	if n == 0 {
+		return nil
+	}
+
+	// Find the natural (max content) width of each column.
+	natural := make([]int, n)
+	for i, h := range headers {
+		natural[i] = len(h)
+		for _, row := range rows {
+			if len(row[i]) > natural[i] {
+				natural[i] = len(row[i])
+			}
+		}
+	}
+
+	separators := n * 3
+	totalWidth := separators
+	for _, w := range natural {
+		totalWidth += w
+	}
+
+	termWidth := terminal.GetTerminalWidth()
+	if totalWidth <= termWidth {
+		return nil
+	}
+
+	// Start with an equal share per column, then let narrow columns
+	// give back unused space to wider ones.
+	available := termWidth - separators
+	if available <= 0 {
+		return nil
+	}
+
+	limits := make([]int, n)
+	equalShare := available / n
+	if equalShare == 0 {
+		equalShare = 1
+	}
+
+	surplus := 0
+
+	// Count how many columns need more than their equal share.
+	wideCount := 0
+	for i, w := range natural {
+		if w <= equalShare {
+			limits[i] = w
+			surplus += equalShare - w
+		} else {
+			wideCount++
+		}
+	}
+
+	// Distribute the surplus evenly among wide columns.
+	wideShare := equalShare
+	if wideCount > 0 {
+		wideShare = equalShare + surplus/wideCount
+	}
+
+	for i, w := range natural {
+		if w > equalShare {
+			limits[i] = max(wideShare-len(ellipsis), 0)
+		}
+	}
+
+	return limits
+}
+
+// toProtoSlice converts a typed slice (e.g. []*pb.Group) to []proto.Message
+// using reflection, since Go generics can't express "any slice of proto.Message implementors".
 func toProtoSlice(v any) []proto.Message {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Slice {
@@ -206,8 +318,9 @@ func flattenProto(msg proto.Message) []field {
 	return fields
 }
 
-// flattenProtoMap marshals a proto to JSON and returns a flat map of snake_case key → value.
-// Nested objects are flattened; timestamps are formatted as human-readable strings.
+// flattenProtoMap marshals a proto to JSON then flattens nested objects into
+// a single-level map keyed by snake_case paths. This approach avoids manually
+// walking every proto field type — protojson handles oneof, wrappers, enums, etc.
 func flattenProtoMap(msg proto.Message) map[string]any {
 	data, err := jsonOpts.Marshal(msg)
 	if err != nil {
@@ -219,43 +332,55 @@ func flattenProtoMap(msg proto.Message) map[string]any {
 		return nil
 	}
 
-	// Collect map field names so we don't flatten them.
+	// Proto map fields look like nested JSON objects but shouldn't be flattened —
+	// they're user-defined key-value pairs, not structured sub-messages.
 	mapFields := make(map[string]struct{})
 	collectMapFields(msg.ProtoReflect().Descriptor().Fields(), mapFields)
 
 	out := make(map[string]any)
-	var flatten func(m map[string]any)
-	flatten = func(m map[string]any) {
-		for k, v := range m {
-			nested, isMap := v.(map[string]any)
-			if !isMap {
-				// Format RFC 3339 timestamps to human-readable.
-				if s, ok := v.(string); ok {
-					if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-						v = t.Local().Format(humanTimeFormat)
-					}
-				}
-
-				out[k] = v
-
-				continue
-			}
-
-			// Keep proto map fields (e.g. labels) as-is; flatten nested messages.
-			if _, isProtoMap := mapFields[k]; isProtoMap {
-				out[k] = nested
-			} else {
-				flatten(nested)
-			}
-		}
-	}
-
-	flatten(raw)
+	flattenJSON(raw, "", mapFields, out)
 
 	return out
 }
 
-// collectMapFields finds all map field names in a proto descriptor, recursing into nested messages.
+// flattenJSON recursively flattens a JSON object into out, joining nested keys
+// with underscores. Proto map fields and scalar values are stored as-is.
+func flattenJSON(m map[string]any, prefix string, mapFields map[string]struct{}, out map[string]any) {
+	for k, v := range m {
+		nested, isMap := v.(map[string]any)
+		if !isMap {
+			// Convert RFC3339 timestamps to a human-friendly format
+			// since raw timestamps are unreadable in CLI output.
+			if s, ok := v.(string); ok {
+				if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+					v = t.Local().Format(humanTimeFormat)
+				}
+			}
+
+			out[prefix+k] = v
+
+			continue
+		}
+
+		// Proto map fields are user-defined key-value pairs that should
+		// be kept as a single value, not recursively flattened.
+		if _, isProtoMap := mapFields[k]; isProtoMap {
+			out[prefix+k] = nested
+			continue
+		}
+
+		childPrefix := prefix + k + "_"
+		if _, ok := transparentFields[k]; ok {
+			childPrefix = prefix
+		}
+
+		flattenJSON(nested, childPrefix, mapFields, out)
+	}
+}
+
+// collectMapFields finds all map field names in a proto descriptor tree.
+// These need special handling during JSON flattening to avoid breaking
+// user-defined key-value pairs into separate flattened keys.
 func collectMapFields(fields protoreflect.FieldDescriptors, out map[string]struct{}) {
 	for i := range fields.Len() {
 		fd := fields.Get(i)
@@ -268,34 +393,41 @@ func collectMapFields(fields protoreflect.FieldDescriptors, out map[string]struc
 }
 
 // protoFieldNames returns display names in proto definition order,
-// flattening nested messages (e.g. metadata).
+// flattening transparent wrapper messages (e.g. metadata).
 func protoFieldNames(msg protoreflect.Message) []field {
 	var out []field
+	walkFieldNames(msg.Descriptor().Fields(), msg, "", &out)
 
-	var walk func(protoreflect.FieldDescriptors, protoreflect.Message)
-	walk = func(fields protoreflect.FieldDescriptors, m protoreflect.Message) {
-		for i := range fields.Len() {
-			fd := fields.Get(i)
-			key := string(fd.Name())
+	return out
+}
 
-			if fd.Kind() == protoreflect.MessageKind && !fd.IsList() && !fd.IsMap() {
-				if fd.Message().FullName() == "google.protobuf.Timestamp" {
-					out = append(out, field{name: displayName(key), key: key})
-					continue
-				}
+// walkFieldNames recursively collects field display names from proto descriptors.
+func walkFieldNames(fields protoreflect.FieldDescriptors, m protoreflect.Message, prefix string, out *[]field) {
+	for i := range fields.Len() {
+		fd := fields.Get(i)
+		name := string(fd.Name())
+		key := prefix + name
 
-				walk(fd.Message().Fields(), m.Get(fd).Message())
-
+		// Recurse into nested messages to flatten their fields,
+		// but treat Timestamps as leaf values since they display as a single string.
+		if fd.Kind() == protoreflect.MessageKind && !fd.IsList() && !fd.IsMap() {
+			if fd.Message().FullName() == "google.protobuf.Timestamp" {
+				*out = append(*out, field{name: displayName(key), key: key})
 				continue
 			}
 
-			out = append(out, field{name: displayName(key), key: key})
+			childPrefix := key + "_"
+			if _, ok := transparentFields[name]; ok {
+				childPrefix = prefix
+			}
+
+			walkFieldNames(fd.Message().Fields(), m.Get(fd).Message(), childPrefix, out)
+
+			continue
 		}
+
+		*out = append(*out, field{name: displayName(key), key: key})
 	}
-
-	walk(msg.Descriptor().Fields(), msg)
-
-	return out
 }
 
 // formatValue converts a field value to a display string.
@@ -311,6 +443,7 @@ func formatValue(v any) string {
 			pairs = append(pairs, fmt.Sprintf("%s=%v", k, v))
 		}
 
+		// Sorted for deterministic output in tests and consistent display.
 		sort.Strings(pairs)
 
 		return strings.Join(pairs, ", ")
@@ -326,7 +459,7 @@ func formatValue(v any) string {
 	}
 }
 
-// displayName converts a snake_case proto field name to Title Case.
+// displayName converts a snake_case proto field name to Title Case for display.
 func displayName(s string) string {
 	return titleCaser.String(strings.ReplaceAll(s, "_", " "))
 }

@@ -64,7 +64,7 @@ func (c *workspaceListMembershipsCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON, "id", "role_id", "namespace_path", "user_id", "service_account_id", "team_id")
 }
 
 func (*workspaceListMembershipsCommand) Synopsis() string {

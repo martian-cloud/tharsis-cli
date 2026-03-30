@@ -90,7 +90,7 @@ func (c *terraformProviderMirrorListVersionsCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON, "trn", "type", "semantic_version", "registry_namespace", "registry_hostname")
 }
 
 func (*terraformProviderMirrorListVersionsCommand) Synopsis() string {

@@ -84,7 +84,7 @@ func (c *moduleListAttestationsCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON, "trn", "description", "predicate_type", "schema_type")
 }
 
 func (*moduleListAttestationsCommand) Synopsis() string {

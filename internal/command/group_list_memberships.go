@@ -25,7 +25,7 @@ func NewGroupListMembershipsCommandFactory(baseCommand *BaseCommand) func() (Com
 }
 
 func (c *groupListMembershipsCommand) validate() error {
-	const message = "group-path is required"
+	const message = "group-id is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,
 			validation.Required.Error(message),
@@ -61,7 +61,7 @@ func (c *groupListMembershipsCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON, "id", "role_id", "namespace_path", "user_id", "service_account_id", "team_id")
 }
 
 func (*groupListMembershipsCommand) Synopsis() string {

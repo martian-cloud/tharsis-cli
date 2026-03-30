@@ -146,7 +146,7 @@ func (c *BaseCommand) Flags() *flag.Set {
 
 // Output renders a proto message as JSON or a human-readable table.
 func (c *BaseCommand) Output(msg proto.Message, toJSON *bool) int {
-	if *toJSON {
+	if toJSON != nil && *toJSON {
 		if err := c.UI.JSON(msg); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
@@ -162,9 +162,10 @@ func (c *BaseCommand) Output(msg proto.Message, toJSON *bool) int {
 
 // OutputList renders a paginated list as JSON or a table with pagination info.
 // data can be a proto message (with repeated fields and optional PageInfo) or a
-// plain slice of proto messages.
-func (c *BaseCommand) OutputList(data any, toJSON *bool) int {
-	if *toJSON {
+// plain slice of proto messages. An optional fields list controls which columns
+// appear in table output; see ProtoToTable for details.
+func (c *BaseCommand) OutputList(data any, toJSON *bool, fields ...string) int {
+	if toJSON != nil && *toJSON {
 		if err := c.UI.JSON(data); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get JSON output")
 			return 1
@@ -179,7 +180,7 @@ func (c *BaseCommand) OutputList(data any, toJSON *bool) int {
 		return 0
 	}
 
-	c.UI.Table(output.ProtoToTable(items))
+	c.UI.Table(output.ProtoToTable(items, fields...))
 
 	if pageInfo != nil {
 		c.UI.Output("---")

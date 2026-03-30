@@ -98,7 +98,7 @@ func (c *groupListEnvironmentVarsCommand) Run(args []string) int {
 		}
 	}
 
-	return c.OutputList(environmentVars, c.toJSON)
+	return c.OutputList(environmentVars, c.toJSON, "trn", "key", "value", "sensitive")
 }
 
 func (*groupListEnvironmentVarsCommand) Synopsis() string {

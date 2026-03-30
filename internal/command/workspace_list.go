@@ -84,7 +84,7 @@ func (c *workspaceListCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON, "trn", "name", "description", "locked")
 }
 
 func (*workspaceListCommand) Synopsis() string {
