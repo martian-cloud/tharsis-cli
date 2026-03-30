@@ -1,7 +1,6 @@
 package command
 
 import (
-	"fmt"
 	"maps"
 	"slices"
 
@@ -34,10 +33,6 @@ func NewModuleListAttestationsCommandFactory(baseCommand *BaseCommand) func() (C
 }
 
 func (c *moduleListAttestationsCommand) validate() error {
-	if c.sortBy != nil && c.sortOrder != nil {
-		return fmt.Errorf("cannot use both -sort-by and -sort-order")
-	}
-
 	const message = "module-id is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,
