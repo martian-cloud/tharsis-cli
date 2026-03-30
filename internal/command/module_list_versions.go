@@ -88,7 +88,7 @@ func (c *moduleListVersionsCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON, "trn", "semantic_version", "status", "latest")
 }
 
 func (*moduleListVersionsCommand) Synopsis() string {

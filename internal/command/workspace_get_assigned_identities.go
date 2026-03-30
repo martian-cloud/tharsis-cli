@@ -55,7 +55,7 @@ func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result.ManagedIdentities, c.toJSON)
+	return c.OutputList(result.ManagedIdentities, c.toJSON, "trn", "name", "type", "description")
 }
 
 func (*workspaceGetAssignedManagedIdentitiesCommand) Synopsis() string {

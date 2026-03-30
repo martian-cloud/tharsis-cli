@@ -53,7 +53,7 @@ func (c *managedIdentityAccessRuleListCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON)
+	return c.OutputList(result, c.toJSON, "id", "type", "run_stage", "verify_state_lineage")
 }
 
 func (*managedIdentityAccessRuleListCommand) Synopsis() string {
