@@ -103,7 +103,6 @@ func (c *groupUpdateCommand) Flags() *flag.Set {
 		&c.toJSON,
 		"json",
 		"Show final output as JSON.",
-		flag.Default(false),
 	)
 
 	return f

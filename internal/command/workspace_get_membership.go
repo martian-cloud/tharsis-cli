@@ -167,7 +167,6 @@ func (c *workspaceGetMembershipCommand) Flags() *flag.Set {
 		&c.toJSON,
 		"json",
 		"Show final output as JSON.",
-		flag.Default(false),
 	)
 	f.StringVar(
 		&c.serviceAccountID,
