@@ -169,7 +169,7 @@ tharsis caller-identity
   
 #### json
 
-Show output as JSON.\
+Show final output as JSON.\
 **Default:** `false`
 
 
@@ -351,7 +351,7 @@ tharsis group add-membership \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### role <span style={{color:'orange'}}>!</span>
@@ -439,7 +439,7 @@ tharsis group delete \
   
 #### Options
   
-#### force
+#### force, f
 
 Force delete the group.
 
@@ -488,7 +488,7 @@ tharsis group get \
   
 #### json
 
-Show output as JSON.\
+Show final output as JSON.\
 **Default:** `false`
 
 
@@ -508,7 +508,7 @@ tharsis group get-membership \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### service-account-id
@@ -550,7 +550,7 @@ tharsis group get-terraform-var \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### key <span style={{color:'red'}}>*</span>
@@ -635,7 +635,7 @@ tharsis group list-environment-vars -show-sensitive trn:group:<group_path>
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### show-sensitive
@@ -678,7 +678,7 @@ tharsis group list-terraform-vars -show-sensitive trn:group:<group_path>
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### show-sensitive
@@ -704,7 +704,7 @@ tharsis group migrate \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### new-parent-id
@@ -856,7 +856,7 @@ tharsis group update-membership \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### role <span style={{color:'orange'}}>!</span>
@@ -969,7 +969,7 @@ tharsis managed-identity delete -force trn:managed_identity:<group_path>/<manage
   
 #### Options
   
-#### force
+#### force, f
 
 Force delete the managed identity.
 
@@ -1284,7 +1284,7 @@ tharsis managed-identity-alias delete trn:managed_identity:<group_path>/<managed
   
 #### Options
   
-#### force
+#### force, f
 
 Force delete the managed identity alias.
 
@@ -1558,7 +1558,7 @@ tharsis module get-version trn:terraform_module_version:<group_path>/<module_nam
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### version <span style={{color:'orange'}}>!</span>
@@ -1914,7 +1914,7 @@ tharsis run cancel -force <id>
   
 #### Options
   
-#### force
+#### force, f
 
 Force the run to cancel.
 
@@ -2124,7 +2124,7 @@ tharsis service-account create-token \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### token <span style={{color:'red'}}>*</span>
@@ -2192,7 +2192,7 @@ The ID of the group to create the provider in.
 
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### private
@@ -2273,7 +2273,7 @@ tharsis terraform-provider-mirror delete-version -force <version-mirror-id>
   
 #### Options
   
-#### force
+#### force, f
 
 Skip confirmation prompt.
 
@@ -2293,7 +2293,7 @@ tharsis terraform-provider-mirror get-version <version-mirror-id>
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 
@@ -2516,7 +2516,7 @@ tharsis workspace add-membership \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### role <span style={{color:'orange'}}>!</span>
@@ -2644,7 +2644,7 @@ tharsis workspace delete -force trn:workspace:<workspace_path>
   
 #### Options
   
-#### force
+#### force, f
 
 Force the workspace to delete even if resources are deployed.
 
@@ -2709,7 +2709,7 @@ tharsis workspace get-assigned-managed-identities trn:workspace:<workspace_path>
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 
@@ -2729,7 +2729,7 @@ tharsis workspace get-membership \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### service-account-id
@@ -2771,7 +2771,7 @@ tharsis workspace get-terraform-var \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### key <span style={{color:'red'}}>*</span>
@@ -2807,7 +2807,7 @@ tharsis workspace label \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### overwrite
@@ -2893,7 +2893,7 @@ tharsis workspace list-environment-vars -show-sensitive trn:workspace:<workspace
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### show-sensitive
@@ -2936,7 +2936,7 @@ tharsis workspace list-terraform-vars -show-sensitive trn:workspace:<workspace_p
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### show-sensitive
@@ -2961,7 +2961,7 @@ tharsis workspace migrate \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### new-group-id <span style={{color:'red'}}>*</span>
@@ -2992,7 +2992,7 @@ tharsis workspace outputs trn:workspace:<workspace_path>
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### output-name
@@ -3171,7 +3171,7 @@ tharsis workspace update-membership \
   
 #### json
 
-Output in JSON format.\
+Show final output as JSON.\
 **Default:** `false`
 
 #### role <span style={{color:'orange'}}>!</span>
