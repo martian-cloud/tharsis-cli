@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -62,10 +62,8 @@ func ValidValues(values ...string) Option {
 	return func(f *Flag) {
 		f.validValues = values
 		f.validate = func(s string) error {
-			for _, v := range values {
-				if strings.EqualFold(s, v) {
-					return nil
-				}
+			if slices.Contains(values, s) {
+				return nil
 			}
 
 			return fmt.Errorf("invalid value %q for flag %s, must be one of: %s",
@@ -93,6 +91,11 @@ func ValidRange(minVal, maxVal int) Option {
 	}
 }
 
+// Validate sets a custom validation function for the flag value.
+func Validate(fn func(string) error) Option {
+	return func(f *Flag) { f.validate = fn }
+}
+
 // ---------------------------------------------------------------------------
 // Set
 // ---------------------------------------------------------------------------
@@ -102,6 +105,9 @@ func ValidRange(minVal, maxVal int) Option {
 type Set struct {
 	stdfs *stdflag.FlagSet
 	flags map[string]*Flag
+	// deprecations holds warnings for deprecated flags used during parsing.
+	// Populated by Parse; read via Deprecations.
+	deprecations []string
 }
 
 // NewSet creates a new Set. Error handling is set to
@@ -132,6 +138,13 @@ func (fs *Set) Args() []string {
 	return fs.stdfs.Args()
 }
 
+// Deprecations returns warning messages for any deprecated flags that were
+// used during the last call to [Set.Parse]. Returns nil if none were used.
+// Callers should display these in non-JSON output modes.
+func (fs *Set) Deprecations() []string {
+	return fs.deprecations
+}
+
 // ---------------------------------------------------------------------------
 // Query methods
 // ---------------------------------------------------------------------------
@@ -151,7 +164,7 @@ func (fs *Set) VisitAll(fn func(*Flag)) {
 		}
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	for _, name := range names {
 		fn(fs.flags[name])
@@ -328,6 +341,7 @@ func (fs *Set) StringSliceVar(p *[]string, name string, usage string, args ...an
 }
 
 // MapVar defines a repeatable flag that parses key=value pairs into a map.
+// Use key=- to remove a key.
 func (fs *Set) MapVar(p *map[string]string, name string, usage string, args ...any) {
 	f := fs.register(name, usage, args)
 	f.repeatable = true
@@ -350,7 +364,12 @@ func (fs *Set) MapVar(p *map[string]string, name string, usage string, args ...a
 			return fmt.Errorf("key cannot be empty")
 		}
 
-		(*p)[parts[0]] = parts[1]
+		// key=- removes the key from the map.
+		if parts[1] == "-" {
+			delete(*p, parts[0])
+		} else {
+			(*p)[parts[0]] = parts[1]
+		}
 
 		return nil
 	}
@@ -364,6 +383,8 @@ func (fs *Set) MapVar(p *map[string]string, name string, usage string, args ...a
 // ---------------------------------------------------------------------------
 
 // Parse parses the command-line flags and checks that all required flags were set.
+// Both -flag and --flag styles are supported.
+// After a successful parse, call [Set.Deprecations] to check for deprecated flag usage.
 func (fs *Set) Parse(arguments []string) error {
 	if err := fs.stdfs.Parse(arguments); err != nil {
 		return err
@@ -372,12 +393,34 @@ func (fs *Set) Parse(arguments []string) error {
 	seen := make(map[string]bool)
 	fs.stdfs.Visit(func(sf *stdflag.Flag) { seen[sf.Name] = true })
 
+	// Collect deprecation warnings for used deprecated flags.
+	fs.deprecations = nil
+	for name, f := range fs.flags {
+		if name != f.Name {
+			continue
+		}
+
+		// Surface deferred parse errors (e.g. invalid env var) for flags
+		// that were not explicitly set on the command line.
+		if f.parseErr != nil && !f.wasSet(seen) {
+			return f.parseErr
+		}
+
+		if f.deprecationMessage != "" && f.wasSet(seen) {
+			fs.deprecations = append(fs.deprecations, fmt.Sprintf("flag -%s is deprecated: %s", f.Name, f.deprecationMessage))
+		}
+	}
+
+	slices.Sort(fs.deprecations)
+
 	var missing []string
 	for name, f := range fs.flags {
 		if name == f.Name && f.required && !f.wasSet(seen) {
 			missing = append(missing, name)
 		}
 	}
+
+	slices.Sort(missing)
 
 	if len(missing) == 1 {
 		return fmt.Errorf("flag -%s is required", missing[0])
@@ -481,6 +524,7 @@ func setDefault[T any](fs *Set, f *Flag, p **T) {
 // setEnvDefault reads the flag's env var (if configured) and applies it as a
 // fallback. It runs after setDefault so that env vars take precedence over
 // coded defaults but explicit flags still win (handled at parse time).
+// Stores an error on the flag if the env var value fails validation or parsing.
 func setEnvDefault[T any](f *Flag, p **T) {
 	if f.envVar == "" {
 		return
@@ -491,12 +535,18 @@ func setEnvDefault[T any](f *Flag, p **T) {
 		return
 	}
 
+	if err := f.validate(v); err != nil {
+		f.parseErr = fmt.Errorf("environment variable %s: %w", f.envVar, err)
+		return
+	}
+
 	// Parse the env value into the target type.
 	var result any
 	var err error
 
 	switch any(*new(T)).(type) {
 	case string:
+		v = f.transform(v)
 		result = v
 	case int:
 		var n int64
@@ -513,6 +563,7 @@ func setEnvDefault[T any](f *Flag, p **T) {
 	}
 
 	if err != nil {
+		f.parseErr = fmt.Errorf("environment variable %s: %w", f.envVar, err)
 		return
 	}
 

@@ -36,6 +36,7 @@ type Flag struct {
 	validValues        []string
 	validate           func(string) error
 	transform          func(string) string
+	parseErr           error
 	// value holds the current string representation of the flag's parsed value,
 	// set by the flag's setter during parsing. This allows callers to read the
 	// parsed value via Lookup().Value() without needing access to the flag set.
@@ -92,7 +93,11 @@ func (f *Flag) DeprecationMessage() string {
 
 // Names returns the flag's primary name and all aliases.
 func (f *Flag) Names() []string {
-	return append([]string{f.Name}, f.aliases...)
+	names := make([]string, 1+len(f.aliases))
+	names[0] = f.Name
+	copy(names[1:], f.aliases)
+
+	return names
 }
 
 // EnvVar returns the environment variable name, or "".

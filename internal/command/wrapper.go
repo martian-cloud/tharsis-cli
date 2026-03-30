@@ -99,6 +99,9 @@ func (c Wrapper) AutocompleteFlags() complete.Flags {
 
 		for _, name := range f.Names() {
 			result["-"+name] = predictor
+			if len(name) > 1 {
+				result["--"+name] = predictor
+			}
 		}
 	})
 

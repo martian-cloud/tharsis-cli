@@ -1,7 +1,9 @@
 package flag
 
 import (
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -432,6 +434,11 @@ func TestMapVar(t *testing.T) {
 			expectVal: map[string]string{"env": "prod", "tier": "frontend"},
 		},
 		{
+			name:      "remove key",
+			args:      []string{"-label", "env=prod", "-label", "tier=frontend", "-label", "env=-"},
+			expectVal: map[string]string{"tier": "frontend"},
+		},
+		{
 			name:      "invalid format",
 			args:      []string{"-label", "invalid"},
 			expectErr: "invalid format",
@@ -692,6 +699,31 @@ func TestParse(t *testing.T) {
 			args:            []string{"-json"},
 			expectErrorCode: "flag -name is required",
 		},
+		{
+			name:       "double dash normalized",
+			args:       []string{"--name", "test", "--json"},
+			expectArgs: []string{},
+		},
+		{
+			name:       "double dash terminator preserved",
+			args:       []string{"-name", "test", "--", "extra"},
+			expectArgs: []string{"extra"},
+		},
+		{
+			name:       "equals syntax",
+			args:       []string{"-name=test", "-json"},
+			expectArgs: []string{},
+		},
+		{
+			name:       "double dash equals syntax",
+			args:       []string{"--name=test", "--json"},
+			expectArgs: []string{},
+		},
+		{
+			name:            "multiple required missing sorted",
+			args:            []string{},
+			expectErrorCode: "flags -json, -name are required",
+		},
 	}
 
 	for _, tc := range tests {
@@ -699,8 +731,16 @@ func TestParse(t *testing.T) {
 			fs := NewSet("test")
 			var name *string
 			var json *bool
-			fs.StringVar(&name, "name", "a name", Required())
-			fs.BoolVar(&json, "json", "json output")
+
+			if tc.name == "multiple required missing sorted" {
+				// Both required to test deterministic ordering.
+				fs.StringVar(&name, "name", "a name", Required())
+				fs.BoolVar(&json, "json", "json output", Required())
+			} else {
+				fs.StringVar(&name, "name", "a name", Required())
+				fs.BoolVar(&json, "json", "json output")
+			}
+
 			fs.SetOutput(io.Discard)
 
 			err := fs.Parse(tc.args)
@@ -715,4 +755,132 @@ func TestParse(t *testing.T) {
 			assert.Equal(t, tc.expectArgs, fs.Args())
 		})
 	}
+}
+
+func TestDeprecationWarning(t *testing.T) {
+	t.Run("collects warning when deprecated flag used", func(t *testing.T) {
+		fs := NewSet("test")
+
+		var old *string
+		fs.StringVar(&old, "old", "old flag", Deprecated("use -new instead"))
+
+		err := fs.Parse([]string{"-old", "val"})
+		require.NoError(t, err)
+		require.Len(t, fs.Deprecations(), 1)
+		assert.Contains(t, fs.Deprecations()[0], "flag -old is deprecated: use -new instead")
+	})
+
+	t.Run("no deprecations when deprecated flag not used", func(t *testing.T) {
+		fs := NewSet("test")
+
+		var old *string
+		fs.StringVar(&old, "old", "old flag", Deprecated("use -new instead"))
+
+		err := fs.Parse([]string{})
+		require.NoError(t, err)
+		assert.Empty(t, fs.Deprecations())
+	})
+}
+
+func TestEnvVarValidation(t *testing.T) {
+	t.Run("invalid env var value returns error", func(t *testing.T) {
+		t.Setenv("TEST_COUNT", "abc")
+
+		fs := NewSet("test")
+		var count *int
+		fs.IntVar(&count, "count", "count", EnvVar("TEST_COUNT"))
+
+		err := fs.Parse([]string{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "environment variable TEST_COUNT")
+	})
+
+	t.Run("env var fails valid values check", func(t *testing.T) {
+		t.Setenv("TEST_FMT", "xml")
+
+		fs := NewSet("test")
+		var format *string
+		fs.StringVar(&format, "format", "output format", ValidValues("json", "yaml"), EnvVar("TEST_FMT"))
+
+		err := fs.Parse([]string{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "environment variable TEST_FMT")
+	})
+
+	t.Run("env var with int type", func(t *testing.T) {
+		t.Setenv("TEST_PORT", "8080")
+
+		fs := NewSet("test")
+		var port *int
+		fs.IntVar(&port, "port", "port number", EnvVar("TEST_PORT"))
+
+		err := fs.Parse([]string{})
+		require.NoError(t, err)
+		require.NotNil(t, port)
+		assert.Equal(t, 8080, *port)
+	})
+
+	t.Run("env var with bool type", func(t *testing.T) {
+		t.Setenv("TEST_VERBOSE", "true")
+
+		fs := NewSet("test")
+		var verbose *bool
+		fs.BoolVar(&verbose, "verbose", "verbose output", EnvVar("TEST_VERBOSE"))
+
+		err := fs.Parse([]string{})
+		require.NoError(t, err)
+		require.NotNil(t, verbose)
+		assert.True(t, *verbose)
+	})
+}
+
+func TestEnvVarTransform(t *testing.T) {
+	t.Run("transform applied to env var value", func(t *testing.T) {
+		t.Setenv("TEST_NAME", "UPPER")
+
+		fs := NewSet("test")
+		var name *string
+		fs.StringVar(&name, "name", "name",
+			TransformString(strings.ToLower),
+			EnvVar("TEST_NAME"),
+		)
+
+		err := fs.Parse([]string{})
+		require.NoError(t, err)
+		require.NotNil(t, name)
+		assert.Equal(t, "upper", *name)
+	})
+}
+
+func TestValidateOption(t *testing.T) {
+	t.Run("custom validator passes", func(t *testing.T) {
+		fs := NewSet("test")
+		var url *string
+		fs.StringVar(&url, "url", "endpoint URL", Validate(func(s string) error {
+			if !strings.HasPrefix(s, "https://") {
+				return fmt.Errorf("must start with https://")
+			}
+			return nil
+		}))
+
+		err := fs.Parse([]string{"-url", "https://example.com"})
+		require.NoError(t, err)
+		require.NotNil(t, url)
+		assert.Equal(t, "https://example.com", *url)
+	})
+
+	t.Run("custom validator fails", func(t *testing.T) {
+		fs := NewSet("test")
+		fs.SetOutput(io.Discard)
+		var url *string
+		fs.StringVar(&url, "url", "endpoint URL", Validate(func(s string) error {
+			if !strings.HasPrefix(s, "https://") {
+				return fmt.Errorf("must start with https://")
+			}
+			return nil
+		}))
+
+		err := fs.Parse([]string{"-url", "http://example.com"})
+		assert.ErrorContains(t, err, "must start with https://")
+	})
 }
