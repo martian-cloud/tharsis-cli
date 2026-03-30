@@ -37,6 +37,7 @@ func helpFunc(globalFlags *flag.Set) cli.HelpFunc {
 		}
 
 		dim := color.New(color.Faint)
+		fmt.Fprintln(&buf, dim.Sprint("  The open-source Terraform platform."))
 		fmt.Fprintf(&buf, "  %s %s\n", dim.Sprint("Version:"), Version)
 		fmt.Fprintf(&buf, "  %s %s\n\n", dim.Sprint("Docs:"), "https://tharsis.martian-cloud.io")
 
