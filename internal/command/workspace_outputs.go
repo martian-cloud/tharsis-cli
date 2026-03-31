@@ -48,15 +48,19 @@ func NewWorkspaceOutputsCommandFactory(baseCommand *BaseCommand) func() (Command
 }
 
 func (c *workspaceOutputsCommand) validate() error {
+	if *c.raw && *c.toJSON {
+		return fmt.Errorf("must not supply both -raw and -json")
+	}
+
+	if *c.raw && c.outputName == nil {
+		return fmt.Errorf("must specify -output-name when using -raw")
+	}
+
 	const message = "workspace-id is required"
 	return validation.ValidateStruct(c,
 		validation.Field(&c.arguments,
 			validation.Required.Error(message),
 			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.raw,
-			validation.When(*c.toJSON, validation.Nil.Error("must not supply both -raw and -json")),
-			validation.When(c.outputName == nil, validation.Nil.Error("must specify -output-name if specifying -raw")),
 		),
 	)
 }
@@ -141,6 +145,41 @@ func (c *workspaceOutputsCommand) displayWorkspaceOutput(outputs []*pb.StateVers
 		return outputs[i].Name < outputs[j].Name
 	})
 
+	// Single named output — no need to iterate all outputs.
+	if outputName != "" {
+		v := valueMap[outputName]
+		ctyType, err := ctyjson.UnmarshalType(v.Type)
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to unmarshal type")
+			return 1
+		}
+
+		ctyValue, err := ctyjson.Unmarshal(v.Value, ctyType)
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to unmarshal value")
+			return 1
+		}
+
+		if *c.raw {
+			valueString, err := convert.Convert(ctyValue, cty.String)
+			if err != nil {
+				c.UI.Errorf("-raw is only supported on string, number and boolean types: %s is of type '%s'. Use -json flag for more complex types", outputName, ctyType.FriendlyName())
+				return 1
+			}
+
+			if valueString.IsNull() {
+				c.UI.Errorf("Unsupported value type: value for %s is null", outputName)
+				return 1
+			}
+
+			fmt.Fprint(os.Stdout, valueString.AsString())
+			return 0
+		}
+
+		c.outputHighlighted(external.FormatValue(ctyValue, 0))
+		return 0
+	}
+
 	for _, v := range outputs {
 		ctyType, err := ctyjson.UnmarshalType(v.Type)
 		if err != nil {
@@ -155,33 +194,11 @@ func (c *workspaceOutputsCommand) displayWorkspaceOutput(outputs []*pb.StateVers
 		}
 
 		valueFormatted := external.FormatValue(ctyValue, 0)
-
-		if outputName == "" {
-			if v.Sensitive {
-				valueFormatted = "[SENSITIVE]"
-			}
-
-			c.outputHighlighted(fmt.Sprintf("%s = %s", v.Name, valueFormatted))
-		} else if *c.raw {
-			if v.Name != outputName {
-				continue
-			}
-
-			valueString, err := convert.Convert(ctyValue, cty.String)
-			if err != nil {
-				c.UI.Errorf("-raw is only supported on string, number and boolean types: %s is of type '%s'. Use -json flag for more complex types", outputName, ctyType.FriendlyName())
-				return 1
-			}
-
-			if valueString.IsNull() {
-				c.UI.Errorf("Unsupported value type: value for %s is null", outputName)
-				return 1
-			}
-
-			fmt.Fprint(os.Stdout, valueString.AsString())
-		} else if v.Name == outputName {
-			c.outputHighlighted(valueFormatted)
+		if v.Sensitive {
+			valueFormatted = "[SENSITIVE]"
 		}
+
+		c.outputHighlighted(fmt.Sprintf("%s = %s", v.Name, valueFormatted))
 	}
 
 	return 0
