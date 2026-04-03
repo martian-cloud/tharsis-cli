@@ -1,17 +1,19 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type runCancelCommand struct {
 	*BaseCommand
 
-	force bool
+	force *bool
 }
+
+var _ Command = (*runCancelCommand)(nil)
 
 // NewRunCancelCommandFactory returns a runCancelCommand struct.
 func NewRunCancelCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -23,13 +25,11 @@ func NewRunCancelCommandFactory(baseCommand *BaseCommand) func() (Command, error
 }
 
 func (c *runCancelCommand) validate() error {
-	const message = "run-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: run id")
+	}
+
+	return nil
 }
 
 func (c *runCancelCommand) Run(args []string) int {
@@ -39,14 +39,14 @@ func (c *runCancelCommand) Run(args []string) int {
 		WithCommandName("run cancel"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to cancel this run?"),
+		WithWarningPrompt("This will forcefully cancel the run, which may leave resources in an inconsistent state."),
 	); code != 0 {
 		return code
 	}
 
 	runID := c.arguments[0]
 
-	// Subscribe to run events
+	// Subscribe to run events.
 	stream, err := c.grpcClient.RunsClient.SubscribeToRunEvents(c.Context, &pb.SubscribeToRunEventsRequest{
 		RunId: &runID,
 	})
@@ -57,7 +57,7 @@ func (c *runCancelCommand) Run(args []string) int {
 
 	input := &pb.CancelRunRequest{
 		Id:    runID,
-		Force: &c.force,
+		Force: c.force,
 	}
 
 	if _, err = c.grpcClient.RunsClient.CancelRun(c.Context, input); err != nil {
@@ -67,7 +67,7 @@ func (c *runCancelCommand) Run(args []string) int {
 
 	c.UI.Output("Run cancellation in progress...")
 
-	// Wait for cancellation to complete
+	// Wait for cancellation to complete.
 	for {
 		select {
 		case <-c.Context.Done():
@@ -98,7 +98,8 @@ func (*runCancelCommand) Synopsis() string {
 
 func (*runCancelCommand) Description() string {
 	return `
-   The run cancel command cancels a run. Supports forced cancellation which is useful when a graceful cancel is not enough.
+   Stops a running or pending run. Use -force when
+   graceful cancellation is not sufficient.
 `
 }
 
@@ -108,17 +109,17 @@ func (*runCancelCommand) Usage() string {
 
 func (*runCancelCommand) Example() string {
 	return `
-tharsis run cancel --force <id>
+tharsis run cancel -force <id>
 `
 }
 
-func (c *runCancelCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *runCancelCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.force,
 		"force",
-		false,
 		"Force the run to cancel.",
+		flag.Aliases("f"),
 	)
 
 	return f

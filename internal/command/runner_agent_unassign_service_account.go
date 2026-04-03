@@ -1,9 +1,8 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -11,6 +10,8 @@ import (
 type runnerAgentUnassignServiceAccountCommand struct {
 	*BaseCommand
 }
+
+var _ Command = (*runnerAgentUnassignServiceAccountCommand)(nil)
 
 // NewRunnerAgentUnassignServiceAccountCommandFactory returns a runnerAgentUnassignServiceAccountCommand struct.
 func NewRunnerAgentUnassignServiceAccountCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -22,13 +23,11 @@ func NewRunnerAgentUnassignServiceAccountCommandFactory(baseCommand *BaseCommand
 }
 
 func (c *runnerAgentUnassignServiceAccountCommand) validate() error {
-	const message = "service account id and runner agent id are required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(2, 2).Error(message),
-		),
-	)
+	if len(c.arguments) != 2 {
+		return errors.New("expected exactly two arguments: service account id and runner agent id")
+	}
+
+	return nil
 }
 
 func (c *runnerAgentUnassignServiceAccountCommand) Run(args []string) int {
@@ -61,7 +60,7 @@ func (*runnerAgentUnassignServiceAccountCommand) Synopsis() string {
 
 func (*runnerAgentUnassignServiceAccountCommand) Description() string {
 	return `
-   The runner-agent unassign-service-account command removes a service account from a runner agent.
+   Revokes a service account's access to a runner agent.
 `
 }
 
@@ -75,8 +74,4 @@ tharsis runner-agent unassign-service-account \
   trn:service_account:<group_path>/<service_account_name> \
   trn:runner:<group_path>/<runner_name>
 `
-}
-
-func (c *runnerAgentUnassignServiceAccountCommand) Flags() *flag.FlagSet {
-	return nil
 }

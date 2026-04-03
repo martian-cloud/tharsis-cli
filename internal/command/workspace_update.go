@@ -1,14 +1,10 @@
 package command
 
 import (
-	"flag"
-	"fmt"
-	"strconv"
-	"strings"
+	"errors"
 
-	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -19,22 +15,20 @@ type workspaceUpdateCommand struct {
 	description        *string
 	terraformVersion   *string
 	maxJobDuration     *int32
-	preventDestroyPlan *bool
 	version            *int64
 	labels             map[string]string
-	toJSON             bool
+	preventDestroyPlan *bool
+	toJSON             *bool
 }
 
 var _ Command = (*workspaceUpdateCommand)(nil)
 
 func (c *workspaceUpdateCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewWorkspaceUpdateCommandFactory returns a workspaceUpdateCommand struct.
@@ -74,7 +68,7 @@ func (c *workspaceUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputWorkspace(c.UI, c.toJSON, updatedWorkspace)
+	return c.Output(updatedWorkspace, c.toJSON)
 }
 
 func (*workspaceUpdateCommand) Synopsis() string {
@@ -87,95 +81,56 @@ func (*workspaceUpdateCommand) Usage() string {
 
 func (*workspaceUpdateCommand) Description() string {
 	return `
-   The workspace update command updates a workspace.
-   Currently, it supports updating the description and the
-   maximum job duration. Shows final output as JSON, if
-   specified.
+   Modifies a workspace's description or max job duration.
 `
 }
 
 func (*workspaceUpdateCommand) Example() string {
 	return `
 tharsis workspace update \
-  --description "Updated production workspace" \
-  --terraform-version "1.6.0" \
-  --max-job-duration 120 \
-  --prevent-destroy-plan true \
+  -description "Updated production workspace" \
+  -terraform-version "1.6.0" \
+  -max-job-duration 120 \
+  -prevent-destroy-plan true \
   trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceUpdateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *workspaceUpdateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.description,
 		"description",
 		"Description for the workspace.",
-		func(s string) error {
-			c.description = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.terraformVersion,
 		"terraform-version",
 		"The default Terraform CLI version for the workspace.",
-		func(s string) error {
-			c.terraformVersion = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.Int32Var(
+		&c.maxJobDuration,
 		"max-job-duration",
 		"The amount of minutes before a job is gracefully canceled.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return err
-			}
-			c.maxJobDuration = ptr.Int32(int32(v))
-			return nil
-		},
 	)
-	f.BoolFunc(
+	f.BoolVar(
+		&c.preventDestroyPlan,
 		"prevent-destroy-plan",
 		"Whether a run/plan will be prevented from destroying deployed resources.",
-		func(s string) error {
-			v, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			c.preventDestroyPlan = &v
-			return nil
-		},
 	)
-	f.Func(
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be updated. "+
-			"In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Optimistic locking version. Usually not required.",
 	)
-	f.Func(
+	f.MapVar(
+		&c.labels,
 		"label",
-		"Labels for the workspace (key=value). Can be specified multiple times.",
-		func(s string) error {
-			parts := strings.Split(s, "=")
-			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-				return fmt.Errorf("label key and value cannot be empty")
-			}
-			c.labels[parts[0]] = parts[1]
-			return nil
-		},
+		"Labels for the workspace (key=value).",
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 

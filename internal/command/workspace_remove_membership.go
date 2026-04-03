@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
-	"strconv"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type workspaceRemoveMembershipCommand struct {
@@ -13,6 +12,8 @@ type workspaceRemoveMembershipCommand struct {
 
 	version *int64
 }
+
+var _ Command = (*workspaceRemoveMembershipCommand)(nil)
 
 // NewWorkspaceRemoveMembershipCommandFactory returns a workspaceRemoveMembershipCommand struct.
 func NewWorkspaceRemoveMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -24,13 +25,11 @@ func NewWorkspaceRemoveMembershipCommandFactory(baseCommand *BaseCommand) func()
 }
 
 func (c *workspaceRemoveMembershipCommand) validate() error {
-	const message = "membership-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: membership id")
+	}
+
+	return nil
 }
 
 func (c *workspaceRemoveMembershipCommand) Run(args []string) int {
@@ -77,7 +76,7 @@ func (*workspaceRemoveMembershipCommand) Synopsis() string {
 
 func (*workspaceRemoveMembershipCommand) Description() string {
 	return `
-   The workspace remove-membership command removes a membership from a workspace.
+   Revokes a membership from a workspace.
 `
 }
 
@@ -91,19 +90,12 @@ tharsis workspace remove-membership <id>
 `
 }
 
-func (c *workspaceRemoveMembershipCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *workspaceRemoveMembershipCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be deleted. In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Optimistic locking version. Usually not required.",
 	)
 
 	return f

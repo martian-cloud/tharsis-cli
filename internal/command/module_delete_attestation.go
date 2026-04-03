@@ -1,9 +1,8 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
@@ -15,13 +14,11 @@ type moduleDeleteAttestationCommand struct {
 var _ Command = (*moduleDeleteAttestationCommand)(nil)
 
 func (c *moduleDeleteAttestationCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewModuleDeleteAttestationCommandFactory returns a moduleDeleteAttestationCommand struct.
@@ -67,7 +64,7 @@ func (*moduleDeleteAttestationCommand) Usage() string {
 
 func (*moduleDeleteAttestationCommand) Description() string {
 	return `
-   The module delete-attestation command deletes a module attestation.
+   Removes an attestation from a module.
 `
 }
 
@@ -75,8 +72,4 @@ func (*moduleDeleteAttestationCommand) Example() string {
 	return `
 tharsis module delete-attestation trn:terraform_module_attestation:<group_path>/<module_name>/<module_system>/<sha_sum>
 `
-}
-
-func (c *moduleDeleteAttestationCommand) Flags() *flag.FlagSet {
-	return nil
 }

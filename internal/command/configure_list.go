@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"sort"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
@@ -18,9 +17,11 @@ type configureListCommand struct {
 var _ Command = (*configureListCommand)(nil)
 
 func (c *configureListCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Empty),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	return nil
 }
 
 // NewConfigureListCommandFactory returns a configureListCommand struct.
@@ -92,10 +93,6 @@ tharsis configure list
 
 func (c *configureListCommand) Description() string {
 	return `
-   The configure list command prints information about all profiles.
+   Displays all configured profiles and their endpoints.
 `
-}
-
-func (c *configureListCommand) Flags() *flag.FlagSet {
-	return nil
 }

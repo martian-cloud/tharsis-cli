@@ -1,21 +1,21 @@
 package command
 
 import (
-	"flag"
-	"fmt"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type managedIdentityAccessRuleListCommand struct {
 	*BaseCommand
 
-	managedIdentityID string
-	toJSON            bool
+	managedIdentityID *string
+	toJSON            *bool
 }
+
+var _ Command = (*managedIdentityAccessRuleListCommand)(nil)
 
 // NewManagedIdentityAccessRuleListCommandFactory returns a managedIdentityAccessRuleListCommand struct.
 func NewManagedIdentityAccessRuleListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -27,10 +27,15 @@ func NewManagedIdentityAccessRuleListCommandFactory(baseCommand *BaseCommand) fu
 }
 
 func (c *managedIdentityAccessRuleListCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Empty),
-		validation.Field(&c.managedIdentityID, validation.Required),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	if c.managedIdentityID == nil {
+		return errors.New("managed identity id is required")
+	}
+
+	return nil
 }
 
 func (c *managedIdentityAccessRuleListCommand) Run(args []string) int {
@@ -45,7 +50,7 @@ func (c *managedIdentityAccessRuleListCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetManagedIdentityAccessRulesRequest{
-		ManagedIdentityId: c.managedIdentityID,
+		ManagedIdentityId: *c.managedIdentityID,
 	}
 
 	result, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityAccessRules(c.Context, input)
@@ -54,27 +59,7 @@ func (c *managedIdentityAccessRuleListCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "type", "run_stage", "verify_state_lineage")
-
-		for _, rule := range result.AccessRules {
-			t.Rich([]string{
-				rule.Metadata.Id,
-				rule.Type,
-				rule.RunStage,
-				fmt.Sprintf("%t", rule.VerifyStateLineage),
-			}, nil)
-		}
-
-		c.UI.Table(t)
-	}
-
-	return 0
+	return c.OutputList(result, c.toJSON, "id", "type", "run_stage", "verify_state_lineage")
 }
 
 func (*managedIdentityAccessRuleListCommand) Synopsis() string {
@@ -83,8 +68,7 @@ func (*managedIdentityAccessRuleListCommand) Synopsis() string {
 
 func (*managedIdentityAccessRuleListCommand) Description() string {
 	return `
-   The managed-identity-access-rule list command prints information about
-   access rules for a specific managed identity.
+   Lists all access rules for a managed identity.
 `
 }
 
@@ -95,30 +79,29 @@ func (*managedIdentityAccessRuleListCommand) Usage() string {
 func (*managedIdentityAccessRuleListCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule list \
-  --managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name>
+  -managed-identity-id "trn:managed_identity:<group_path>/<managed_identity_name>"
 `
 }
 
-func (c *managedIdentityAccessRuleListCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *managedIdentityAccessRuleListCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.managedIdentityID,
 		"managed-identity-id",
-		"",
 		"ID of the managed identity to get access rules for.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.managedIdentityID,
 		"managed-identity-path",
-		"Resource path of the managed identity to get access rules for. Deprecated.",
-		func(s string) error {
-			c.managedIdentityID = trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
-			return nil
-		},
+		"Resource path of the managed identity to get access rules for.",
+		flag.Deprecated("use -managed-identity-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
+		}),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 

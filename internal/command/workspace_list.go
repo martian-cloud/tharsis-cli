@@ -1,29 +1,30 @@
 package command
 
 import (
-	"flag"
-	"fmt"
+	"errors"
+	"maps"
+	"slices"
 	"strings"
 
-	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceListCommand struct {
 	*BaseCommand
 
-	limit        int
-	sortOrder    *string
+	limit        *int32
 	cursor       *string
 	search       *string
 	groupID      *string
 	sortBy       *string
+	sortOrder    *string
 	labelFilters map[string]string
-	toJSON       bool
+	toJSON       *bool
 }
+
+var _ Command = (*workspaceListCommand)(nil)
 
 // NewWorkspaceListCommandFactory returns a workspaceListCommand struct.
 func NewWorkspaceListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -36,10 +37,11 @@ func NewWorkspaceListCommandFactory(baseCommand *BaseCommand) func() (Command, e
 }
 
 func (c *workspaceListCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
-		validation.Field(&c.arguments, validation.Empty),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	return nil
 }
 
 func (c *workspaceListCommand) Run(args []string) int {
@@ -66,7 +68,7 @@ func (c *workspaceListCommand) Run(args []string) int {
 	input := &pb.GetWorkspacesRequest{
 		Sort: sortByEnum,
 		PaginationOptions: &pb.PaginationOptions{
-			First: ptr.Int32(int32(c.limit)),
+			First: c.limit,
 			After: c.cursor,
 		},
 		Search:       c.search,
@@ -80,39 +82,7 @@ func (c *workspaceListCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "name", "description", "full_path")
-
-		for _, workspace := range result.Workspaces {
-			t.Rich([]string{
-				workspace.Metadata.Id,
-				workspace.Name,
-				workspace.Description,
-				workspace.FullPath,
-			}, nil)
-		}
-
-		c.UI.Table(t)
-		namedValues := []terminal.NamedValue{
-			{Name: "Total count", Value: result.GetPageInfo().TotalCount},
-			{Name: "Has Next Page", Value: result.GetPageInfo().HasNextPage},
-		}
-		if result.GetPageInfo().EndCursor != nil {
-			namedValues = append(namedValues, terminal.NamedValue{
-				Name:  "Next cursor",
-				Value: result.GetPageInfo().GetEndCursor(),
-			})
-		}
-
-		c.UI.NamedValues(namedValues)
-	}
-
-	return 0
+	return c.OutputList(result, c.toJSON, "trn", "name", "description", "locked")
 }
 
 func (*workspaceListCommand) Synopsis() string {
@@ -121,9 +91,7 @@ func (*workspaceListCommand) Synopsis() string {
 
 func (*workspaceListCommand) Description() string {
 	return `
-   The workspace list command prints information about (likely
-   multiple) workspaces. Supports pagination, filtering and
-   sorting the output.
+   Lists workspaces with pagination, filtering, and sorting.
 `
 }
 
@@ -134,107 +102,74 @@ func (*workspaceListCommand) Usage() string {
 func (*workspaceListCommand) Example() string {
 	return `
 tharsis workspace list \
-  --group-id trn:group:<group_path> \
-  --label env=prod \
-  --label team=platform \
-  --sort-by FULL_PATH_ASC \
-  --limit 5 \
-  --json
+  -group-id "trn:group:<group_path>" \
+  -label "env=prod" \
+  -label "team=platform" \
+  -sort-by "FULL_PATH_ASC" \
+  -limit 5 \
+  -json
 `
 }
 
-func (c *workspaceListCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *workspaceListCommand) Flags() *flag.Set {
+	sortValues := slices.Collect(maps.Keys(pb.WorkspaceSortableField_value))
+
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.cursor,
 		"cursor",
 		"The cursor string for manual pagination.",
-		func(s string) error {
-			c.cursor = &s
-			return nil
-		},
 	)
-	f.IntVar(
+	f.Int32Var(
 		&c.limit,
 		"limit",
-		maxPaginationLimit,
 		"Maximum number of result elements to return.",
+		flag.Default(maxPaginationLimit),
+		flag.ValidRange(0, int(maxPaginationLimit)),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortBy,
 		"sort-by",
-		"Sort by this field (e.g., UPDATED_AT_ASC, UPDATED_AT_DESC, FULL_PATH_ASC, FULL_PATH_DESC).",
-		func(s string) error {
-			// TODO: Update to use PB types and validate with PB map once deprecation is done.
-			switch v := strings.ToUpper(s); v {
-			case pb.WorkspaceSortableField_FULL_PATH_ASC.String(),
-				pb.WorkspaceSortableField_FULL_PATH_DESC.String(),
-				pb.WorkspaceSortableField_UPDATED_AT_ASC.String(),
-				pb.WorkspaceSortableField_UPDATED_AT_DESC.String():
-				c.sortBy = &v
-			case "UPDATED": // Deprecated.
-				c.sortBy = ptr.String("UPDATED_AT")
-			case "PATH": // Deprecated.
-				c.sortBy = ptr.String("FULL_PATH")
-			default:
-				return fmt.Errorf("unknown sort by option %s", s)
-			}
-
-			return nil
-		},
+		"Sort by this field.",
+		flag.PredictValues(sortValues...),
+		flag.TransformString(strings.ToUpper),
 	)
-	f.Func(
+	f.StringVar(
+		&c.search,
 		"search",
 		"Filter to only workspaces containing this substring in their path.",
-		func(s string) error {
-			c.search = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.groupID,
 		"group-id",
 		"Filter to only workspaces in this group.",
-		func(s string) error {
-			c.groupID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.groupID,
 		"group-path",
-		"Filter to only workspaces in this group path. Deprecated.",
-		func(s string) error {
-			c.groupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, s))
-			return nil
-		},
+		"Filter to only workspaces in this group path.",
+		flag.Deprecated("use -group-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+		}),
 	)
-	f.Func(
+	f.MapVar(
+		&c.labelFilters,
 		"label",
-		"Filter by label (key=value). This flag may be repeated.",
-		func(s string) error {
-			parts := strings.SplitN(s, "=", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("invalid label filter format: %s (must be key=value)", s)
-			}
-			c.labelFilters[parts[0]] = parts[1]
-			return nil
-		},
+		"Filter by label (key=value).",
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortOrder,
 		"sort-order",
-		"Sort in this direction, ASC or DESC. Deprecated",
-		func(s string) error {
-			switch strings.ToUpper(s) {
-			case "ASC", "DESC":
-				c.sortOrder = &s
-			default:
-				return fmt.Errorf("unknown sort order %s", s)
-			}
-
-			return nil
-		},
+		"Sort in this direction.",
+		flag.Deprecated("use -sort-by"),
+		flag.ValidValues("ASC", "DESC"),
+		flag.PredictValues("ASC", "DESC"),
+		flag.TransformString(strings.ToUpper),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 

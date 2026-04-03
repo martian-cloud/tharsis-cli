@@ -1,9 +1,9 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
@@ -25,12 +25,13 @@ type applyCommand struct {
 	tfVariables      []string
 	envVariables     []string
 	targetAddresses  []string
-	comment          string
-	autoApprove      bool
-	input            bool
-	refresh          bool
-	refreshOnly      bool
+	autoApprove      *bool
+	input            *bool
+	refresh          *bool
+	refreshOnly      *bool
 }
+
+var _ Command = (*applyCommand)(nil)
 
 // NewApplyCommandFactory returns an applyCommand struct.
 func NewApplyCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -42,13 +43,11 @@ func NewApplyCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 }
 
 func (c *applyCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *applyCommand) Run(args []string) int {
@@ -94,11 +93,11 @@ func (c *applyCommand) Run(args []string) int {
 		TargetAddresses:  c.targetAddresses,
 		IsDestroy:        false,
 		IsSpeculative:    false,
-		Refresh:          c.refresh,
-		RefreshOnly:      c.refreshOnly,
+		Refresh:          *c.refresh,
+		RefreshOnly:      *c.refreshOnly,
 	})
 	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to create run")
+		c.UI.ErrorWithSummary(err, "failed to apply")
 		return 1
 	}
 
@@ -109,13 +108,13 @@ func (c *applyCommand) Run(args []string) int {
 	}
 
 	// Return if input is false and autoApprove is not set
-	if !c.input && !c.autoApprove {
+	if !*c.input && !*c.autoApprove {
 		c.UI.Output("Will not apply the plan since -input was false.")
 		return 0
 	}
 
 	// Handle approval
-	if c.autoApprove {
+	if *c.autoApprove {
 		c.UI.Output("\nAuto-approving.\n")
 	} else {
 		c.UI.Output("\nDo you approve to apply the above plan?\n")
@@ -127,7 +126,7 @@ func (c *applyCommand) Run(args []string) int {
 			return 1
 		}
 		if answer != "yes" {
-			c.UI.Output("Approval response was negative. Will NOT apply the plan.")
+			c.UI.Output("Approval response was negative. Will not apply the plan.")
 			return 0
 		}
 		c.UI.Output("\n")
@@ -146,14 +145,14 @@ func (c *applyCommand) Run(args []string) int {
 }
 
 func (*applyCommand) Synopsis() string {
-	return "Apply a Terraform run"
+	return "Apply a Terraform run."
 }
 
 func (*applyCommand) Description() string {
 	return `
-   The apply command creates and applies a Terraform run.
-   It first creates a plan, then applies it after approval.
-   Supports setting run-scoped Terraform / environment variables.
+   Creates and applies a Terraform run. First creates a
+   plan, then applies after approval. Supports run-scoped
+   Terraform and environment variables.
 
    Terraform variables may be passed in via supported
    options or from the environment with a 'TF_VAR_' prefix.
@@ -166,115 +165,84 @@ func (*applyCommand) Usage() string {
 
 func (*applyCommand) Example() string {
 	return `
-tharsis apply --directory-path ./terraform trn:workspace:<workspace_path>
+tharsis apply -directory-path "./terraform" trn:workspace:<workspace_path>
 `
 }
 
-func (c *applyCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *applyCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 
-	f.Func(
+	f.StringVar(
+		&c.directoryPath,
 		"directory-path",
 		"The path of the root module's directory.",
-		func(s string) error {
-			c.directoryPath = &s
-			return nil
-		},
-	)
-	f.Func(
-		"module-source",
-		"Remote module source specification.",
-		func(s string) error {
-			c.moduleSource = &s
-			return nil
-		},
-	)
-	f.Func(
-		"module-version",
-		"Remote module version number--defaults to latest.",
-		func(s string) error {
-			c.moduleVersion = &s
-			return nil
-		},
-	)
-	f.Func(
-		"terraform-version",
-		"The Terraform CLI version to use for the run.",
-		func(s string) error {
-			c.terraformVersion = &s
-			return nil
-		},
 	)
 	f.StringVar(
-		&c.comment,
-		"comment",
-		"",
-		"Comment for the apply.",
+		&c.moduleSource,
+		"module-source",
+		"Remote module source specification.",
+	)
+	f.StringVar(
+		&c.moduleVersion,
+		"module-version",
+		"Remote module version number. Uses latest if empty.",
+	)
+	f.StringVar(
+		&c.terraformVersion,
+		"terraform-version",
+		"The Terraform CLI version to use for the run.",
 	)
 	f.BoolVar(
 		&c.autoApprove,
 		"auto-approve",
-		false,
 		"Skip interactive approval of the plan.",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.input,
 		"input",
-		true,
 		"Ask for input for variables if not directly set.",
+		flag.Default(true),
 	)
 	f.BoolVar(
 		&c.refresh,
 		"refresh",
-		true,
 		"Whether to do the usual refresh step.",
+		flag.Default(true),
 	)
 	f.BoolVar(
 		&c.refreshOnly,
 		"refresh-only",
-		false,
 		"Whether to do ONLY a refresh operation.",
+		flag.Default(false),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.tfVarFiles,
 		"tf-var-file",
 		"The path to a .tfvars variables file.",
-		func(s string) error {
-			c.tfVarFiles = append(c.tfVarFiles, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.envVarFiles,
 		"env-var-file",
 		"The path to an environment variables file.",
-		func(s string) error {
-			c.envVarFiles = append(c.envVarFiles, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.tfVariables,
 		"tf-var",
 		"A terraform variable as a key=value pair.",
-		func(s string) error {
-			c.tfVariables = append(c.tfVariables, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.envVariables,
 		"env-var",
 		"An environment variable as a key=value pair.",
-		func(s string) error {
-			c.envVariables = append(c.envVariables, s)
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.targetAddresses,
 		"target",
 		"The Terraform address of the resources to be acted upon.",
-		func(s string) error {
-			c.targetAddresses = append(c.targetAddresses, s)
-			return nil
-		},
 	)
+
+	f.MutuallyExclusive("directory-path", "module-source")
 
 	return f
 }

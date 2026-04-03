@@ -1,43 +1,41 @@
 package command
 
 import (
-	"flag"
-	"fmt"
+	"errors"
 	"strings"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type terraformProviderCreateCommand struct {
 	*BaseCommand
 
-	groupID       string
-	repositoryURL string
-	private       bool
-	toJSON        bool
+	groupID       *string
+	repositoryURL *string
+	private       *bool
+	toJSON        *bool
 }
+
+var _ Command = (*terraformProviderCreateCommand)(nil)
 
 // NewTerraformProviderCreateCommandFactory returns a terraformProviderCreateCommand struct.
 func NewTerraformProviderCreateCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
 	return func() (Command, error) {
 		return &terraformProviderCreateCommand{
 			BaseCommand: baseCommand,
-			private:     true,
 		}, nil
 	}
 }
 
 func (c *terraformProviderCreateCommand) validate() error {
-	const message = "provider-name is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: provider name")
+	}
+
+	return nil
 }
 
 func (c *terraformProviderCreateCommand) Run(args []string) int {
@@ -54,14 +52,17 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 	providerName := c.arguments[0]
 
 	parts := strings.Split(providerName, "/")
+	var groupID string
 	if len(parts) == 1 {
 		// Ensure a group is supplied when using just provider name argument.
-		if c.groupID == "" {
+		if c.groupID == nil {
 			c.UI.Errorf("group-id is required when supplying the name in the argument")
 			return 1
 		}
+
+		groupID = *c.groupID
 	} else {
-		if c.groupID != "" {
+		if c.groupID != nil {
 			c.UI.Errorf("group-id should not be supplied when using provider path")
 			return 1
 		}
@@ -69,14 +70,14 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 		// Handle deprecated syntax by extracting name and group path.
 		parent, child := extractParentPath(providerName)
 		providerName = child
-		c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, parent)
+		groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, parent)
 	}
 
 	input := &pb.CreateTerraformProviderRequest{
 		Name:          providerName,
-		GroupId:       c.groupID,
-		RepositoryUrl: c.repositoryURL,
-		Private:       c.private,
+		GroupId:       groupID,
+		RepositoryUrl: ptr.ToString(c.repositoryURL),
+		Private:       *c.private,
 	}
 
 	provider, err := c.grpcClient.TerraformProvidersClient.CreateTerraformProvider(c.Context, input)
@@ -85,23 +86,7 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(provider); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-		return 0
-	}
-
-	t := terminal.NewTable("id", "name", "private")
-	t.Rich([]string{
-		provider.Metadata.Id,
-		provider.Name,
-		fmt.Sprintf("%t", provider.Private),
-	}, nil)
-
-	c.UI.Table(t)
-	return 0
+	return c.Output(provider, c.toJSON)
 }
 
 func (*terraformProviderCreateCommand) Synopsis() string {
@@ -110,7 +95,7 @@ func (*terraformProviderCreateCommand) Synopsis() string {
 
 func (*terraformProviderCreateCommand) Description() string {
 	return `
-   The terraform-provider create command creates a new terraform provider.
+   Creates a new Terraform provider in the registry.
 `
 }
 
@@ -121,37 +106,34 @@ func (*terraformProviderCreateCommand) Usage() string {
 func (*terraformProviderCreateCommand) Example() string {
 	return `
 tharsis terraform-provider create \
-  --group-id trn:group:<group_path> \
-  --repository-url https://github.com/example/terraform-provider-example \
+  -group-id "trn:group:<group_path>" \
+  -repository-url "https://github.com/example/terraform-provider-example" \
   my-provider
 `
 }
 
-func (c *terraformProviderCreateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *terraformProviderCreateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.groupID,
 		"group-id",
-		"",
 		"The ID of the group to create the provider in.",
 	)
 	f.StringVar(
 		&c.repositoryURL,
 		"repository-url",
-		"",
 		"The repository URL for this terraform provider.",
 	)
 	f.BoolVar(
 		&c.private,
 		"private",
-		true,
 		"Set to false to allow all groups to view and use the terraform provider.",
+		flag.Default(true),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
 	)
 
 	return f

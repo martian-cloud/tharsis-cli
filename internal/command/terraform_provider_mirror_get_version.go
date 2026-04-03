@@ -1,18 +1,19 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type terraformProviderMirrorGetVersionCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
+
+var _ Command = (*terraformProviderMirrorGetVersionCommand)(nil)
 
 // NewTerraformProviderMirrorGetVersionCommandFactory returns a terraformProviderMirrorGetVersionCommand struct.
 func NewTerraformProviderMirrorGetVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -24,13 +25,11 @@ func NewTerraformProviderMirrorGetVersionCommandFactory(baseCommand *BaseCommand
 }
 
 func (c *terraformProviderMirrorGetVersionCommand) validate() error {
-	const message = "version-mirror-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: version mirror id")
+	}
+
+	return nil
 }
 
 func (c *terraformProviderMirrorGetVersionCommand) Run(args []string) int {
@@ -54,25 +53,7 @@ func (c *terraformProviderMirrorGetVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(versionMirror); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-		return 0
-	}
-
-	t := terminal.NewTable("id", "semantic_version", "registry_hostname", "registry_namespace", "type")
-	t.Rich([]string{
-		versionMirror.Metadata.Id,
-		versionMirror.SemanticVersion,
-		versionMirror.RegistryHostname,
-		versionMirror.RegistryNamespace,
-		versionMirror.Type,
-	}, nil)
-
-	c.UI.Table(t)
-	return 0
+	return c.Output(versionMirror, c.toJSON)
 }
 
 func (*terraformProviderMirrorGetVersionCommand) Synopsis() string {
@@ -81,8 +62,7 @@ func (*terraformProviderMirrorGetVersionCommand) Synopsis() string {
 
 func (*terraformProviderMirrorGetVersionCommand) Description() string {
 	return `
-   The terraform-provider-mirror get-version command retrieves a terraform provider
-   version from the provider mirror.
+   Retrieves details about a mirrored provider version.
 `
 }
 
@@ -96,13 +76,12 @@ tharsis terraform-provider-mirror get-version <version-mirror-id>
 `
 }
 
-func (c *terraformProviderMirrorGetVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *terraformProviderMirrorGetVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
 	)
 
 	return f

@@ -1,19 +1,20 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceGetAssignedManagedIdentitiesCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
+
+var _ Command = (*workspaceGetAssignedManagedIdentitiesCommand)(nil)
 
 // NewWorkspaceGetAssignedManagedIdentitiesCommandFactory returns a workspaceGetAssignedManagedIdentitiesCommand struct.
 func NewWorkspaceGetAssignedManagedIdentitiesCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -25,13 +26,11 @@ func NewWorkspaceGetAssignedManagedIdentitiesCommandFactory(baseCommand *BaseCom
 }
 
 func (c *workspaceGetAssignedManagedIdentitiesCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
@@ -55,26 +54,7 @@ func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(result.ManagedIdentities); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to output JSON")
-			return 1
-		}
-		return 0
-	}
-
-	t := terminal.NewTable("id", "name", "group id", "type")
-	for _, identity := range result.ManagedIdentities {
-		t.Rich([]string{
-			identity.Metadata.Id,
-			identity.Name,
-			identity.GroupId,
-			identity.Type,
-		}, nil)
-	}
-
-	c.UI.Table(t)
-	return 0
+	return c.OutputList(result.ManagedIdentities, c.toJSON, "trn", "name", "type", "description")
 }
 
 func (*workspaceGetAssignedManagedIdentitiesCommand) Synopsis() string {
@@ -83,7 +63,7 @@ func (*workspaceGetAssignedManagedIdentitiesCommand) Synopsis() string {
 
 func (*workspaceGetAssignedManagedIdentitiesCommand) Description() string {
 	return `
-   The workspace get-assigned-managed-identities command lists managed identities assigned to a workspace.
+   Lists all managed identities assigned to a workspace.
 `
 }
 
@@ -97,13 +77,12 @@ tharsis workspace get-assigned-managed-identities trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceGetAssignedManagedIdentitiesCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceGetAssignedManagedIdentitiesCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
 	)
 
 	return f

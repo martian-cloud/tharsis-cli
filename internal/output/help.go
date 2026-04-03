@@ -3,178 +3,138 @@ package output
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
-	"regexp"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/alecthomas/chroma/v2/quick"
-	"github.com/fatih/color"
 	"github.com/kr/text"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
-var (
-	reHelpHeader = regexp.MustCompile(`^[a-zA-Z0-9_-].*:$`)             // matches "Section:" style headers
-	reHelpFlag   = regexp.MustCompile(`(\s|^|")(-[\w-]+)(\W|$)`)        // matches -flag style options
-	reCodeBlock  = regexp.MustCompile("(?s)([ ]*)```(\\w*)\\n(.*?)```") // matches ```lang\ncode``` with optional indent
-)
+// maxHelpTextWidth is the max line width for help text such as
+// descriptions and flag usage, accounting for indentation.
+const maxHelpTextWidth = 70
 
 // CommandHelpInfo contains the components of command help text.
 type CommandHelpInfo struct {
 	ProductName string
 	Usage       string
 	Description string
-	Flags       *flag.FlagSet
-	FlagsTitle  string // Title for flags section (default: "Command options:")
+	Flags       *flag.Set
 	Example     string
 }
 
 // CommandHelp builds and formats help text for a command with syntax highlighting.
-// It assembles usage, description, flags, and example sections, then applies color
-// highlighting to headers, flags, and command references.
 func CommandHelp(info CommandHelpInfo) string {
-	var buf bytes.Buffer
-	bold := color.New(color.Bold)
-	highlightColor := color.New(color.FgHiGreen)
+	var sections []string
 
-	// Build help sections
-	buf.WriteString("\n" + strings.TrimSpace(info.Usage) + "\n")
-
-	if desc := strings.TrimSpace(info.Description); desc != "" {
-		buf.WriteString("\n" + highlightCode(desc, info.ProductName) + "\n")
+	// Usage.
+	if usage := strings.TrimSpace(info.Usage); usage != "" {
+		sections = append(sections, usage)
 	}
 
+	// Description.
+	if desc := normalizeDescription(info.Description); desc != "" {
+		sections = append(sections, desc)
+	}
+
+	// Flags.
 	if info.Flags != nil {
-		flagsTitle := info.FlagsTitle
-		if flagsTitle == "" {
-			flagsTitle = "Command options:"
-		}
-		buf.WriteString("\n" + bold.Sprint(flagsTitle) + "\n")
-		var optionsBuf bytes.Buffer
-		writer := tabwriter.NewWriter(&optionsBuf, 0, 80, 0, ' ', 0)
-		info.Flags.VisitAll(func(f *flag.Flag) {
-			var defValue string
-			if f.DefValue != "" {
-				defValue = fmt.Sprintf("(default %s)", bold.Sprint(f.DefValue))
-			}
-			wrapped := text.Wrap(f.Usage, 70)
-			lines := strings.Split(wrapped, "\n")
-			for i, line := range lines {
-				lines[i] = strings.Repeat(" ", 6) + line
-			}
-			fmt.Fprintf(writer, "  %s %s\n\t%s\n", highlightColor.Sprintf("-%s", f.Name), defValue, strings.Join(lines, "\n"))
-		})
-		writer.Flush()
-		buf.WriteString(optionsBuf.String())
+		sections = append(sections, info.Flags.Name()+":\n"+formatFlags(info.Flags))
 	}
 
-	if example := strings.TrimSuffix(strings.TrimPrefix(info.Example, "\n"), "\n"); example != "" {
-		buf.WriteString("\n" + bold.Sprint("Example:") + "\n" + highlightCode(example, info.ProductName) + "\n\n")
+	// Example.
+	if example := strings.TrimSpace(info.Example); example != "" {
+		sections = append(sections, "Example:\n"+example)
 	}
 
-	// Apply syntax highlighting line by line
-	v := strings.TrimSpace(buf.String())
-	buf.Reset()
-
-	seenHeader := false
-	productPrefix := info.ProductName + " "
-	for _, line := range strings.Split(v, "\n") {
-		// Highlight product name at start of usage line
-		if info.ProductName != "" && strings.HasPrefix(line, productPrefix) {
-			buf.WriteString(highlightColor.Sprint(info.ProductName))
-			buf.WriteString(line[len(info.ProductName):])
-			buf.WriteString("\n")
-			continue
-		}
-
-		// Highlight "Usage:" prefix
-		if strings.HasPrefix(line, "Usage: ") {
-			buf.WriteString(highlightColor.Sprint("Usage: "))
-			buf.WriteString(line[7:])
-			buf.WriteString("\n")
-			continue
-		}
-
-		// Bold section headers like "Commands:" or "Options:"
-		if reHelpHeader.MatchString(line) {
-			seenHeader = true
-			buf.WriteString(bold.Sprint(line))
-			buf.WriteString("\n")
-			continue
-		}
-
-		// Highlight quoted command references like "product run"
-		if info.ProductName != "" {
-			reHelpCmd := regexp.MustCompile(`"` + regexp.QuoteMeta(info.ProductName) + ` (\w\s?)+"`)
-			if matches := reHelpCmd.FindAllStringIndex(line, -1); len(matches) > 0 {
-				idx := 0
-				for _, match := range matches {
-					buf.WriteString(line[idx : match[0]+1])
-					buf.WriteString(highlightColor.Sprint(line[match[0]+1 : match[1]-1]))
-					idx = match[1] - 1
-				}
-				buf.WriteString(line[idx:])
-				buf.WriteString("\n")
-				continue
-			}
-		}
-
-		// Highlight flags (only before first header to avoid coloring subcommand descriptions)
-		if !seenHeader {
-			if matches := reHelpFlag.FindAllStringSubmatchIndex(line, -1); len(matches) > 0 {
-				idx := 0
-				for _, match := range matches {
-					start, end := match[4], match[5]
-					buf.WriteString(line[idx:start])
-					buf.WriteString(highlightColor.Sprint(line[start:end]))
-					idx = end
-				}
-				buf.WriteString(line[idx:])
-				buf.WriteString("\n")
-				continue
-			}
-		}
-
-		buf.WriteString(line)
-		buf.WriteString("\n")
-	}
-
-	return strings.TrimSuffix(buf.String(), "\n")
+	return Colorize(strings.Join(sections, "\n\n"), info.ProductName)
 }
 
-// highlightCode applies syntax highlighting to code blocks and shell commands.
-func highlightCode(s, productName string) string {
-	// Check for explicit code blocks
-	if reCodeBlock.MatchString(s) {
-		return reCodeBlock.ReplaceAllStringFunc(s, func(match string) string {
-			parts := reCodeBlock.FindStringSubmatch(match)
-			if len(parts) < 4 || parts[2] == "" {
-				return parts[3] // return code without markers if no language
-			}
-			return highlight(parts[3], parts[2])
-		})
+// Wrap wraps text to fit the terminal width.
+func Wrap(s string) string {
+	return text.Wrap(s, maxHelpTextWidth)
+}
+
+// normalizeDescription trims and indents description text with 2-space indent.
+func normalizeDescription(desc string) string {
+	desc = strings.TrimSpace(desc)
+	if desc == "" {
+		return ""
 	}
 
-	// Auto-detect shell commands in examples
-	s = strings.TrimSpace(s)
-	if productName != "" {
-		if strings.HasPrefix(s, productName+" ") || strings.HasPrefix(s, "./"+productName+" ") {
-			return highlight(s, "bash")
+	lines := strings.Split(desc, "\n")
+	for i, line := range lines {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			lines[i] = "  " + trimmed
+		} else {
+			lines[i] = ""
 		}
 	}
 
-	return s
+	return strings.Join(lines, "\n")
 }
 
-func highlight(code, lang string) string {
-	if color.NoColor {
-		return strings.TrimSpace(code)
-	}
-
+func formatFlags(flagSet *flag.Set) string {
 	var buf bytes.Buffer
-	if err := quick.Highlight(&buf, strings.TrimSpace(code), lang, "terminal16m", "monokai"); err != nil {
-		return code
-	}
-	return strings.TrimSpace(buf.String())
+	w := tabwriter.NewWriter(&buf, 0, 80, 0, ' ', 0)
+
+	flagSet.VisitAll(func(f *flag.Flag) {
+		// Flag names.
+		names := f.Names()
+		for i, name := range names {
+			names[i] = "-" + name
+		}
+
+		parts := []string{strings.Join(names, ", ")}
+		for _, m := range f.Markers() {
+			parts = append(parts, m.String())
+		}
+
+		// Usage text.
+		var usage strings.Builder
+		first := true
+		for line := range strings.SplitSeq(text.Wrap(f.Usage, maxHelpTextWidth), "\n") {
+			if !first {
+				usage.WriteByte('\n')
+			}
+			usage.WriteString("      ")
+			usage.WriteString(line)
+			first = false
+		}
+
+		fmt.Fprintf(w, "  %s\n%s\n", strings.Join(parts, " "), usage.String())
+
+		// Metadata lines.
+		if vals := f.ValidValues(); len(vals) > 0 {
+			fmt.Fprintf(w, "      Values: %s\n", strings.Join(vals, ", "))
+		}
+
+		if dv := f.DefaultValue(); dv != "" {
+			fmt.Fprintf(w, "      Default: %s\n", dv)
+		}
+
+		if dm := f.DeprecationMessage(); dm != "" {
+			fmt.Fprintf(w, "      Deprecated: %s\n", dm)
+		}
+
+		if env := f.EnvVar(); env != "" {
+			fmt.Fprintf(w, "      Env: %s\n", env)
+		}
+
+		if ex := f.ExclusiveWith(); len(ex) > 0 {
+			names := make([]string, len(ex))
+			for i, name := range ex {
+				names[i] = "-" + name
+			}
+
+			fmt.Fprintf(w, "      Conflicts: %s\n", strings.Join(names, ", "))
+		}
+
+		fmt.Fprintln(w)
+	})
+
+	w.Flush()
+
+	return strings.TrimRight(buf.String(), "\n")
 }

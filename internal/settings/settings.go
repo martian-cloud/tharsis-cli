@@ -6,11 +6,6 @@ package settings
 
 import "fmt"
 
-const (
-	// DefaultProfileName is the name of the default profile
-	DefaultProfileName = "default"
-)
-
 // Settings holds the contents of one settings file and
 // a pointer to the profile specified by the current command.
 type Settings struct {

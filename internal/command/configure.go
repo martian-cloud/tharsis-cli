@@ -1,13 +1,14 @@
 package command
 
 import (
-	"flag"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
-	"github.com/go-ozzo/ozzo-validation/v4/is"
+	"github.com/aws/smithy-go/ptr"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
@@ -16,18 +17,25 @@ import (
 type configureCommand struct {
 	*BaseCommand
 
-	profileName   string
-	httpEndpoint  string
-	tlsSkipVerify bool
+	profileName   *string
+	httpEndpoint  *string
+	tlsSkipVerify *bool
 }
 
 var _ Command = (*configureCommand)(nil)
 
 func (c *configureCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Empty),
-		validation.Field(&c.httpEndpoint, is.URL),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	if c.httpEndpoint != nil {
+		if _, err := url.ParseRequestURI(*c.httpEndpoint); err != nil {
+			return errors.New("-http-endpoint must be a valid URL")
+		}
+	}
+
+	return nil
 }
 
 // NewConfigureCommandFactory returns a configureCommand struct.
@@ -49,11 +57,10 @@ func (c *configureCommand) Run(args []string) int {
 		return code
 	}
 
-	if (c.profileName == "") && (c.httpEndpoint == "") {
+	if c.profileName == nil && c.httpEndpoint == nil {
 		// If options are not specified, prompt for values.
 
-		var err error
-		c.profileName, err = c.UI.Input(&terminal.Input{
+		profile, err := c.UI.Input(&terminal.Input{
 			Prompt: "Enter the profile name: ",
 			// Rest of the fields are ignored.
 		})
@@ -61,9 +68,12 @@ func (c *configureCommand) Run(args []string) int {
 			c.UI.ErrorWithSummary(err, "failed to request profile name")
 			return 1
 		}
-		if c.profileName == "" {
+
+		if profile == "" {
 			// If nothing entered manually, default to default.
-			c.profileName = "default"
+			c.profileName = ptr.String(settings.DefaultProfileName)
+		} else {
+			c.profileName = &profile
 		}
 
 		var httpEndpointAskPrompt string
@@ -75,25 +85,27 @@ func (c *configureCommand) Run(args []string) int {
 			httpEndpointAskPrompt = "Enter the HTTP API URL: "
 		}
 
-		c.httpEndpoint, err = c.UI.Input(&terminal.Input{Prompt: httpEndpointAskPrompt})
+		httpEndpoint, err := c.UI.Input(&terminal.Input{Prompt: httpEndpointAskPrompt})
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to request HTTP endpoint URL")
 			return 1
 		}
 
-		if c.httpEndpoint == "" {
+		if httpEndpoint == "" {
 			// If nothing entered manually, default to the value passed into the
 			// main package at build time.
-			c.httpEndpoint = c.DefaultHTTPEndpoint
+			c.httpEndpoint = &c.DefaultHTTPEndpoint
+		} else {
+			c.httpEndpoint = &httpEndpoint
 		}
 	}
 
-	if c.profileName == "" || c.httpEndpoint == "" {
+	if c.profileName == nil || c.httpEndpoint == nil {
 		// If only one option is specified, error out.
 		// This can happen if the only one option is supplied or if the
 		// interactive response leaves the endpoint URL blank and
 		// the default value from build time is blank.
-		c.UI.Errorf("Please specify all --profile=..., --http-endpoint=... options.")
+		c.UI.Errorf("Please specify all -profile=..., -http-endpoint=... options.")
 		return 1
 	}
 
@@ -104,7 +116,8 @@ func (c *configureCommand) Run(args []string) int {
 
 	// Remove any trailing slashes from the endpoint as this could
 	// create problems when making requests.
-	c.httpEndpoint = strings.TrimSuffix(c.httpEndpoint, "/")
+	trimmed := strings.TrimSuffix(*c.httpEndpoint, "/")
+	c.httpEndpoint = &trimmed
 
 	// Attempt to read the existing settings.
 	gotSettings, err := settings.ReadSettings()
@@ -133,21 +146,22 @@ func (c *configureCommand) updateOneProfile(oldSettings *settings.Settings) int 
 		oldSettings.Profiles = map[string]settings.Profile{}
 	}
 
-	profile, ok := oldSettings.Profiles[c.profileName]
+	profile, ok := oldSettings.Profiles[*c.profileName]
 	if !ok {
 		// Create a new profile.
-		oldSettings.Profiles[c.profileName] = settings.Profile{}
+		oldSettings.Profiles[*c.profileName] = settings.Profile{}
 	}
 
-	if !strings.HasPrefix(c.httpEndpoint, "http://") && !strings.HasPrefix(c.httpEndpoint, "https://") {
+	if !strings.HasPrefix(*c.httpEndpoint, "http://") && !strings.HasPrefix(*c.httpEndpoint, "https://") {
 		// Handle case where only hostname was entered by prepending HTTPS to it.
-		c.httpEndpoint = fmt.Sprintf("https://%s", c.httpEndpoint)
+		prefixed := fmt.Sprintf("https://%s", *c.httpEndpoint)
+		c.httpEndpoint = &prefixed
 	}
 
 	// Check for duplicate endpoints across profiles.
 	for name, p := range oldSettings.Profiles {
-		if p.Endpoint == c.httpEndpoint && name != c.profileName {
-			c.UI.Errorf("Endpoint %s is already used by profile %q. Each profile must have a unique endpoint.", c.httpEndpoint, name)
+		if p.Endpoint == *c.httpEndpoint && name != *c.profileName {
+			c.UI.Errorf("Endpoint %s is already used by profile %q. Each profile must have a unique endpoint.", *c.httpEndpoint, name)
 			return 1
 		}
 	}
@@ -156,15 +170,15 @@ func (c *configureCommand) updateOneProfile(oldSettings *settings.Settings) int 
 
 	c.UI.Output("Setting profile:")
 	c.UI.NamedValues([]terminal.NamedValue{
-		{Name: "Profile", Value: c.profileName},
-		{Name: "HTTP endpoint", Value: c.httpEndpoint},
-		{Name: "TLS Skip Verify", Value: c.tlsSkipVerify},
+		{Name: "Profile", Value: *c.profileName},
+		{Name: "HTTP endpoint", Value: *c.httpEndpoint},
+		{Name: "TLS Skip Verify", Value: *c.tlsSkipVerify},
 	})
 
 	// Set the endpoints on the settings.
-	profile.Endpoint = c.httpEndpoint
-	profile.TLSSkipVerify = c.tlsSkipVerify
-	oldSettings.Profiles[c.profileName] = profile
+	profile.Endpoint = *c.httpEndpoint
+	profile.TLSSkipVerify = *c.tlsSkipVerify
+	oldSettings.Profiles[*c.profileName] = profile
 
 	// Write the file.
 	if err := oldSettings.WriteSettingsFile(); err != nil {
@@ -185,45 +199,44 @@ func (c *configureCommand) Usage() string {
 
 func (c *configureCommand) Description() string {
 	return `
-   The configure command creates or updates a profile. If no
-   options are specified, the command prompts for values.
+   Creates or updates a profile. If no options are
+   specified, the command prompts for values.
 `
 }
 
 func (c *configureCommand) Example() string {
 	return `
 tharsis configure \
-  --http-endpoint https://api.tharsis.example.com \
-  --profile prod-example
+  -http-endpoint "https://api.tharsis.example.com" \
+  -profile "prod-example"
 `
 }
 
-func (c *configureCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("command options", flag.ContinueOnError)
+func (c *configureCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+
 	f.StringVar(
 		&c.profileName,
 		"profile",
-		"",
 		"The name of the profile to set.",
 	)
 	f.StringVar(
 		&c.httpEndpoint,
 		"http-endpoint",
-		c.DefaultHTTPEndpoint,
-		"The Tharsis HTTP API endpoint (in URL format).",
+		"The Tharsis HTTP API endpoint.",
 	)
 	f.StringVar(
 		&c.httpEndpoint,
 		"endpoint-url",
-		c.DefaultHTTPEndpoint,
-		"The Tharsis HTTP API endpoint (in URL format). Deprecated.",
+		"The Tharsis HTTP API endpoint.",
+		flag.Deprecated("use -http-endpoint instead"),
 	)
 	f.BoolVar(
 		&c.tlsSkipVerify,
 		"insecure-tls-skip-verify",
-		false,
 		"Allow TLS but disable verification of the gRPC server's certificate chain and hostname. "+
-			"This should ONLY be true for testing as it could allow the CLI to connect to an impersonated server.",
+			"Only use for testing as it could allow connecting to an impersonated server.",
+		flag.Default(false),
 	)
 
 	return f

@@ -1,9 +1,8 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
 
@@ -15,13 +14,11 @@ type managedIdentityAccessRuleDeleteCommand struct {
 var _ Command = (*managedIdentityAccessRuleDeleteCommand)(nil)
 
 func (c *managedIdentityAccessRuleDeleteCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewManagedIdentityAccessRuleDeleteCommandFactory returns a managedIdentityAccessRuleDeleteCommand struct.
@@ -67,7 +64,7 @@ func (*managedIdentityAccessRuleDeleteCommand) Usage() string {
 
 func (*managedIdentityAccessRuleDeleteCommand) Description() string {
 	return `
-   The managed-identity-access-rule delete command deletes a managed identity access rule.
+   Removes an access rule from a managed identity.
 `
 }
 
@@ -75,8 +72,4 @@ func (*managedIdentityAccessRuleDeleteCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule delete <id>
 `
-}
-
-func (c *managedIdentityAccessRuleDeleteCommand) Flags() *flag.FlagSet {
-	return nil
 }

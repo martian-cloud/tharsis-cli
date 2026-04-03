@@ -1,15 +1,15 @@
 package command
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"slices"
 	"strings"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -17,25 +17,29 @@ import (
 type managedIdentityAccessRuleCreateCommand struct {
 	*BaseCommand
 
-	managedIdentityID         string
-	ruleType                  *pb.ManagedIdentityAccessRuleType
-	runStage                  *pb.JobType
+	managedIdentityID         *string
+	ruleType                  *string
+	runStage                  *string
 	allowedUsers              []string
 	allowedServiceAccounts    []string
 	allowedTeams              []string
-	verifyStateLineage        bool
 	moduleAttestationPolicies []string
-	toJSON                    bool
+	verifyStateLineage        *bool
+	toJSON                    *bool
 }
 
 var _ Command = (*managedIdentityAccessRuleCreateCommand)(nil)
 
 func (c *managedIdentityAccessRuleCreateCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.managedIdentityID, validation.Required),
-		validation.Field(&c.ruleType, validation.NotNil),
-		validation.Field(&c.runStage, validation.NotNil),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	if c.managedIdentityID == nil {
+		return errors.New("managed identity id is required")
+	}
+
+	return nil
 }
 
 // NewManagedIdentityAccessRuleCreateCommandFactory returns a managedIdentityAccessRuleCreateCommand struct.
@@ -65,13 +69,13 @@ func (c *managedIdentityAccessRuleCreateCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateManagedIdentityAccessRuleRequest{
-		Type:                      *c.ruleType,
-		RunStage:                  *c.runStage,
-		ManagedIdentityId:         c.managedIdentityID,
+		Type:                      pb.ManagedIdentityAccessRuleType(pb.ManagedIdentityAccessRuleType_value[*c.ruleType]),
+		RunStage:                  pb.JobType(pb.JobType_value[*c.runStage]),
+		ManagedIdentityId:         *c.managedIdentityID,
 		AllowedUsers:              c.allowedUsers,
 		AllowedServiceAccounts:    c.allowedServiceAccounts,
 		AllowedTeams:              c.allowedTeams,
-		VerifyStateLineage:        c.verifyStateLineage,
+		VerifyStateLineage:        *c.verifyStateLineage,
 		ModuleAttestationPolicies: policies,
 	}
 
@@ -81,7 +85,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentityAccessRule(c.UI, c.toJSON, createdRule)
+	return c.Output(createdRule, c.toJSON)
 }
 
 func (*managedIdentityAccessRuleCreateCommand) Synopsis() string {
@@ -94,103 +98,97 @@ func (*managedIdentityAccessRuleCreateCommand) Usage() string {
 
 func (*managedIdentityAccessRuleCreateCommand) Description() string {
 	return `
-   The managed-identity-access-rule create command creates a new managed identity access rule.
+   Creates an access rule that controls which workspaces
+   can use a managed identity.
 `
 }
 
 func (*managedIdentityAccessRuleCreateCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule create \
-  --managed-identity-id trn:managed_identity:<group_path>/<managed_identity_name> \
-  --rule-type eligible_principals \
-  --run-stage plan \
-  --allowed-user trn:user:<username> \
-  --allowed-team trn:team:<team_name>
+  -managed-identity-id "trn:managed_identity:<group_path>/<managed_identity_name>" \
+  -rule-type "eligible_principals" \
+  -run-stage "plan" \
+  -allowed-user "trn:user:<username>" \
+  -allowed-team "trn:team:<team_name>"
 `
 }
 
-func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.Set {
+	ruleTypes := slices.Collect(maps.Keys(pb.ManagedIdentityAccessRuleType_value))
+	runStages := slices.Collect(maps.Keys(pb.JobType_value))
+
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.managedIdentityID,
 		"managed-identity-id",
-		"",
 		"The ID or TRN of the managed identity.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.managedIdentityID,
 		"managed-identity-path",
-		"Resource path to the managed identity. Deprecated.",
-		func(s string) error {
-			c.managedIdentityID = trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
-			return nil
-		},
+		"Resource path to the managed identity.",
+		flag.Deprecated("use -managed-identity-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
+		}),
 	)
-	f.Func(
+	f.StringVar(
+		&c.ruleType,
 		"rule-type",
-		"The type of access rule: eligible_principals or module_attestation.",
-		func(s string) error {
-			val, ok := pb.ManagedIdentityAccessRuleType_value[strings.ToLower(s)]
-			if !ok {
-				return fmt.Errorf("invalid rule type: %s (valid types: %v)", s, slices.Collect(maps.Keys(pb.ManagedIdentityAccessRuleType_value)))
-			}
-			c.ruleType = pb.ManagedIdentityAccessRuleType(val).Enum()
-			return nil
-		},
+		"The type of access rule.",
+		flag.Required(),
+		flag.ValidValues(ruleTypes...),
+		flag.PredictValues(ruleTypes...),
+		flag.TransformString(strings.ToLower),
 	)
-	f.Func(
+	f.StringVar(
+		&c.runStage,
 		"run-stage",
-		"The run stage: plan or apply.",
-		func(s string) error {
-			val, ok := pb.JobType_value[strings.ToLower(s)]
-			if !ok {
-				return fmt.Errorf("invalid run stage: %s (valid stages: %v)", s, slices.Collect(maps.Keys(pb.JobType_value)))
-			}
-			c.runStage = pb.JobType(val).Enum()
-			return nil
-		},
+		"The run stage.",
+		flag.Required(),
+		flag.ValidValues(runStages...),
+		flag.PredictValues(runStages...),
+		flag.TransformString(strings.ToLower),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.allowedUsers,
 		"allowed-user",
-		"Allowed user ID. (This flag may be repeated)",
-		func(s string) error {
-			c.allowedUsers = append(c.allowedUsers, trn.ToTRN(trn.ResourceTypeUser, s))
-			return nil
-		},
+		"Allowed user ID.",
+		flag.TransformString(func(s string) string {
+			return trn.ToTRN(trn.ResourceTypeUser, s)
+		}),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.allowedServiceAccounts,
 		"allowed-service-account",
-		"Allowed service account ID. (This flag may be repeated)",
-		func(s string) error {
-			c.allowedServiceAccounts = append(c.allowedServiceAccounts, trn.ToTRN(trn.ResourceTypeServiceAccount, s))
-			return nil
-		},
+		"Allowed service account ID.",
+		flag.TransformString(func(s string) string {
+			return trn.ToTRN(trn.ResourceTypeServiceAccount, s)
+		}),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.allowedTeams,
 		"allowed-team",
-		"Allowed team ID. (This flag may be repeated)",
-		func(s string) error {
-			c.allowedTeams = append(c.allowedTeams, trn.ToTRN(trn.ResourceTypeTeam, s))
-			return nil
-		},
+		"Allowed team ID.",
+		flag.TransformString(func(s string) string {
+			return trn.ToTRN(trn.ResourceTypeTeam, s)
+		}),
 	)
 	f.BoolVar(
 		&c.verifyStateLineage,
 		"verify-state-lineage",
-		false,
 		"Verify state lineage.",
+		flag.Default(false),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.moduleAttestationPolicies,
 		"module-attestation-policy",
-		"Module attestation policy in format \"[PredicateType=someval,]PublicKeyFile=/path/to/file\". (This flag may be repeated)",
-		func(s string) error {
-			c.moduleAttestationPolicies = append(c.moduleAttestationPolicies, s)
-			return nil
-		},
+		"Module attestation policy in format \"[PredicateType=someval,]PublicKeyFile=/path/to/file\".",
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 

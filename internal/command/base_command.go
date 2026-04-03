@@ -7,31 +7,33 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
+
 	"github.com/hashicorp/go-hclog"
 	"github.com/mitchellh/cli"
+	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
 	// maxPaginationLimit is the default (and max) limit for paginated list commands.
-	maxPaginationLimit = 100
-
-	// humanTimeFormat is the format used for displaying timestamps in human-readable output.
-	humanTimeFormat = "January 2 2006, 3:04:05 PM MST"
+	maxPaginationLimit int32 = 100
 )
 
 // baseOptions contains the different ways to configure the behavior of BaseCommand.
 type baseOptions struct {
-	flags          *flag.FlagSet
+	flags          *flag.Set
 	inputValidator func() error
 	commandName    string
 	args           []string
@@ -40,13 +42,24 @@ type baseOptions struct {
 	confirmPrompt  string
 }
 
-// isForceFlagSet checks if the --force flag is set in the parsed flags.
+// isForceFlagSet checks if the -force flag is set in the parsed flags.
 func (o *baseOptions) isForceFlagSet() bool {
 	if o.flags == nil {
 		return false
 	}
+
 	f := o.flags.Lookup("force")
-	return f != nil && f.Value.String() == "true"
+	return f != nil && f.Value() == "true"
+}
+
+// isJSONFlagSet checks if the -json flag is set in the parsed flags.
+func (o *baseOptions) isJSONFlagSet() bool {
+	if o.flags == nil {
+		return false
+	}
+
+	f := o.flags.Lookup("json")
+	return f != nil && f.Value() == "true"
 }
 
 // BaseOptionsFunc is an alias that allows setting baseOptions.
@@ -54,7 +67,7 @@ type BaseOptionsFunc func(*baseOptions) error
 
 // WithFlags sets the FlagSet that needs to be parsed. Return
 // values are often set as fields on the caller command's struct.
-func WithFlags(flags *flag.FlagSet) BaseOptionsFunc {
+func WithFlags(flags *flag.Set) BaseOptionsFunc {
 	return func(o *baseOptions) error {
 		o.flags = flags
 		return nil
@@ -102,10 +115,9 @@ func WithClient(withAuth bool) BaseOptionsFunc {
 	}
 }
 
-// WithForcePrompt prompts for confirmation in interactive mode when
-// --force option is used to prevent accidental deletions for forceful
-// actions. The prompt parameter is the confirmation message shown to the user.
-func WithForcePrompt(prompt string) BaseOptionsFunc {
+// WithWarningPrompt displays a warning and prompts for confirmation
+// in interactive mode when the -force flag is set.
+func WithWarningPrompt(prompt string) BaseOptionsFunc {
 	return func(o *baseOptions) error {
 		o.confirmPrompt = prompt
 		return nil
@@ -124,13 +136,95 @@ type BaseCommand struct {
 	HTTPClient           *http.Client
 	grpcClient           *client.Client
 	Version              string
-	DisplayTitle         string
 	BinaryName           string
 	CurrentProfileName   string
 	DefaultHTTPEndpoint  string
 	UserAgent            string
 	arguments            []string
 	DefaultTLSSkipVerify bool
+}
+
+// PredictArgs returns argument completions. Override in commands that accept arguments.
+func (c *BaseCommand) PredictArgs() complete.Predictor {
+	return complete.PredictNothing
+}
+
+// Flags returns the command's flag set. Override in commands that accept flags.
+func (c *BaseCommand) Flags() *flag.Set {
+	return nil
+}
+
+// Output renders a proto message as JSON or a human-readable table.
+func (c *BaseCommand) Output(msg proto.Message, toJSON *bool) int {
+	if toJSON != nil && *toJSON {
+		if err := c.UI.JSON(msg); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+
+		return 0
+	}
+
+	c.UI.NamedValues(output.ProtoToNamedValues(msg))
+
+	return 0
+}
+
+// OutputList renders a paginated list as JSON or a table with pagination info.
+// data can be a proto message (with repeated fields and optional PageInfo) or a
+// plain slice of proto messages. An optional fields list controls which columns
+// appear in table output; see ProtoToTable for details.
+func (c *BaseCommand) OutputList(data any, toJSON *bool, fields ...string) int {
+	if toJSON != nil && *toJSON {
+		if err := c.UI.JSON(data); err != nil {
+			c.UI.ErrorWithSummary(err, "failed to get JSON output")
+			return 1
+		}
+
+		return 0
+	}
+
+	items, pageInfo := output.ExtractListFields(data)
+	if len(items) == 0 {
+		c.UI.Warnf("No results found")
+		return 0
+	}
+
+	c.UI.Table(output.ProtoToTable(items, fields...))
+
+	if pageInfo != nil {
+		c.UI.Output("---")
+
+		bold := color.New(color.Bold)
+		values := []terminal.NamedValue{
+			{Name: bold.Sprint("Total"), Value: pageInfo.TotalCount},
+		}
+
+		if pageInfo.HasNextPage && pageInfo.EndCursor != nil {
+			values = append(values, terminal.NamedValue{
+				Name:  bold.Sprint("Next page"),
+				Value: pageInfo.GetEndCursor(),
+			})
+		}
+
+		c.UI.NamedValues(values)
+	}
+
+	return 0
+}
+
+// Close closes any pending resources.
+func (c *BaseCommand) Close() error {
+	var errs []error
+
+	if closer, ok := c.UI.(io.Closer); ok {
+		errs = append(errs, closer.Close())
+	}
+	if c.grpcClient != nil {
+		errs = append(errs, c.grpcClient.Close())
+	}
+
+	return errors.Join(errs...)
 }
 
 // initialize performs some preliminary tasks for each command. It should be
@@ -165,6 +259,12 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 			return cli.RunResultHelp
 		}
 
+		if !o.isJSONFlagSet() {
+			for _, d := range o.flags.Deprecations() {
+				c.UI.Warnf("WARNING: %s", d)
+			}
+		}
+
 		c.arguments = o.flags.Args()
 	} else {
 		// There are no flags defined for the command, so default to all arguments.
@@ -179,10 +279,10 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 		}
 	}
 
-	// Prompt for confirmation if destructive operation in interactive mode.
-	// Only prompt when --force is used.
+	// Prompt for confirmation in interactive mode when -force is true.
 	if o.confirmPrompt != "" && c.UI.Interactive() && o.isForceFlagSet() {
-		confirmed, err := c.UI.Confirm(o.confirmPrompt)
+		c.UI.Warnf(o.confirmPrompt)
+		confirmed, err := c.UI.Confirm("Continue?")
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to confirm")
 			return 1
@@ -232,23 +332,14 @@ func (c *BaseCommand) getCurrentSettings() (*settings.Settings, error) {
 		return nil, err
 	}
 
-	c.Logger.Debug("loaded settings", "settings", currentSettings)
+	c.Logger.Debug("loaded settings",
+		"profile", c.CurrentProfileName,
+		"endpoint", currentSettings.CurrentProfile.Endpoint,
+		"tlsSkipVerify", currentSettings.CurrentProfile.TLSSkipVerify,
+		"profileCount", len(currentSettings.Profiles),
+	)
 
 	return currentSettings, nil
-}
-
-// Close closes any pending resources.
-func (c *BaseCommand) Close() error {
-	var errs []error
-
-	if closer, ok := c.UI.(io.Closer); ok {
-		errs = append(errs, closer.Close())
-	}
-	if c.grpcClient != nil {
-		errs = append(errs, c.grpcClient.Close())
-	}
-
-	return errors.Join(errs...)
 }
 
 /*
@@ -377,19 +468,31 @@ func parseSortField[T ~int32](sortBy, sortOrder *string, enumValues map[string]i
 		return nil, nil
 	}
 
-	// Try direct lookup first (new format: FIELD_ORDER)
-	sort, ok := enumValues[*sortBy]
+	// Normalize deprecated short names.
+	deprecatedAliases := map[string]string{
+		"CREATED": "CREATED_AT",
+		"UPDATED": "UPDATED_AT",
+		"PATH":    "FULL_PATH",
+	}
+
+	key := *sortBy
+	if alias, ok := deprecatedAliases[key]; ok {
+		key = alias
+	}
+
+	// Try direct lookup first (new format: FIELD_ORDER).
+	sort, ok := enumValues[key]
 	if ok {
 		enumVal := T(sort)
 		return &enumVal, nil
 	}
 
-	// Handle deprecated separate sort-by and sort-order flags
+	// Handle deprecated separate sort-by and sort-order flags.
 	if sortOrder == nil {
 		return nil, fmt.Errorf("sort order must be specified if using deprecated sort-by value %s", *sortBy)
 	}
 
-	sortValue := fmt.Sprintf("%s_%s", *sortBy, *sortOrder)
+	sortValue := fmt.Sprintf("%s_%s", key, *sortOrder)
 	sort, ok = enumValues[sortValue]
 	if !ok {
 		return nil, fmt.Errorf("unknown sort value %s", sortValue)

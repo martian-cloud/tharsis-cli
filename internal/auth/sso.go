@@ -736,15 +736,13 @@ func (a *ssoAuthenticator) buildCallbackResponseBody() string {
 
 // launchBrowser launches the web browser to the OAuth login page.
 func (a *ssoAuthenticator) launchBrowser(authCodeURL string) error {
-	if a.config.ui != nil {
-		asURL, err := url.Parse(a.tharsisURL)
-		if err != nil {
-			return err
-		}
-		a.config.ui.Output("\nTharsis must now open a web browser to the login page for host %s\n", asURL.Host)
-		a.config.ui.Output("If a browser does not open automatically, open the following URL:\n%s\n", authCodeURL)
-		a.config.ui.Output("Tharsis will now wait for the host to signal that login was successful.\n\n")
+	asURL, err := url.Parse(a.tharsisURL)
+	if err != nil {
+		return err
 	}
+	a.config.ui.Output("\nTharsis must now open a web browser to the login page for host %s\n", asURL.Host)
+	a.config.ui.Output("If a browser does not open automatically, open the following URL:\n%s\n", authCodeURL)
+	a.config.ui.Output("Tharsis will now wait for the host to signal that login was successful.\n\n")
 
 	return browser.OpenURL(authCodeURL)
 }

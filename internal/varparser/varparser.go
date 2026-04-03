@@ -16,7 +16,15 @@ import (
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
-	sdktypes "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go/pkg/types"
+)
+
+// VariableCategory represents the categories of variables.
+type VariableCategory string
+
+// Variable category constants.
+const (
+	TerraformVariableCategory   VariableCategory = "terraform"
+	EnvironmentVariableCategory VariableCategory = "environment"
 )
 
 // Constants required for this module.
@@ -46,7 +54,7 @@ type ParseEnvironmentVariablesInput struct {
 type Variable struct {
 	Value    string
 	Key      string
-	Category sdktypes.VariableCategory
+	Category VariableCategory
 }
 
 // VariableParser implements functionalities needed to parse variables.
@@ -81,11 +89,11 @@ func (v *VariableParser) ParseTerraformVariables(input *ParseTerraformVariablesI
 	if v.withTfVarsFromEnvironment {
 		exportedVariables := []string{}
 		for _, e := range os.Environ() {
-			if strings.HasPrefix(e, exportedTfVarPrefix) {
-				exportedVariables = append(exportedVariables, strings.TrimPrefix(e, exportedTfVarPrefix))
+			if after, ok := strings.CutPrefix(e, exportedTfVarPrefix); ok {
+				exportedVariables = append(exportedVariables, after)
 			}
 		}
-		err := v.processStringVariables(exportedVariables, sdktypes.TerraformVariableCategory)
+		err := v.processStringVariables(exportedVariables, TerraformVariableCategory)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +111,7 @@ func (v *VariableParser) ParseTerraformVariables(input *ParseTerraformVariablesI
 		return nil, err
 	}
 
-	err := v.processStringVariables(input.TfVariables, sdktypes.TerraformVariableCategory)
+	err := v.processStringVariables(input.TfVariables, TerraformVariableCategory)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +137,7 @@ func (v *VariableParser) ParseEnvironmentVariables(input *ParseEnvironmentVariab
 		return nil, err
 	}
 
-	err := v.processStringVariables(input.EnvVariables, sdktypes.EnvironmentVariableCategory)
+	err := v.processStringVariables(input.EnvVariables, EnvironmentVariableCategory)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +151,7 @@ func (v *VariableParser) ParseEnvironmentVariables(input *ParseEnvironmentVariab
 }
 
 // processStringVariables iterates through the variables slice and splits variables using "=".
-func (v *VariableParser) processStringVariables(variables []string, category sdktypes.VariableCategory) error {
+func (v *VariableParser) processStringVariables(variables []string, category VariableCategory) error {
 	for i, pair := range variables {
 		pair = strings.TrimSpace(pair)
 
@@ -229,7 +237,7 @@ func (v *VariableParser) processTfVarsFile(filePaths []string) error {
 
 			v.variableMap[key] = Variable{
 				Key:      key,
-				Category: sdktypes.TerraformVariableCategory,
+				Category: TerraformVariableCategory,
 				Value:    val,
 			}
 		}
@@ -256,7 +264,7 @@ func (v *VariableParser) processEnvVarsFile(filePaths []string) error {
 			lines = append(lines, scanner.Text())
 		}
 
-		if err = v.processStringVariables(lines, sdktypes.EnvironmentVariableCategory); err != nil {
+		if err = v.processStringVariables(lines, EnvironmentVariableCategory); err != nil {
 			return err
 		}
 	}

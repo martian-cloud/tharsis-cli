@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
@@ -14,6 +14,8 @@ type groupSetEnvironmentVarsCommand struct {
 
 	envVarFiles []string
 }
+
+var _ Command = (*groupSetEnvironmentVarsCommand)(nil)
 
 // NewGroupSetEnvironmentVarsCommandFactory returns a groupSetEnvironmentVarsCommand struct.
 func NewGroupSetEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -25,14 +27,11 @@ func NewGroupSetEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func() (
 }
 
 func (c *groupSetEnvironmentVarsCommand) validate() error {
-	const message = "group-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.envVarFiles, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: group id")
+	}
+
+	return nil
 }
 
 func (c *groupSetEnvironmentVarsCommand) Run(args []string) int {
@@ -89,9 +88,8 @@ func (*groupSetEnvironmentVarsCommand) Synopsis() string {
 
 func (*groupSetEnvironmentVarsCommand) Description() string {
 	return `
-   The group set-environment-vars command sets environment variables for a group.
-   Command will overwrite any existing environment variables in the target group!
-   Note: This command does not support sensitive variables.
+   Replaces all environment variables in a group from a
+   file. Does not support sensitive variables.
 `
 }
 
@@ -102,20 +100,18 @@ func (*groupSetEnvironmentVarsCommand) Usage() string {
 func (*groupSetEnvironmentVarsCommand) Example() string {
 	return `
 tharsis group set-environment-vars \
-  --env-var-file vars.env \
+  -env-var-file "vars.env" \
   trn:group:<group_path>
 `
 }
 
-func (c *groupSetEnvironmentVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *groupSetEnvironmentVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringSliceVar(
+		&c.envVarFiles,
 		"env-var-file",
-		"Path to an environment variables file (can be specified multiple times).",
-		func(s string) error {
-			c.envVarFiles = append(c.envVarFiles, s)
-			return nil
-		},
+		"Path to an environment variables file.",
+		flag.Required(),
 	)
 
 	return f

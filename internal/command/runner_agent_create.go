@@ -2,11 +2,10 @@ package command
 
 import (
 	"errors"
-	"flag"
-	"strconv"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -14,30 +13,35 @@ import (
 type runnerAgentCreateCommand struct {
 	*BaseCommand
 
-	disabled        *bool
-	runnerName      string
-	groupID         string
-	description     string
+	runnerName      *string
+	groupID         *string
+	description     *string
 	tags            []string
-	runUntaggedJobs bool
-	toJSON          bool
+	disabled        *bool
+	runUntaggedJobs *bool
+	toJSON          *bool
 }
 
 var _ Command = (*runnerAgentCreateCommand)(nil)
 
 func (c *runnerAgentCreateCommand) validate() error {
-	if len(c.arguments) > 0 && c.runnerName != "" {
-		return errors.New("must supply only one of runner name argument or option, not both")
+	if c.runnerName != nil && len(c.arguments) > 0 {
+		return errors.New("must supply only one of runner name argument or -runner-name flag, not both")
 	}
 
-	if len(c.arguments) == 0 && c.runnerName == "" {
-		return errors.New("runner name argument or option is required")
+	if c.runnerName == nil && len(c.arguments) == 0 {
+		return errors.New("runner name argument or -runner-name flag is required")
 	}
 
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Length(0, 1)),
-		validation.Field(&c.groupID, validation.Required),
-	)
+	if len(c.arguments) > 1 {
+		return errors.New("at most one argument is allowed")
+	}
+
+	if c.groupID == nil {
+		return errors.New("group id is required")
+	}
+
+	return nil
 }
 
 // NewRunnerAgentCreateCommandFactory returns a runnerAgentCreateCommand struct.
@@ -60,15 +64,16 @@ func (c *runnerAgentCreateCommand) Run(args []string) int {
 		return code
 	}
 
-	if c.runnerName != "" {
-		c.arguments = append(c.arguments, c.runnerName)
+	// Deprecated -runner-name flag support.
+	if c.runnerName != nil {
+		c.arguments = append(c.arguments, *c.runnerName)
 	}
 
 	input := &pb.CreateRunnerRequest{
 		Name:            c.arguments[0],
-		Description:     c.description,
-		GroupId:         c.groupID,
-		RunUntaggedJobs: c.runUntaggedJobs,
+		Description:     ptr.ToString(c.description),
+		GroupId:         *c.groupID,
+		RunUntaggedJobs: *c.runUntaggedJobs,
 		Tags:            c.tags,
 		Disabled:        c.disabled,
 	}
@@ -79,7 +84,7 @@ func (c *runnerAgentCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputRunnerAgent(c.UI, c.toJSON, createdRunner)
+	return c.Output(createdRunner, c.toJSON)
 }
 
 func (*runnerAgentCreateCommand) Synopsis() string {
@@ -92,80 +97,69 @@ func (*runnerAgentCreateCommand) Usage() string {
 
 func (*runnerAgentCreateCommand) Description() string {
 	return `
-   The runner-agent create command creates a new runner agent.
+   Creates a new runner agent for executing Terraform
+   jobs.
 `
 }
 
 func (*runnerAgentCreateCommand) Example() string {
 	return `
 tharsis runner-agent create \
-  --group-id trn:group:<group_path> \
-  --description "Production runner" \
-  --run-untagged-jobs \
-  --tag prod \
-  --tag us-east-1 \
+  -group-id "trn:group:<group_path>" \
+  -description "Production runner" \
+  -run-untagged-jobs \
+  -tag "prod" \
+  -tag "us-east-1" \
   prod-runner
 `
 }
 
-func (c *runnerAgentCreateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *runnerAgentCreateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.groupID,
 		"group-id",
-		"",
 		"Group ID or TRN where the runner agent will be created.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.groupID,
 		"group-path",
-		"Full path of group where runner will be created. Deprecated.",
-		func(s string) error {
-			c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, s)
-			return nil
-		},
+		"Full path of group where runner will be created.",
+		flag.Deprecated("use -group-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+		}),
 	)
-	f.BoolFunc(
+	f.BoolVar(
+		&c.disabled,
 		"disabled",
 		"Whether the runner is disabled.",
-		func(s string) error {
-			v, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-
-			c.disabled = &v
-			return nil
-		})
+	)
 	f.StringVar(
 		&c.runnerName,
 		"runner-name",
-		"",
-		"Name of the new runner agent. Deprecated.",
+		"Name of the new runner agent.",
+		flag.Deprecated("pass name as an argument"),
 	)
 	f.StringVar(
 		&c.description,
 		"description",
-		"",
 		"Description for the runner agent.",
 	)
 	f.BoolVar(
 		&c.runUntaggedJobs,
 		"run-untagged-jobs",
-		false,
 		"Allow the runner agent to execute jobs without tags.",
+		flag.Default(false),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.tags,
 		"tag",
-		"Tag for the runner agent. (This flag may be repeated)",
-		func(s string) error {
-			c.tags = append(c.tags, s)
-			return nil
-		},
+		"Tag for the runner agent.",
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 
