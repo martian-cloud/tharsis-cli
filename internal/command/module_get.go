@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -13,19 +12,17 @@ import (
 type moduleGetCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*moduleGetCommand)(nil)
 
 func (c *moduleGetCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewModuleGetCommandFactory returns a moduleGetCommand struct.
@@ -58,7 +55,7 @@ func (c *moduleGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModule(c.UI, c.toJSON, module)
+	return c.Output(module, c.toJSON)
 }
 
 func (*moduleGetCommand) Synopsis() string {
@@ -71,7 +68,7 @@ func (*moduleGetCommand) Usage() string {
 
 func (*moduleGetCommand) Description() string {
 	return `
-   The module get command prints information about one Terraform module.
+   Retrieves details about a Terraform module.
 `
 }
 
@@ -81,37 +78,13 @@ tharsis module get trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 
-func (c *moduleGetCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *moduleGetCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 
 	return f
-}
-
-func outputModule(ui terminal.UI, toJSON bool, module *pb.TerraformModule) int {
-	if toJSON {
-		if err := ui.JSON(module); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		ui.NamedValues([]terminal.NamedValue{
-			{Name: "ID", Value: module.Metadata.Id},
-			{Name: "TRN", Value: module.Metadata.Trn},
-			{Name: "Name", Value: module.Name},
-			{Name: "System", Value: module.System},
-			{Name: "Private", Value: module.Private},
-			{Name: "Repository URL", Value: module.RepositoryUrl},
-			{Name: "Created By", Value: module.CreatedBy},
-			{Name: "Created At", Value: module.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
-			{Name: "Updated At", Value: module.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
-		})
-	}
-
-	return 0
 }

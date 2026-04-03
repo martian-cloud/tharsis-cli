@@ -110,7 +110,7 @@ func (ui *nonInteractiveUI) NamedValues(rows []NamedValue, opts ...Option) {
 	}
 	tr.Flush()
 
-	fmt.Fprintln(cfg.Writer, buf.String())
+	fmt.Fprint(cfg.Writer, buf.String())
 }
 
 // OutputWriters implements UI

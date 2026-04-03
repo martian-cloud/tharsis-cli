@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
@@ -14,6 +14,8 @@ type workspaceSetEnvironmentVarsCommand struct {
 
 	envVarFiles []string
 }
+
+var _ Command = (*workspaceSetEnvironmentVarsCommand)(nil)
 
 // NewWorkspaceSetEnvironmentVarsCommandFactory returns a workspaceSetEnvironmentVarsCommand struct.
 func NewWorkspaceSetEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -25,14 +27,11 @@ func NewWorkspaceSetEnvironmentVarsCommandFactory(baseCommand *BaseCommand) func
 }
 
 func (c *workspaceSetEnvironmentVarsCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.envVarFiles, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *workspaceSetEnvironmentVarsCommand) Run(args []string) int {
@@ -47,8 +46,8 @@ func (c *workspaceSetEnvironmentVarsCommand) Run(args []string) int {
 	}
 
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0])},
-	)
+		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
@@ -91,9 +90,8 @@ func (*workspaceSetEnvironmentVarsCommand) Synopsis() string {
 
 func (*workspaceSetEnvironmentVarsCommand) Description() string {
 	return `
-   The workspace set-environment-vars command sets environment variables for a workspace.
-   Command will overwrite any existing environment variables in the target workspace!
-   Note: This command does not support sensitive variables.
+   Replaces all environment variables in a workspace from
+   a file. Does not support sensitive variables.
 `
 }
 
@@ -104,20 +102,18 @@ func (*workspaceSetEnvironmentVarsCommand) Usage() string {
 func (*workspaceSetEnvironmentVarsCommand) Example() string {
 	return `
 tharsis workspace set-environment-vars \
-  --env-var-file vars.env \
+  -env-var-file "vars.env" \
   trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceSetEnvironmentVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *workspaceSetEnvironmentVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringSliceVar(
+		&c.envVarFiles,
 		"env-var-file",
-		"Path to an environment variables file (can be specified multiple times).",
-		func(s string) error {
-			c.envVarFiles = append(c.envVarFiles, s)
-			return nil
-		},
+		"Path to an environment variables file.",
+		flag.Required(),
 	)
 
 	return f

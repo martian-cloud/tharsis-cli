@@ -142,7 +142,7 @@ func (ui *basicUI) NamedValues(rows []NamedValue, opts ...Option) {
 	}
 
 	tr.Flush()
-	colorInfo.Fprintln(cfg.Writer, buf.String())
+	colorInfo.Fprint(cfg.Writer, buf.String())
 }
 
 func (ui *basicUI) OutputWriters() (io.Writer, io.Writer, error) {

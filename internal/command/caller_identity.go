@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -15,15 +14,17 @@ import (
 type callerIdentityCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*callerIdentityCommand)(nil)
 
 func (c *callerIdentityCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Empty),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	return nil
 }
 
 // NewCallerIdentityCommandFactory returns a callerIdentityCommand struct.
@@ -57,7 +58,14 @@ func (c *callerIdentityCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.outputCallerIdentity(resp)
+	switch caller := resp.Caller.(type) {
+	case *pb.GetCallerIdentityResponse_User:
+		return c.Output(caller.User, c.toJSON)
+	case *pb.GetCallerIdentityResponse_ServiceAccount:
+		return c.Output(caller.ServiceAccount, c.toJSON)
+	}
+
+	return 0
 }
 
 func (*callerIdentityCommand) Synopsis() string {
@@ -70,8 +78,8 @@ func (*callerIdentityCommand) Usage() string {
 
 func (*callerIdentityCommand) Description() string {
 	return `
-   The caller-identity command returns information about the
-   authenticated caller (User or ServiceAccount).
+   Returns information about the authenticated caller
+   (User or ServiceAccount).
 `
 }
 
@@ -81,42 +89,14 @@ tharsis caller-identity
 `
 }
 
-func (c *callerIdentityCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *callerIdentityCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Show output as JSON.",
+		"Show final output as JSON.",
 	)
 
 	return f
-}
-
-func (c *callerIdentityCommand) outputCallerIdentity(resp *pb.GetCallerIdentityResponse) int {
-	if c.toJSON {
-		if err := c.UI.JSON(resp); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		switch caller := resp.Caller.(type) {
-		case *pb.GetCallerIdentityResponse_User:
-			c.UI.NamedValues([]terminal.NamedValue{
-				{Name: "Name", Value: caller.User.Username},
-				{Name: "TRN", Value: caller.User.Metadata.Trn},
-				{Name: "Email", Value: caller.User.Email},
-				{Name: "Admin", Value: caller.User.Admin},
-				{Name: "Active", Value: caller.User.Active},
-			})
-		case *pb.GetCallerIdentityResponse_ServiceAccount:
-			c.UI.NamedValues([]terminal.NamedValue{
-				{Name: "Name", Value: caller.ServiceAccount.Name},
-				{Name: "TRN", Value: caller.ServiceAccount.Metadata.Trn},
-				{Name: "Description", Value: caller.ServiceAccount.Description},
-			})
-		}
-	}
-
-	return 0
 }

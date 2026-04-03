@@ -8,13 +8,14 @@ require (
 	github.com/aws/smithy-go v1.24.0
 	github.com/bgentry/speakeasy v0.1.0
 	github.com/briandowns/spinner v1.11.1
+	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 	github.com/containerd/console v1.0.3
 	github.com/fatih/color v1.18.0
-	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hashicorp/go-slug v0.16.4
 	github.com/hashicorp/go-uuid v1.0.3
+	github.com/hashicorp/go-version v1.9.0
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/hashicorp/terraform-registry-address v0.2.3
 	github.com/kr/text v0.2.0
@@ -23,6 +24,7 @@ require (
 	github.com/mitchellh/cli v1.1.5
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/morikuni/aec v1.0.0
+	github.com/nao1215/markdown v0.7.1
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/posener/complete v1.2.3
@@ -30,8 +32,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zclconf/go-cty v1.17.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.82.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-sdk-go v0.57.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.83.0
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/term v0.39.0
 	golang.org/x/text v0.33.0
@@ -51,7 +52,6 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
-	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/bits-and-blooms/bitset v1.22.0 // indirect
 	github.com/blevesearch/bleve/v2 v2.5.7 // indirect
 	github.com/blevesearch/bleve_index_api v1.2.11 // indirect
@@ -92,6 +92,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/karrick/godirwalk v1.17.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/magiconair/properties v1.8.9 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect

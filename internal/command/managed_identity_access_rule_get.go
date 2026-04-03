@@ -1,31 +1,27 @@
 package command
 
 import (
-	"flag"
-	"strings"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 // managedIdentityAccessRuleGetCommand is the top-level structure for the managed identity access rule get command.
 type managedIdentityAccessRuleGetCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*managedIdentityAccessRuleGetCommand)(nil)
 
 func (c *managedIdentityAccessRuleGetCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewManagedIdentityAccessRuleGetCommandFactory returns a managedIdentityAccessRuleGetCommand struct.
@@ -56,7 +52,7 @@ func (c *managedIdentityAccessRuleGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentityAccessRule(c.UI, c.toJSON, rule)
+	return c.Output(rule, c.toJSON)
 }
 
 func (*managedIdentityAccessRuleGetCommand) Synopsis() string {
@@ -69,7 +65,7 @@ func (*managedIdentityAccessRuleGetCommand) Usage() string {
 
 func (*managedIdentityAccessRuleGetCommand) Description() string {
 	return `
-   The managed-identity-access-rule get command gets a managed identity access rule by ID.
+   Retrieves details about a managed identity access rule.
 `
 }
 
@@ -79,47 +75,13 @@ tharsis managed-identity-access-rule get <id>
 `
 }
 
-func (c *managedIdentityAccessRuleGetCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *managedIdentityAccessRuleGetCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 
 	return f
-}
-
-func outputManagedIdentityAccessRule(ui terminal.UI, toJSON bool, rule *pb.ManagedIdentityAccessRule) int {
-	if toJSON {
-		if err := ui.JSON(rule); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		values := []terminal.NamedValue{
-			{Name: "ID", Value: rule.Metadata.Id},
-			{Name: "TRN", Value: rule.Metadata.Trn},
-			{Name: "Type", Value: rule.Type},
-			{Name: "Run Stage", Value: rule.RunStage},
-			{Name: "Verify State Lineage", Value: rule.VerifyStateLineage},
-		}
-
-		if len(rule.AllowedUsers) > 0 {
-			values = append(values, terminal.NamedValue{Name: "Allowed Users", Value: strings.Join(rule.AllowedUsers, ", ")})
-		}
-
-		if len(rule.AllowedServiceAccounts) > 0 {
-			values = append(values, terminal.NamedValue{Name: "Allowed Service Accounts", Value: strings.Join(rule.AllowedServiceAccounts, ", ")})
-		}
-
-		if len(rule.AllowedTeams) > 0 {
-			values = append(values, terminal.NamedValue{Name: "Allowed Teams", Value: strings.Join(rule.AllowedTeams, ", ")})
-		}
-
-		ui.NamedValues(values)
-	}
-
-	return 0
 }

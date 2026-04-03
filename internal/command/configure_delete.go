@@ -1,9 +1,9 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/posener/complete"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 )
 
@@ -15,10 +15,11 @@ type configureDeleteCommand struct {
 var _ Command = (*configureDeleteCommand)(nil)
 
 func (c *configureDeleteCommand) validate() error {
-	const message = "name is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Required.Error(message), validation.Length(1, 1).Error(message)), // 1 and only 1 argument.
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: name")
+	}
+
+	return nil
 }
 
 // NewConfigureDeleteCommandFactory returns a configureDeleteCommand struct.
@@ -80,8 +81,7 @@ func (c *configureDeleteCommand) Usage() string {
 
 func (c *configureDeleteCommand) Description() string {
 	return `
-   The configure delete command removes a profile and its
-   credentials with the given name.
+   Removes a profile and its stored credentials.
 `
 }
 
@@ -91,6 +91,18 @@ tharsis configure delete prod-example
 `
 }
 
-func (c *configureDeleteCommand) Flags() *flag.FlagSet {
-	return nil
+func (c *configureDeleteCommand) PredictArgs() complete.Predictor {
+	return complete.PredictFunc(func(complete.Args) []string {
+		gotSettings, err := settings.ReadSettings()
+		if err != nil {
+			return nil
+		}
+
+		names := make([]string, 0, len(gotSettings.Profiles))
+		for name := range gotSettings.Profiles {
+			names = append(names, name)
+		}
+
+		return names
+	})
 }

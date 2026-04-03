@@ -1,20 +1,21 @@
 package command
 
 import (
-	"flag"
-	"strconv"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceDeleteTerraformVarCommand struct {
 	*BaseCommand
 
-	key     string
+	key     *string
 	version *int64
 }
+
+var _ Command = (*workspaceDeleteTerraformVarCommand)(nil)
 
 // NewWorkspaceDeleteTerraformVarCommandFactory returns a workspaceDeleteTerraformVarCommand struct.
 func NewWorkspaceDeleteTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -26,14 +27,11 @@ func NewWorkspaceDeleteTerraformVarCommandFactory(baseCommand *BaseCommand) func
 }
 
 func (c *workspaceDeleteTerraformVarCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.key, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *workspaceDeleteTerraformVarCommand) Run(args []string) int {
@@ -47,7 +45,7 @@ func (c *workspaceDeleteTerraformVarCommand) Run(args []string) int {
 		return code
 	}
 
-	// Get workspace to retrieve full path
+	// Get workspace to retrieve full path.
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
 		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	})
@@ -57,7 +55,7 @@ func (c *workspaceDeleteTerraformVarCommand) Run(args []string) int {
 	}
 
 	deleteInput := &pb.DeleteNamespaceVariableRequest{
-		Id:      trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, pb.VariableCategory_terraform.String(), c.key),
+		Id:      trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, pb.VariableCategory_terraform.String(), *c.key),
 		Version: c.version,
 	}
 
@@ -76,7 +74,7 @@ func (*workspaceDeleteTerraformVarCommand) Synopsis() string {
 
 func (*workspaceDeleteTerraformVarCommand) Description() string {
 	return `
-   The workspace delete-terraform-var command deletes a terraform variable from a workspace.
+   Removes a Terraform variable from a workspace.
 `
 }
 
@@ -87,30 +85,23 @@ func (*workspaceDeleteTerraformVarCommand) Usage() string {
 func (*workspaceDeleteTerraformVarCommand) Example() string {
 	return `
 tharsis workspace delete-terraform-var \
-  --key region \
+  -key "region" \
   trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceDeleteTerraformVarCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceDeleteTerraformVarCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.key,
 		"key",
-		"",
 		"Variable key.",
+		flag.Required(),
 	)
-	f.Func(
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be deleted. In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Optimistic locking version. Usually not required.",
 	)
 
 	return f

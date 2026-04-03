@@ -1,20 +1,20 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupListMembershipsCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
+
+var _ Command = (*groupListMembershipsCommand)(nil)
 
 // NewGroupListMembershipsCommandFactory returns a groupListMembershipsCommand struct.
 func NewGroupListMembershipsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -26,13 +26,11 @@ func NewGroupListMembershipsCommandFactory(baseCommand *BaseCommand) func() (Com
 }
 
 func (c *groupListMembershipsCommand) validate() error {
-	const message = "group-path is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: group id")
+	}
+
+	return nil
 }
 
 func (c *groupListMembershipsCommand) Run(args []string) int {
@@ -46,7 +44,6 @@ func (c *groupListMembershipsCommand) Run(args []string) int {
 		return code
 	}
 
-	// Ensure it's a group.
 	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0])})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
@@ -63,28 +60,7 @@ func (c *groupListMembershipsCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "role_id", "user_id", "service_account_id", "team_id")
-
-		for _, membership := range result.NamespaceMemberships {
-			t.Rich([]string{
-				membership.GetMetadata().Id,
-				membership.RoleId,
-				ptr.ToString(membership.UserId),
-				ptr.ToString(membership.ServiceAccountId),
-				ptr.ToString(membership.TeamId),
-			}, nil)
-		}
-
-		c.UI.Table(t)
-	}
-
-	return 0
+	return c.OutputList(result, c.toJSON, "id", "role_id", "namespace_path", "user_id", "service_account_id", "team_id")
 }
 
 func (*groupListMembershipsCommand) Synopsis() string {
@@ -93,8 +69,7 @@ func (*groupListMembershipsCommand) Synopsis() string {
 
 func (*groupListMembershipsCommand) Description() string {
 	return `
-   The group list-memberships command prints information about
-   memberships for a specific group.
+   Lists all memberships for a group.
 `
 }
 
@@ -108,12 +83,11 @@ tharsis group list-memberships trn:group:<group_path>
 `
 }
 
-func (c *groupListMembershipsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupListMembershipsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 

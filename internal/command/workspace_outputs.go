@@ -3,19 +3,19 @@ package command
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 
 	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/fatih/color"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/external"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -31,10 +31,12 @@ type stateOutputValue struct {
 type workspaceOutputsCommand struct {
 	*BaseCommand
 
-	outputName string
-	raw        bool
-	toJSON     bool
+	outputName *string
+	raw        *bool
+	toJSON     *bool
 }
+
+var _ Command = (*workspaceOutputsCommand)(nil)
 
 // NewWorkspaceOutputsCommandFactory returns a workspaceOutputsCommand struct.
 func NewWorkspaceOutputsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -46,17 +48,15 @@ func NewWorkspaceOutputsCommandFactory(baseCommand *BaseCommand) func() (Command
 }
 
 func (c *workspaceOutputsCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.raw,
-			validation.When(c.toJSON, validation.Empty.Error("must not supply both -raw and -json")),
-			validation.When(c.outputName == "", validation.Empty.Error("must specify -output-name if specifying -raw")),
-		),
-	)
+	if *c.raw && c.outputName == nil {
+		return errors.New("must specify -output-name when using -raw")
+	}
+
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *workspaceOutputsCommand) Run(args []string) int {
@@ -111,29 +111,68 @@ func (c *workspaceOutputsCommand) displayWorkspaceOutput(outputs []*pb.StateVers
 	}
 
 	var (
-		val any = valueMap
-		ok  bool
+		val        any = valueMap
+		outputName string
+		ok         bool
 	)
 
-	if c.outputName != "" {
-		val, ok = valueMap[c.outputName]
+	if c.outputName != nil {
+		outputName = *c.outputName
+
+		val, ok = valueMap[outputName]
 		if !ok {
-			c.UI.Errorf("%s does not exist in state version output. Name is case sensitive.", c.outputName)
+			c.UI.Errorf("%s does not exist in state version output. Name is case sensitive.", outputName)
 			return 1
 		}
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(val); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to output JSON")
 			return 1
 		}
+
 		return 0
 	}
 
 	sort.SliceStable(outputs, func(i, j int) bool {
 		return outputs[i].Name < outputs[j].Name
 	})
+
+	// Single named output — no need to iterate all outputs.
+	if outputName != "" {
+		v := valueMap[outputName]
+		ctyType, err := ctyjson.UnmarshalType(v.Type)
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to unmarshal type")
+			return 1
+		}
+
+		ctyValue, err := ctyjson.Unmarshal(v.Value, ctyType)
+		if err != nil {
+			c.UI.ErrorWithSummary(err, "failed to unmarshal value")
+			return 1
+		}
+
+		if *c.raw {
+			valueString, err := convert.Convert(ctyValue, cty.String)
+			if err != nil {
+				c.UI.Errorf("-raw is only supported on string, number and boolean types: %s is of type '%s'. Use -json flag for more complex types", outputName, ctyType.FriendlyName())
+				return 1
+			}
+
+			if valueString.IsNull() {
+				c.UI.Errorf("Unsupported value type: value for %s is null", outputName)
+				return 1
+			}
+
+			fmt.Fprint(os.Stdout, valueString.AsString())
+			return 0
+		}
+
+		c.outputHighlighted(external.FormatValue(ctyValue, 0))
+		return 0
+	}
 
 	for _, v := range outputs {
 		ctyType, err := ctyjson.UnmarshalType(v.Type)
@@ -149,32 +188,11 @@ func (c *workspaceOutputsCommand) displayWorkspaceOutput(outputs []*pb.StateVers
 		}
 
 		valueFormatted := external.FormatValue(ctyValue, 0)
-
-		if c.outputName == "" {
-			if v.Sensitive {
-				valueFormatted = "[SENSITIVE]"
-			}
-			c.outputHighlighted(fmt.Sprintf("%s = %s", v.Name, valueFormatted))
-		} else if c.raw {
-			if v.Name != c.outputName {
-				continue
-			}
-
-			valueString, err := convert.Convert(ctyValue, cty.String)
-			if err != nil {
-				c.UI.Errorf("-raw is only supported on string, number and boolean types: %s is of type '%s'. Use -json flag for more complex types", c.outputName, ctyType.FriendlyName())
-				return 1
-			}
-
-			if valueString.IsNull() {
-				c.UI.Errorf("Unsupported value type: value for %s is null", c.outputName)
-				return 1
-			}
-
-			fmt.Fprint(os.Stdout, valueString.AsString())
-		} else if v.Name == c.outputName {
-			c.outputHighlighted(valueFormatted)
+		if v.Sensitive {
+			valueFormatted = "[SENSITIVE]"
 		}
+
+		c.outputHighlighted(fmt.Sprintf("%s = %s", v.Name, valueFormatted))
 	}
 
 	return 0
@@ -198,16 +216,14 @@ func (*workspaceOutputsCommand) Synopsis() string {
 
 func (*workspaceOutputsCommand) Description() string {
 	return `
-   The workspace outputs command retrieves the state version outputs for a workspace.
+   Retrieves the Terraform state outputs for a workspace.
 
    Supported output types:
       - Decorated (shows if map, list, etc. default).
       - JSON.
-      - Raw (just the value. limited).
+      - Raw (just the value, limited).
 
-   In addition, it supports filtering the output for each of the supported types above with --output-name option.
-
-   Combining --raw and --json is not allowed.
+   Use -output-name to filter to a specific output.
 `
 }
 
@@ -221,26 +237,27 @@ tharsis workspace outputs trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceOutputsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceOutputsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.outputName,
 		"output-name",
-		"",
 		"The name of the output variable to use as a filter. Required for -raw option.",
 	)
 	f.BoolVar(
 		&c.raw,
 		"raw",
-		false,
 		"For any value that can be converted to a string, output just the raw value.",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
+		flag.Default(false),
 	)
+
+	f.MutuallyExclusive("raw", "json")
 
 	return f
 }
