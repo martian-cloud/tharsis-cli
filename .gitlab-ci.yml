@@ -106,6 +106,17 @@ default:
 #################################
 ##            BUILD            ##
 #################################
+Generate:
+  image: golang:${GO_VERSION}-alpine
+  stage: test
+  before_script:
+    - apk add git openssh make
+  script:
+    - |
+      go mod download
+      make generate
+      git diff --compact-summary --exit-code || \
+            (echo; echo "Unexpected difference in directories after code generation. Run 'make generate' command and commit."; exit 1)
 
 tests:
   image: golang:${GO_VERSION}-alpine

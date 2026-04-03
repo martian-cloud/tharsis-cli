@@ -1,26 +1,26 @@
 package command
 
 import (
-	"flag"
-	"fmt"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
 
-	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type terraformProviderMirrorListVersionsCommand struct {
 	*BaseCommand
 
-	limit  int
-	cursor *string
-	sortBy *pb.TerraformProviderVersionMirrorSortableField
-	toJSON bool
+	limit     *int32
+	cursor    *string
+	sortBy    *string
+	sortOrder *string
+	toJSON    *bool
 }
+
+var _ Command = (*terraformProviderMirrorListVersionsCommand)(nil)
 
 // NewTerraformProviderMirrorListVersionsCommandFactory returns a terraformProviderMirrorListVersionsCommand struct.
 func NewTerraformProviderMirrorListVersionsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -32,14 +32,11 @@ func NewTerraformProviderMirrorListVersionsCommandFactory(baseCommand *BaseComma
 }
 
 func (c *terraformProviderMirrorListVersionsCommand) validate() error {
-	const message = "namespace-path is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: namespace path")
+	}
+
+	return nil
 }
 
 func (c *terraformProviderMirrorListVersionsCommand) Run(args []string) int {
@@ -53,11 +50,29 @@ func (c *terraformProviderMirrorListVersionsCommand) Run(args []string) int {
 		return code
 	}
 
+	var sortEnum *pb.TerraformProviderVersionMirrorSortableField
+	if c.sortBy != nil {
+		v := pb.TerraformProviderVersionMirrorSortableField(pb.TerraformProviderVersionMirrorSortableField_value[strings.ToUpper(*c.sortBy)])
+		sortEnum = &v
+	}
+
+	if c.sortOrder != nil {
+		var v pb.TerraformProviderVersionMirrorSortableField
+		switch strings.ToUpper(*c.sortOrder) {
+		case "ASC":
+			v = pb.TerraformProviderVersionMirrorSortableField_CREATED_AT_ASC
+		case "DESC":
+			v = pb.TerraformProviderVersionMirrorSortableField_CREATED_AT_DESC
+		}
+
+		sortEnum = &v
+	}
+
 	input := &pb.GetTerraformProviderVersionMirrorsRequest{
 		NamespacePath: c.arguments[0],
-		Sort:          c.sortBy,
+		Sort:          sortEnum,
 		PaginationOptions: &pb.PaginationOptions{
-			First: ptr.Int32(int32(c.limit)),
+			First: c.limit,
 			After: c.cursor,
 		},
 	}
@@ -68,40 +83,7 @@ func (c *terraformProviderMirrorListVersionsCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "type", "registry_hostname", "registry_namespace", "semantic_version")
-
-		for _, mirror := range result.VersionMirrors {
-			t.Rich([]string{
-				mirror.Metadata.Id,
-				mirror.Type,
-				mirror.RegistryHostname,
-				mirror.RegistryNamespace,
-				mirror.SemanticVersion,
-			}, nil)
-		}
-
-		c.UI.Table(t)
-		namedValues := []terminal.NamedValue{
-			{Name: "Total count", Value: result.GetPageInfo().TotalCount},
-			{Name: "Has Next Page", Value: result.GetPageInfo().HasNextPage},
-		}
-		if result.GetPageInfo().EndCursor != nil {
-			namedValues = append(namedValues, terminal.NamedValue{
-				Name:  "Next cursor",
-				Value: result.GetPageInfo().GetEndCursor(),
-			})
-		}
-
-		c.UI.NamedValues(namedValues)
-	}
-
-	return 0
+	return c.OutputList(result, c.toJSON, "trn", "type", "semantic_version", "registry_namespace", "registry_hostname")
 }
 
 func (*terraformProviderMirrorListVersionsCommand) Synopsis() string {
@@ -110,8 +92,8 @@ func (*terraformProviderMirrorListVersionsCommand) Synopsis() string {
 
 func (*terraformProviderMirrorListVersionsCommand) Description() string {
 	return `
-   The terraform-provider-mirror list-versions command prints information
-   about provider version mirrors in a namespace. Supports pagination and sorting.
+   Lists mirrored provider versions with pagination
+   and sorting.
 `
 }
 
@@ -122,62 +104,52 @@ func (*terraformProviderMirrorListVersionsCommand) Usage() string {
 func (*terraformProviderMirrorListVersionsCommand) Example() string {
 	return `
 tharsis terraform-provider-mirror list-versions \
-  --sort-by CREATED_AT_DESC \
-  --limit 10 \
+  -sort-by "CREATED_AT_DESC" \
+  -limit 10 \
   <namespace_path>
 `
 }
 
-func (c *terraformProviderMirrorListVersionsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *terraformProviderMirrorListVersionsCommand) Flags() *flag.Set {
+	sortValues := slices.Collect(maps.Keys(pb.TerraformProviderVersionMirrorSortableField_value))
+
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.cursor,
 		"cursor",
 		"The cursor string for manual pagination.",
-		func(s string) error {
-			c.cursor = &s
-			return nil
-		},
 	)
-	f.IntVar(
+	f.Int32Var(
 		&c.limit,
 		"limit",
-		maxPaginationLimit,
 		"Maximum number of result elements to return.",
+		flag.Default(maxPaginationLimit),
+		flag.ValidRange(0, int(maxPaginationLimit)),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortBy,
 		"sort-by",
-		"Sort by this field (e.g., CREATED_AT_ASC, CREATED_AT_DESC).",
-		func(s string) error {
-			value, ok := pb.TerraformProviderVersionMirrorSortableField_value[strings.ToUpper(s)]
-			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, slices.Collect(maps.Keys(pb.TerraformProviderVersionMirrorSortableField_value)))
-			}
-			c.sortBy = pb.TerraformProviderVersionMirrorSortableField(value).Enum()
-			return nil
-		},
+		"Sort by this field.",
+		flag.ValidValues(sortValues...),
+		flag.PredictValues(sortValues...),
+		flag.TransformString(strings.ToUpper),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortOrder,
 		"sort-order",
-		"Sort in this direction, ASC or DESC. Deprecated",
-		func(s string) error {
-			switch v := strings.ToUpper(s); v {
-			case "ASC":
-				c.sortBy = pb.TerraformProviderVersionMirrorSortableField_CREATED_AT_ASC.Enum()
-			case "DESC":
-				c.sortBy = pb.TerraformProviderVersionMirrorSortableField_CREATED_AT_DESC.Enum()
-			default:
-				return fmt.Errorf("invalid sort-order value: %s", s)
-			}
-
-			return nil
-		},
+		"Sort in this direction.",
+		flag.Deprecated("use -sort-by"),
+		flag.ValidValues("ASC", "DESC"),
+		flag.PredictValues("ASC", "DESC"),
+		flag.TransformString(strings.ToUpper),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
+
+	f.MutuallyExclusive("sort-by", "sort-order")
 
 	return f
 }

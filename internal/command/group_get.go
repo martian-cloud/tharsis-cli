@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -13,19 +12,17 @@ import (
 type groupGetCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*groupGetCommand)(nil)
 
 func (c *groupGetCommand) validate() error {
-	const message = "group id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: group id")
+	}
+
+	return nil
 }
 
 // NewGroupGetCommandFactory returns a groupGetCommand struct.
@@ -58,7 +55,7 @@ func (c *groupGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputGroup(c.UI, c.toJSON, group)
+	return c.Output(group, c.toJSON)
 }
 
 func (*groupGetCommand) Synopsis() string {
@@ -71,50 +68,25 @@ func (*groupGetCommand) Usage() string {
 
 func (*groupGetCommand) Description() string {
 	return `
-   The group get command retrieves a single group by its ID.
-   Shows output as JSON, if specified.
+   Retrieves details about a group by ID or path.
 `
 }
 
 func (*groupGetCommand) Example() string {
 	return `
 tharsis group get \
-  --json \
+  -json \
   trn:tharsis:group:<group_path>
 `
 }
 
-func (c *groupGetCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupGetCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Show output as JSON.",
+		"Show final output as JSON.",
 	)
 
 	return f
-}
-
-// outputGroup is the output for most group operations.
-func outputGroup(ui terminal.UI, toJSON bool, group *pb.Group) int {
-	if toJSON {
-		if err := ui.JSON(group); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		ui.NamedValues([]terminal.NamedValue{
-			{Name: "ID", Value: group.Metadata.Id},
-			{Name: "TRN", Value: group.Metadata.Trn},
-			{Name: "Name", Value: group.Name},
-			{Name: "Full Path", Value: group.FullPath},
-			{Name: "Description", Value: group.Description},
-			{Name: "Created By", Value: group.CreatedBy},
-			{Name: "Created At", Value: group.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
-			{Name: "Updated At", Value: group.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
-		})
-	}
-
-	return 0
 }

@@ -1,9 +1,8 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -11,6 +10,8 @@ import (
 type workspaceUnassignManagedIdentityCommand struct {
 	*BaseCommand
 }
+
+var _ Command = (*workspaceUnassignManagedIdentityCommand)(nil)
 
 // NewWorkspaceUnassignManagedIdentityCommandFactory returns a workspaceUnassignManagedIdentityCommand struct.
 func NewWorkspaceUnassignManagedIdentityCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -22,13 +23,11 @@ func NewWorkspaceUnassignManagedIdentityCommandFactory(baseCommand *BaseCommand)
 }
 
 func (c *workspaceUnassignManagedIdentityCommand) validate() error {
-	const message = "workspace id and managed identity id are required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(2, 2).Error(message),
-		),
-	)
+	if len(c.arguments) != 2 {
+		return errors.New("expected exactly two arguments: workspace id and managed identity id")
+	}
+
+	return nil
 }
 
 func (c *workspaceUnassignManagedIdentityCommand) Run(args []string) int {
@@ -61,7 +60,7 @@ func (*workspaceUnassignManagedIdentityCommand) Synopsis() string {
 
 func (*workspaceUnassignManagedIdentityCommand) Description() string {
 	return `
-   The workspace unassign-managed-identity command removes a managed identity from a workspace.
+   Removes a managed identity assignment from a workspace.
 `
 }
 
@@ -75,8 +74,4 @@ tharsis workspace unassign-managed-identity \
   trn:workspace:<workspace_path> \
   trn:managed_identity:<group_path>/<identity_name>
 `
-}
-
-func (c *workspaceUnassignManagedIdentityCommand) Flags() *flag.FlagSet {
-	return nil
 }

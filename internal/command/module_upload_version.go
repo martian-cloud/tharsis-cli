@@ -2,13 +2,13 @@ package command
 
 import (
 	"encoding/hex"
-	"flag"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
@@ -24,9 +24,11 @@ type moduleUploadVersionCommand struct {
 	*BaseCommand
 
 	sg            terminal.StepGroup
-	directoryPath string
-	version       string
+	directoryPath *string
+	version       *string
 }
+
+var _ Command = (*moduleUploadVersionCommand)(nil)
 
 // NewModuleUploadVersionCommandFactory returns a moduleUploadVersionCommand struct.
 func NewModuleUploadVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -39,14 +41,11 @@ func NewModuleUploadVersionCommandFactory(baseCommand *BaseCommand) func() (Comm
 }
 
 func (c *moduleUploadVersionCommand) validate() error {
-	const message = "module-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.version, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: module id")
+	}
+
+	return nil
 }
 
 func (c *moduleUploadVersionCommand) Run(args []string) int {
@@ -60,14 +59,14 @@ func (c *moduleUploadVersionCommand) Run(args []string) int {
 		return code
 	}
 
-	dirStat, err := os.Stat(c.directoryPath)
+	dirStat, err := os.Stat(*c.directoryPath)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to stat directory path")
 		return 1
 	}
 
 	if !dirStat.IsDir() {
-		c.UI.Errorf("path is not a directory: %s", c.directoryPath)
+		c.UI.Errorf("path is not a directory: %s", *c.directoryPath)
 		return 1
 	}
 
@@ -132,7 +131,7 @@ func (c *moduleUploadVersionCommand) createModulePackage() (slugPath string, sha
 		return "", nil, err
 	}
 
-	s, err := slug.NewSlug(c.directoryPath, slugFile.Name())
+	s, err := slug.NewSlug(*c.directoryPath, slugFile.Name())
 	if err != nil {
 		os.Remove(slugFile.Name())
 		return "", nil, err
@@ -142,12 +141,12 @@ func (c *moduleUploadVersionCommand) createModulePackage() (slugPath string, sha
 }
 
 func (c *moduleUploadVersionCommand) createModuleVersion(moduleID string, shaSum []byte) (version *pb.TerraformModuleVersion, err error) {
-	step := c.sg.Add("Create module version %q", c.version)
+	step := c.sg.Add("Create module version %q", *c.version)
 	defer func() { c.finalizeStep(step, err) }()
 
 	version, err = c.grpcClient.TerraformModulesClient.CreateTerraformModuleVersion(c.Context, &pb.CreateTerraformModuleVersionRequest{
 		ModuleId: moduleID,
-		Version:  c.version,
+		Version:  *c.version,
 		ShaSum:   hex.EncodeToString(shaSum),
 	})
 
@@ -224,8 +223,8 @@ func (*moduleUploadVersionCommand) Synopsis() string {
 
 func (*moduleUploadVersionCommand) Description() string {
 	return `
-   The module upload-version command uploads a new
-   module version to the module registry.
+   Packages and uploads a new module version to the
+   registry.
 `
 }
 
@@ -236,25 +235,26 @@ func (*moduleUploadVersionCommand) Usage() string {
 func (*moduleUploadVersionCommand) Example() string {
 	return `
 tharsis module upload-version \
-  --version 1.0.0 \
-  --directory-path ./my-module \
+  -version "1.0.0" \
+  -directory-path "./my-module" \
   trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 
-func (c *moduleUploadVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *moduleUploadVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.directoryPath,
 		"directory-path",
-		".",
 		"The path of the terraform module's directory.",
+		flag.Default("."),
 	)
 	f.StringVar(
 		&c.version,
 		"version",
-		"",
-		"The semantic version for the new module version (required).",
+		"The semantic version for the new module version.",
+		flag.Required(),
 	)
+
 	return f
 }

@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
-	"strconv"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -16,21 +15,19 @@ type managedIdentityAccessRuleUpdateCommand struct {
 	allowedUsers              []string
 	allowedServiceAccounts    []string
 	allowedTeams              []string
-	verifyStateLineage        *bool
 	moduleAttestationPolicies []string
-	toJSON                    bool
+	verifyStateLineage        *bool
+	toJSON                    *bool
 }
 
 var _ Command = (*managedIdentityAccessRuleUpdateCommand)(nil)
 
 func (c *managedIdentityAccessRuleUpdateCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewManagedIdentityAccessRuleUpdateCommandFactory returns a managedIdentityAccessRuleUpdateCommand struct.
@@ -78,7 +75,7 @@ func (c *managedIdentityAccessRuleUpdateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentityAccessRule(c.UI, c.toJSON, updatedRule)
+	return c.Output(updatedRule, c.toJSON)
 }
 
 func (*managedIdentityAccessRuleUpdateCommand) Synopsis() string {
@@ -91,68 +88,57 @@ func (*managedIdentityAccessRuleUpdateCommand) Usage() string {
 
 func (*managedIdentityAccessRuleUpdateCommand) Description() string {
 	return `
-   The managed-identity-access-rule update command updates an existing managed identity access rule.
+   Modifies an existing managed identity access rule.
 `
 }
 
 func (*managedIdentityAccessRuleUpdateCommand) Example() string {
 	return `
 tharsis managed-identity-access-rule update \
-  --allowed-user trn:user:<username> \
+  -allowed-user "trn:user:<username>" \
   <id>
 `
 }
 
-func (c *managedIdentityAccessRuleUpdateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *managedIdentityAccessRuleUpdateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringSliceVar(
+		&c.allowedUsers,
 		"allowed-user",
-		"Allowed user ID. (This flag may be repeated)",
-		func(s string) error {
-			c.allowedUsers = append(c.allowedUsers, trn.ToTRN(trn.ResourceTypeUser, s))
-			return nil
-		},
+		"Allowed user ID.",
+		flag.TransformString(func(s string) string {
+			return trn.ToTRN(trn.ResourceTypeUser, s)
+		}),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.allowedServiceAccounts,
 		"allowed-service-account",
-		"Allowed service account ID. (This flag may be repeated)",
-		func(s string) error {
-			c.allowedServiceAccounts = append(c.allowedServiceAccounts, trn.ToTRN(trn.ResourceTypeServiceAccount, s))
-			return nil
-		},
+		"Allowed service account ID.",
+		flag.TransformString(func(s string) string {
+			return trn.ToTRN(trn.ResourceTypeServiceAccount, s)
+		}),
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.allowedTeams,
 		"allowed-team",
-		"Allowed team ID. (This flag may be repeated)",
-		func(s string) error {
-			c.allowedTeams = append(c.allowedTeams, trn.ToTRN(trn.ResourceTypeTeam, s))
-			return nil
-		},
+		"Allowed team ID.",
+		flag.TransformString(func(s string) string {
+			return trn.ToTRN(trn.ResourceTypeTeam, s)
+		}),
 	)
-	f.BoolFunc(
+	f.BoolVar(
+		&c.verifyStateLineage,
 		"verify-state-lineage",
 		"Verify state lineage.",
-		func(s string) error {
-			val, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			c.verifyStateLineage = &val
-			return nil
-		},
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.moduleAttestationPolicies,
 		"module-attestation-policy",
-		"Module attestation policy in format \"[PredicateType=someval,]PublicKeyFile=/path/to/file\". (This flag may be repeated)",
-		func(s string) error {
-			c.moduleAttestationPolicies = append(c.moduleAttestationPolicies, s)
-			return nil
-		},
+		"Module attestation policy in format \"[PredicateType=someval,]PublicKeyFile=/path/to/file\".",
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 

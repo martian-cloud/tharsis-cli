@@ -1,12 +1,10 @@
 package command
 
 import (
-	"encoding/base64"
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -14,19 +12,17 @@ import (
 type managedIdentityGetCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
 
 var _ Command = (*managedIdentityGetCommand)(nil)
 
 func (c *managedIdentityGetCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewManagedIdentityGetCommandFactory returns a managedIdentityGetCommand struct.
@@ -59,7 +55,7 @@ func (c *managedIdentityGetCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputManagedIdentity(c.UI, c.toJSON, identity)
+	return c.Output(identity, c.toJSON)
 }
 
 func (*managedIdentityGetCommand) Synopsis() string {
@@ -72,8 +68,7 @@ func (*managedIdentityGetCommand) Usage() string {
 
 func (*managedIdentityGetCommand) Description() string {
 	return `
-   The managed-identity get command prints information about one
-   managed identity.
+   Retrieves details about a managed identity.
 `
 }
 
@@ -83,45 +78,13 @@ tharsis managed-identity get trn:managed_identity:<group_path>/<managed_identity
 `
 }
 
-func (c *managedIdentityGetCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *managedIdentityGetCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 
 	return f
-}
-
-func outputManagedIdentity(ui terminal.UI, toJSON bool, identity *pb.ManagedIdentity) int {
-	if toJSON {
-		if err := ui.JSON(identity); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		// Decode base64 data
-		decoded, err := base64.StdEncoding.DecodeString(identity.Data)
-		if err != nil {
-			ui.ErrorWithSummary(err, "failed to decode identity data")
-			return 1
-		}
-
-		ui.NamedValues([]terminal.NamedValue{
-			{Name: "ID", Value: identity.Metadata.Id},
-			{Name: "TRN", Value: identity.Metadata.Trn},
-			{Name: "Name", Value: identity.Name},
-			{Name: "Description", Value: identity.Description},
-			{Name: "Type", Value: identity.Type},
-			{Name: "Is Alias", Value: identity.AliasSourceId != nil},
-			{Name: "Data", Value: string(decoded)},
-			{Name: "Created By", Value: identity.CreatedBy},
-			{Name: "Created At", Value: identity.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
-			{Name: "Updated At", Value: identity.Metadata.UpdatedAt.AsTime().Local().Format(humanTimeFormat)},
-		})
-	}
-
-	return 0
 }

@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
-	"strconv"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type moduleDeleteVersionCommand struct {
@@ -13,6 +12,8 @@ type moduleDeleteVersionCommand struct {
 
 	version *int64
 }
+
+var _ Command = (*moduleDeleteVersionCommand)(nil)
 
 // NewModuleDeleteVersionCommandFactory returns a moduleDeleteVersionCommand struct.
 func NewModuleDeleteVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -24,13 +25,11 @@ func NewModuleDeleteVersionCommandFactory(baseCommand *BaseCommand) func() (Comm
 }
 
 func (c *moduleDeleteVersionCommand) validate() error {
-	const message = "version-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: version id")
+	}
+
+	return nil
 }
 
 func (c *moduleDeleteVersionCommand) Run(args []string) int {
@@ -64,7 +63,8 @@ func (*moduleDeleteVersionCommand) Synopsis() string {
 
 func (*moduleDeleteVersionCommand) Description() string {
 	return `
-   The module delete-version command deletes a module version.
+   Removes a specific version of a module from the
+   registry.
 `
 }
 
@@ -78,20 +78,13 @@ tharsis module delete-version trn:terraform_module_version:<group_path>/<module_
 `
 }
 
-func (c *moduleDeleteVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *moduleDeleteVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be deleted. "+
-			"In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Optimistic locking version. Usually not required.",
 	)
+
 	return f
 }

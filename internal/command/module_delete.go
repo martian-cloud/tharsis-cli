@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -16,13 +16,11 @@ type moduleDeleteCommand struct {
 var _ Command = (*moduleDeleteCommand)(nil)
 
 func (c *moduleDeleteCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewModuleDeleteCommandFactory returns a moduleDeleteCommand struct.
@@ -67,7 +65,8 @@ func (*moduleDeleteCommand) Usage() string {
 
 func (*moduleDeleteCommand) Description() string {
 	return `
-   The module delete command deletes a Terraform module.
+   Permanently removes a module and all its versions
+   from the registry.
 `
 }
 
@@ -77,6 +76,6 @@ tharsis module delete trn:terraform_module:<group_path>/<module_name>/<system>
 `
 }
 
-func (*moduleDeleteCommand) Flags() *flag.FlagSet {
+func (*moduleDeleteCommand) Flags() *flag.Set {
 	return nil
 }

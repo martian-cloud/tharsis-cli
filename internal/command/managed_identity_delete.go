@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -12,19 +12,17 @@ import (
 type managedIdentityDeleteCommand struct {
 	*BaseCommand
 
-	force bool
+	force *bool
 }
 
 var _ Command = (*managedIdentityDeleteCommand)(nil)
 
 func (c *managedIdentityDeleteCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewManagedIdentityDeleteCommandFactory returns a managedIdentityDeleteCommand struct.
@@ -43,14 +41,14 @@ func (c *managedIdentityDeleteCommand) Run(args []string) int {
 		WithCommandName("managed-identity delete"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to delete this managed identity?"),
+		WithWarningPrompt("This will permanently delete the managed identity and revoke all access."),
 	); code != 0 {
 		return code
 	}
 
 	input := &pb.DeleteManagedIdentityRequest{
 		Id:    trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
-		Force: &c.force,
+		Force: c.force,
 	}
 
 	if _, err := c.grpcClient.ManagedIdentitiesClient.DeleteManagedIdentity(c.Context, input); err != nil {
@@ -72,25 +70,24 @@ func (*managedIdentityDeleteCommand) Usage() string {
 
 func (*managedIdentityDeleteCommand) Description() string {
 	return `
-   The managed-identity delete command deletes a managed identity.
-
-   Use with caution as deleting a managed identity is irreversible!
+   Permanently removes a managed identity. This action
+   is irreversible.
 `
 }
 
 func (*managedIdentityDeleteCommand) Example() string {
 	return `
-tharsis managed-identity delete --force trn:managed_identity:<group_path>/<managed_identity_name>
+tharsis managed-identity delete -force trn:managed_identity:<group_path>/<managed_identity_name>
 `
 }
 
-func (c *managedIdentityDeleteCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *managedIdentityDeleteCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.force,
 		"force",
-		false,
 		"Force delete the managed identity.",
+		flag.Aliases("f"),
 	)
 
 	return f

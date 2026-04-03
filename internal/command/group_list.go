@@ -1,29 +1,29 @@
 package command
 
 import (
-	"flag"
-	"fmt"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
 
-	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupListCommand struct {
 	*BaseCommand
 
-	limit    int
-	cursor   *string
-	search   *string
-	parentID *string
-	sortBy   *pb.GroupSortableField
-	toJSON   bool
+	limit     *int32
+	cursor    *string
+	search    *string
+	parentID  *string
+	sortBy    *string
+	sortOrder *string
+	toJSON    *bool
 }
+
+var _ Command = (*groupListCommand)(nil)
 
 // NewGroupListCommandFactory returns a groupListCommand struct.
 func NewGroupListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -35,10 +35,11 @@ func NewGroupListCommandFactory(baseCommand *BaseCommand) func() (Command, error
 }
 
 func (c *groupListCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
-		validation.Field(&c.arguments, validation.Empty),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	return nil
 }
 
 func (c *groupListCommand) Run(args []string) int {
@@ -53,13 +54,25 @@ func (c *groupListCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetGroupsRequest{
-		Sort: c.sortBy,
 		PaginationOptions: &pb.PaginationOptions{
-			First: ptr.Int32(int32(c.limit)),
+			First: c.limit,
 			After: c.cursor,
 		},
 		Search:   c.search,
 		ParentId: c.parentID,
+	}
+
+	if c.sortOrder != nil {
+		switch *c.sortOrder {
+		case "ASC":
+			input.Sort = pb.GroupSortableField_FULL_PATH_ASC.Enum()
+		case "DESC":
+			input.Sort = pb.GroupSortableField_FULL_PATH_DESC.Enum()
+		}
+	}
+
+	if c.sortBy != nil {
+		input.Sort = pb.GroupSortableField(pb.GroupSortableField_value[*c.sortBy]).Enum()
 	}
 
 	result, err := c.grpcClient.GroupsClient.GetGroups(c.Context, input)
@@ -68,39 +81,7 @@ func (c *groupListCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "name", "description", "full_path")
-
-		for _, group := range result.Groups {
-			t.Rich([]string{
-				group.Metadata.Id,
-				group.Name,
-				group.Description,
-				group.FullPath,
-			}, nil)
-		}
-
-		c.UI.Table(t)
-		namedValues := []terminal.NamedValue{
-			{Name: "Total count", Value: result.GetPageInfo().TotalCount},
-			{Name: "Has Next Page", Value: result.GetPageInfo().HasNextPage},
-		}
-		if result.GetPageInfo().EndCursor != nil {
-			namedValues = append(namedValues, terminal.NamedValue{
-				Name:  "Next cursor",
-				Value: result.GetPageInfo().GetEndCursor(),
-			})
-		}
-
-		c.UI.NamedValues(namedValues)
-	}
-
-	return 0
+	return c.OutputList(result, c.toJSON, "trn", "name", "description")
 }
 
 func (*groupListCommand) Synopsis() string {
@@ -109,9 +90,7 @@ func (*groupListCommand) Synopsis() string {
 
 func (*groupListCommand) Description() string {
 	return `
-   The group list command prints information about (likely
-   multiple) groups. Supports pagination, filtering and
-   sorting the output.
+   Lists groups with pagination, filtering, and sorting.
 `
 }
 
@@ -122,87 +101,72 @@ func (*groupListCommand) Usage() string {
 func (*groupListCommand) Example() string {
 	return `
 tharsis group list \
-  --parent-id trn:group:<parent_group_path> \
-  --sort-by FULL_PATH_ASC \
-  --limit 5 \
-  --json
+  -parent-id "trn:group:<parent_group_path>" \
+  -sort-by "FULL_PATH_ASC" \
+  -limit 5 \
+  -json
 `
 }
 
-func (c *groupListCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *groupListCommand) Flags() *flag.Set {
+	sortValues := slices.Collect(maps.Keys(pb.GroupSortableField_value))
+
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.cursor,
 		"cursor",
 		"The cursor string for manual pagination.",
-		func(s string) error {
-			c.cursor = &s
-			return nil
-		},
 	)
-	f.IntVar(
+	f.Int32Var(
 		&c.limit,
 		"limit",
-		maxPaginationLimit,
 		"Maximum number of result elements to return.",
+		flag.Default(maxPaginationLimit),
+		flag.ValidRange(0, int(maxPaginationLimit)),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortBy,
 		"sort-by",
-		"Sort by this field (e.g., UPDATED_AT_ASC, UPDATED_AT_DESC, FULL_PATH_ASC, FULL_PATH_DESC).",
-		func(s string) error {
-			value, ok := pb.GroupSortableField_value[strings.ToUpper(s)]
-			if !ok {
-				return fmt.Errorf("invalid sort-by value: %s (valid values: %v)", s, slices.Collect(maps.Keys(pb.GroupSortableField_value)))
-			}
-			c.sortBy = pb.GroupSortableField(value).Enum()
-			return nil
-		},
+		"Sort by this field.",
+		flag.ValidValues(sortValues...),
+		flag.PredictValues(sortValues...),
+		flag.TransformString(strings.ToUpper),
 	)
-	f.Func(
+	f.StringVar(
+		&c.search,
 		"search",
 		"Filter to only groups containing this substring in their path.",
-		func(s string) error {
-			c.search = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.parentID,
 		"parent-id",
 		"Filter to only direct sub-groups of this parent group.",
-		func(s string) error {
-			c.parentID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.parentID,
 		"parent-path",
-		"Filter to only direct sub-groups of this parent group. Deprecated",
-		func(s string) error {
-			c.parentID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, s))
-			return nil
-		},
+		"Filter to only direct sub-groups of this parent group.",
+		flag.Deprecated("use -parent-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+		}),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortOrder,
 		"sort-order",
-		"Sort in this direction, ASC or DESC. Deprecated",
-		func(s string) error {
-			switch strings.ToUpper(s) {
-			case "ASC":
-				c.sortBy = pb.GroupSortableField_FULL_PATH_ASC.Enum()
-			case "DESC":
-				c.sortBy = pb.GroupSortableField_FULL_PATH_DESC.Enum()
-			default:
-				return fmt.Errorf("unknown sort order %s", s)
-			}
-
-			return nil
-		},
+		"Sort in this direction.",
+		flag.Deprecated("use -sort-by"),
+		flag.ValidValues("ASC", "DESC"),
+		flag.PredictValues("ASC", "DESC"),
+		flag.TransformString(strings.ToUpper),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
+
+	f.MutuallyExclusive("sort-by", "sort-order")
 
 	return f
 }

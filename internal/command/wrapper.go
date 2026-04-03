@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
-
+	"github.com/fatih/color"
 	"github.com/mitchellh/cli"
 	"github.com/posener/complete"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 )
 
@@ -13,7 +13,8 @@ type Command interface {
 	Usage() string
 	Description() string
 	Example() string
-	Flags() *flag.FlagSet
+	Flags() *flag.Set
+	PredictArgs() complete.Predictor
 	Run(args []string) int
 	Synopsis() string
 }
@@ -48,6 +49,23 @@ func (c Wrapper) Help() string {
 	})
 }
 
+// HelpTemplate returns a custom help template if the wrapped command provides one.
+// Otherwise it returns the default template with bold subcommand headers.
+func (c Wrapper) HelpTemplate() string {
+	if t, ok := c.command.(interface{ HelpTemplate() string }); ok {
+		return t.HelpTemplate()
+	}
+
+	return `{{.Help}}
+{{- if gt (len .Subcommands) 0}}
+
+` + color.New(color.Bold).Sprint("Subcommands:") + `
+{{- range $value := .Subcommands }}
+    {{ $value.NameAligned }}    {{ $value.Synopsis }}{{ end }}
+{{- end }}
+`
+}
+
 // Run executes the command.
 func (c Wrapper) Run(args []string) int {
 	return c.command.Run(args)
@@ -60,19 +78,31 @@ func (c Wrapper) Synopsis() string {
 
 // AutocompleteArgs returns argument completions (none by default).
 func (c Wrapper) AutocompleteArgs() complete.Predictor {
-	return complete.PredictNothing
+	return c.command.PredictArgs()
 }
 
 // AutocompleteFlags returns flag completions derived from the command's Flags().
 func (c Wrapper) AutocompleteFlags() complete.Flags {
-	flags := c.command.Flags()
-	if flags == nil {
+	fs := c.command.Flags()
+	if fs == nil {
 		return nil
 	}
 
 	result := make(complete.Flags)
-	flags.VisitAll(func(f *flag.Flag) {
-		result["-"+f.Name] = complete.PredictAnything
+	fs.VisitAll(func(f *flag.Flag) {
+		var predictor complete.Predictor
+		if f.IsBool() {
+			predictor = complete.PredictNothing
+		} else if preds := f.Predictors(); len(preds) > 0 {
+			predictor = complete.PredictSet(preds...)
+		} else {
+			predictor = complete.PredictAnything
+		}
+
+		for _, name := range f.Names() {
+			result["-"+name] = predictor
+		}
 	})
+
 	return result
 }

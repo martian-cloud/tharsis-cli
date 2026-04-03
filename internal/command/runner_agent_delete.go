@@ -1,11 +1,10 @@
 package command
 
 import (
-	"flag"
-	"strconv"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 // runnerAgentDeleteCommand is the top-level structure for the runner agent delete command.
@@ -18,13 +17,11 @@ type runnerAgentDeleteCommand struct {
 var _ Command = (*runnerAgentDeleteCommand)(nil)
 
 func (c *runnerAgentDeleteCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 // NewRunnerAgentDeleteCommandFactory returns a runnerAgentDeleteCommand struct.
@@ -71,7 +68,7 @@ func (*runnerAgentDeleteCommand) Usage() string {
 
 func (*runnerAgentDeleteCommand) Description() string {
 	return `
-   The runner-agent delete command deletes a runner agent.
+   Permanently removes a runner agent.
 `
 }
 
@@ -81,20 +78,12 @@ tharsis runner-agent delete trn:runner:<group_path>/<runner_name>
 `
 }
 
-func (c *runnerAgentDeleteCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *runnerAgentDeleteCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be deleted. "+
-			"In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Optimistic locking version. Usually not required.",
 	)
 
 	return f

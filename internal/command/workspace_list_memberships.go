@@ -1,20 +1,20 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceListMembershipsCommand struct {
 	*BaseCommand
 
-	toJSON bool
+	toJSON *bool
 }
+
+var _ Command = (*workspaceListMembershipsCommand)(nil)
 
 // NewWorkspaceListMembershipsCommandFactory returns a workspaceListMembershipsCommand struct.
 func NewWorkspaceListMembershipsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -26,13 +26,11 @@ func NewWorkspaceListMembershipsCommandFactory(baseCommand *BaseCommand) func() 
 }
 
 func (c *workspaceListMembershipsCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *workspaceListMembershipsCommand) Run(args []string) int {
@@ -51,7 +49,7 @@ func (c *workspaceListMembershipsCommand) Run(args []string) int {
 		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
 	})
 	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to get group")
+		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
 	}
 
@@ -65,28 +63,7 @@ func (c *workspaceListMembershipsCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "role_id", "user_id", "service_account_id", "team_id")
-
-		for _, membership := range result.NamespaceMemberships {
-			t.Rich([]string{
-				membership.GetMetadata().Id,
-				membership.RoleId,
-				ptr.ToString(membership.UserId),
-				ptr.ToString(membership.ServiceAccountId),
-				ptr.ToString(membership.TeamId),
-			}, nil)
-		}
-
-		c.UI.Table(t)
-	}
-
-	return 0
+	return c.OutputList(result, c.toJSON, "id", "role_id", "namespace_path", "user_id", "service_account_id", "team_id")
 }
 
 func (*workspaceListMembershipsCommand) Synopsis() string {
@@ -95,8 +72,7 @@ func (*workspaceListMembershipsCommand) Synopsis() string {
 
 func (*workspaceListMembershipsCommand) Description() string {
 	return `
-   The workspace list-memberships command prints information about
-   memberships for a specific workspace.
+   Lists all memberships for a workspace.
 `
 }
 
@@ -110,12 +86,11 @@ tharsis workspace list-memberships trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceListMembershipsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceListMembershipsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 

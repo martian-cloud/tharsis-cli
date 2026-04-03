@@ -1,21 +1,21 @@
 package command
 
 import (
-	"flag"
-	"strings"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type moduleGetVersionCommand struct {
 	*BaseCommand
 
-	version string
-	toJSON  bool
+	version *string
+	toJSON  *bool
 }
+
+var _ Command = (*moduleGetVersionCommand)(nil)
 
 // NewModuleGetVersionCommandFactory returns a moduleGetVersionCommand struct.
 func NewModuleGetVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -27,13 +27,11 @@ func NewModuleGetVersionCommandFactory(baseCommand *BaseCommand) func() (Command
 }
 
 func (c *moduleGetVersionCommand) validate() error {
-	const message = "id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: id")
+	}
+
+	return nil
 }
 
 func (c *moduleGetVersionCommand) Run(args []string) int {
@@ -49,9 +47,9 @@ func (c *moduleGetVersionCommand) Run(args []string) int {
 
 	moduleVersionID := c.arguments[0]
 
-	if c.version != "" {
-		// Handle deprecated version flag and module path arg.
-		moduleVersionID = trn.NewResourceTRN(trn.ResourceTypeTerraformModuleVersion, moduleVersionID, c.version)
+	// Handle deprecated -version flag and module path arg.
+	if c.version != nil {
+		moduleVersionID = trn.NewResourceTRN(trn.ResourceTypeTerraformModuleVersion, moduleVersionID, *c.version)
 	}
 
 	input := &pb.GetTerraformModuleVersionByIDRequest{
@@ -64,7 +62,7 @@ func (c *moduleGetVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModuleVersion(c.UI, c.toJSON, version)
+	return c.Output(version, c.toJSON)
 }
 
 func (*moduleGetVersionCommand) Synopsis() string {
@@ -73,7 +71,7 @@ func (*moduleGetVersionCommand) Synopsis() string {
 
 func (*moduleGetVersionCommand) Description() string {
 	return `
-   The module get-version command retrieves details about a specific module version.
+   Retrieves details about a specific module version.
 `
 }
 
@@ -87,51 +85,19 @@ tharsis module get-version trn:terraform_module_version:<group_path>/<module_nam
 `
 }
 
-func (c *moduleGetVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *moduleGetVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
 	)
 	f.StringVar(
 		&c.version,
 		"version",
-		"",
-		"A semver compliant version tag to use as a filter. Deprecated.",
+		"A semver compliant version tag to use as a filter.",
+		flag.Deprecated("pass version TRN as argument"),
 	)
+
 	return f
-}
-
-func outputModuleVersion(ui terminal.UI, toJSON bool, version *pb.TerraformModuleVersion) int {
-	if toJSON {
-		if err := ui.JSON(version); err != nil {
-			ui.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		values := []terminal.NamedValue{
-			{Name: "ID", Value: version.Metadata.Id},
-			{Name: "TRN", Value: version.Metadata.Trn},
-			{Name: "Version", Value: version.SemanticVersion},
-			{Name: "Status", Value: version.Status},
-			{Name: "Latest", Value: version.Latest},
-			{Name: "SHA Sum", Value: version.ShaSum},
-			{Name: "Created By", Value: version.CreatedBy},
-			{Name: "Created At", Value: version.Metadata.CreatedAt.AsTime().Local().Format(humanTimeFormat)},
-		}
-
-		if version.Error != "" {
-			values = append(values, terminal.NamedValue{Name: "Error", Value: version.Error})
-		}
-
-		if len(version.Submodules) > 0 {
-			values = append(values, terminal.NamedValue{Name: "Submodules", Value: strings.Join(version.Submodules, ", ")})
-		}
-
-		ui.NamedValues(values)
-	}
-
-	return 0
 }

@@ -1,14 +1,11 @@
 package command
 
 import (
-	"flag"
-	"fmt"
-	"strconv"
-	"strings"
+	"errors"
 
 	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,27 +15,25 @@ import (
 type workspaceCreateCommand struct {
 	*BaseCommand
 
-	parentGroupID      string
-	description        string
-	terraformVersion   string
+	parentGroupID      *string
+	description        *string
+	terraformVersion   *string
 	maxJobDuration     *int32
-	preventDestroyPlan bool
 	managedIdentityIDs []string
 	labels             map[string]string
-	toJSON             bool
-	ifNotExists        bool
+	preventDestroyPlan *bool
+	toJSON             *bool
+	ifNotExists        *bool
 }
 
 var _ Command = (*workspaceCreateCommand)(nil)
 
 func (c *workspaceCreateCommand) validate() error {
-	const message = "name is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: name")
+	}
+
+	return nil
 }
 
 // NewWorkspaceCreateCommandFactory returns a workspaceCreateCommand struct.
@@ -64,17 +59,17 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 
 	name := c.arguments[0]
 
-	if c.parentGroupID == "" {
+	if c.parentGroupID == nil {
 		// Handle deprecated syntax where full path of the workspace is passed into the argument.
 		parent, child := extractParentPath(name)
-		c.parentGroupID = trn.NewResourceTRN(trn.ResourceTypeGroup, parent)
+		c.parentGroupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, parent))
 		name = child
 	}
 
-	if c.ifNotExists {
-		c.Logger.Debug("getting parent group", "value", c.parentGroupID)
+	if *c.ifNotExists {
+		c.Logger.Debug("getting parent group", "value", *c.parentGroupID)
 
-		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.parentGroupID})
+		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: *c.parentGroupID})
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get parent group")
 			return 1
@@ -91,17 +86,17 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 
 		if workspace != nil {
 			c.Logger.Debug("workspace already exists, returning existing workspace")
-			return outputWorkspace(c.UI, c.toJSON, workspace)
+			return c.Output(workspace, c.toJSON)
 		}
 	}
 
 	input := &pb.CreateWorkspaceRequest{
 		Name:               name,
-		GroupId:            c.parentGroupID,
-		Description:        c.description,
-		TerraformVersion:   c.terraformVersion,
+		GroupId:            *c.parentGroupID,
+		Description:        ptr.ToString(c.description),
+		TerraformVersion:   ptr.ToString(c.terraformVersion),
 		MaxJobDuration:     c.maxJobDuration,
-		PreventDestroyPlan: c.preventDestroyPlan,
+		PreventDestroyPlan: *c.preventDestroyPlan,
 		Labels:             c.labels,
 	}
 
@@ -123,7 +118,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 		}
 	}
 
-	return outputWorkspace(c.UI, c.toJSON, createdWorkspace)
+	return c.Output(createdWorkspace, c.toJSON)
 }
 
 func (*workspaceCreateCommand) Synopsis() string {
@@ -136,99 +131,77 @@ func (*workspaceCreateCommand) Usage() string {
 
 func (*workspaceCreateCommand) Description() string {
 	return `
-   The workspace create command creates a new workspace. It
-   allows setting a workspace's description (optional),
-   maximum job duration and managed identities. Shows final
-   output as JSON, if specified. Idempotent when used with
-   --if-not-exists option.
+   Creates a new workspace with optional description,
+   max job duration, and managed identity assignments.
 `
 }
 
 func (*workspaceCreateCommand) Example() string {
 	return `
 tharsis workspace create \
-  --parent-group-id trn:group:<group_path> \
-  --description "Production workspace" \
-  --terraform-version "1.5.0" \
-  --max-job-duration 60 \
-  --prevent-destroy-plan \
-  --managed-identity trn:managed_identity:<group_path>/<identity_name> \
-  --managed-identity trn:managed_identity:<group_path>/<another_identity> \
-  --label env=prod \
-  --label team=platform \
+  -parent-group-id "trn:group:<group_path>" \
+  -description "Production workspace" \
+  -terraform-version "1.5.0" \
+  -max-job-duration 60 \
+  -prevent-destroy-plan \
+  -managed-identity "trn:managed_identity:<group_path>/<identity_name>" \
+  -label "env=prod" \
+  -label "team=platform" \
   <name>
 `
 }
 
-func (c *workspaceCreateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceCreateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.parentGroupID,
 		"parent-group-id",
-		"",
 		"Parent group ID.",
 	)
 	f.StringVar(
 		&c.description,
 		"description",
-		"",
 		"Description for the new workspace.",
 	)
 	f.StringVar(
 		&c.terraformVersion,
 		"terraform-version",
-		"",
 		"The default Terraform CLI version for the new workspace.",
 	)
-	f.Func(
+	f.Int32Var(
+		&c.maxJobDuration,
 		"max-job-duration",
 		"The amount of minutes before a job is gracefully canceled (Default 720).",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return err
-			}
-			c.maxJobDuration = ptr.Int32(int32(v))
-			return nil
-		},
 	)
 	f.BoolVar(
 		&c.preventDestroyPlan,
 		"prevent-destroy-plan",
-		false,
 		"Whether a run/plan will be prevented from destroying deployed resources.",
+		flag.Default(false),
 	)
-	f.Func(
+	f.MapVar(
+		&c.labels,
 		"label",
-		"Labels for the new workspace (key=value). Can be specified multiple times.",
-		func(s string) error {
-			parts := strings.Split(s, "=")
-			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-				return fmt.Errorf("label key and value cannot be empty")
-			}
-			c.labels[parts[0]] = parts[1]
-			return nil
-		},
+		"Labels for the new workspace (key=value).",
 	)
-	f.Func(
+	f.StringSliceVar(
+		&c.managedIdentityIDs,
 		"managed-identity",
-		"The ID of a managed identity to assign. Can be specified multiple times.",
-		func(s string) error {
-			c.managedIdentityIDs = append(c.managedIdentityIDs, trn.ToTRN(trn.ResourceTypeManagedIdentity, s))
-			return nil
-		},
+		"The ID of a managed identity to assign.",
+		flag.TransformString(func(s string) string {
+			return trn.ToTRN(trn.ResourceTypeManagedIdentity, s)
+		}),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 	f.BoolVar(
 		&c.ifNotExists,
 		"if-not-exists",
-		false,
 		"Create a workspace if it does not already exist.",
+		flag.Default(false),
 	)
 
 	return f

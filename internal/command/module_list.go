@@ -1,28 +1,29 @@
 package command
 
 import (
-	"flag"
-	"fmt"
+	"errors"
+	"maps"
+	"slices"
 	"strings"
 
-	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type moduleListCommand struct {
 	*BaseCommand
 
-	limit            int
+	limit            *int32
 	cursor           *string
 	search           *string
 	groupID          *string
-	includeInherited bool
-	sortOrder        *string
 	sortBy           *string
-	toJSON           bool
+	sortOrder        *string
+	includeInherited *bool
+	toJSON           *bool
 }
+
+var _ Command = (*moduleListCommand)(nil)
 
 // NewModuleListCommandFactory returns a moduleListCommand struct.
 func NewModuleListCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -34,10 +35,11 @@ func NewModuleListCommandFactory(baseCommand *BaseCommand) func() (Command, erro
 }
 
 func (c *moduleListCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.limit, validation.Min(0), validation.Max(maxPaginationLimit)),
-		validation.Field(&c.arguments, validation.Empty),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	return nil
 }
 
 func (c *moduleListCommand) Run(args []string) int {
@@ -64,12 +66,12 @@ func (c *moduleListCommand) Run(args []string) int {
 	input := &pb.GetTerraformModulesRequest{
 		Sort: sortByEnum,
 		PaginationOptions: &pb.PaginationOptions{
-			First: ptr.Int32(int32(c.limit)),
+			First: c.limit,
 			After: c.cursor,
 		},
 		Search:           c.search,
 		GroupId:          c.groupID,
-		IncludeInherited: c.includeInherited,
+		IncludeInherited: *c.includeInherited,
 	}
 
 	result, err := c.grpcClient.TerraformModulesClient.GetTerraformModules(c.Context, input)
@@ -78,39 +80,7 @@ func (c *moduleListCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
-		if err := c.UI.JSON(result); err != nil {
-			c.UI.ErrorWithSummary(err, "failed to get JSON output")
-			return 1
-		}
-	} else {
-		t := terminal.NewTable("id", "name", "system", "private")
-
-		for _, module := range result.Modules {
-			t.Rich([]string{
-				module.GetMetadata().Id,
-				module.Name,
-				module.System,
-				fmt.Sprintf("%t", module.Private),
-			}, nil)
-		}
-
-		c.UI.Table(t)
-		namedValues := []terminal.NamedValue{
-			{Name: "Total count", Value: result.GetPageInfo().TotalCount},
-			{Name: "Has Next Page", Value: result.GetPageInfo().HasNextPage},
-		}
-		if result.GetPageInfo().EndCursor != nil {
-			namedValues = append(namedValues, terminal.NamedValue{
-				Name:  "Next cursor",
-				Value: result.GetPageInfo().GetEndCursor(),
-			})
-		}
-
-		c.UI.NamedValues(namedValues)
-	}
-
-	return 0
+	return c.OutputList(result, c.toJSON, "trn", "name", "system", "private")
 }
 
 func (*moduleListCommand) Synopsis() string {
@@ -119,9 +89,7 @@ func (*moduleListCommand) Synopsis() string {
 
 func (*moduleListCommand) Description() string {
 	return `
-   The module list command prints information about (likely
-   multiple) modules. Supports pagination, filtering and
-   sorting the output.
+   Lists modules with pagination, filtering, and sorting.
 `
 }
 
@@ -132,93 +100,65 @@ func (*moduleListCommand) Usage() string {
 func (*moduleListCommand) Example() string {
 	return `
 tharsis module list \
-  --group-id trn:group:<group_path> \
-  --include-inherited \
-  --sort-by UPDATED_AT_DESC \
-  --limit 5 \
-  --json
+  -group-id "trn:group:<group_path>" \
+  -include-inherited \
+  -sort-by "UPDATED_AT_DESC" \
+  -limit 5 \
+  -json
 `
 }
 
-func (c *moduleListCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *moduleListCommand) Flags() *flag.Set {
+	sortValues := slices.Collect(maps.Keys(pb.TerraformModuleSortableField_value))
+
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.cursor,
 		"cursor",
 		"The cursor string for manual pagination.",
-		func(s string) error {
-			c.cursor = &s
-			return nil
-		},
 	)
-	f.IntVar(
+	f.Int32Var(
 		&c.limit,
 		"limit",
-		maxPaginationLimit,
 		"Maximum number of result elements to return.",
+		flag.Default(maxPaginationLimit),
+		flag.ValidRange(0, int(maxPaginationLimit)),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortBy,
 		"sort-by",
-		"Sort by this field (e.g., NAME_ASC, NAME_DESC, GROUP_LEVEL_ASC, GROUP_LEVEL_DESC, UPDATED_AT_ASC, UPDATED_AT_DESC).",
-		func(s string) error {
-			// TODO: Update to use PB types and validate with PB map once deprecation is done.
-			switch v := strings.ToUpper(s); v {
-			case "NAME", // DEPRECATED
-				pb.TerraformModuleSortableField_GROUP_LEVEL_ASC.String(),
-				pb.TerraformModuleSortableField_GROUP_LEVEL_DESC.String(),
-				pb.TerraformModuleSortableField_NAME_ASC.String(),
-				pb.TerraformModuleSortableField_NAME_DESC.String(),
-				pb.TerraformModuleSortableField_UPDATED_AT_ASC.String(),
-				pb.TerraformModuleSortableField_UPDATED_AT_DESC.String():
-				c.sortBy = &v
-			case "UPDATED": // Deprecated
-				c.sortBy = ptr.String("UPDATED_AT")
-			default:
-				return fmt.Errorf("unknown sort by option %s", s)
-			}
-
-			return nil
-		},
+		"Sort by this field.",
+		flag.PredictValues(sortValues...),
+		flag.TransformString(strings.ToUpper),
 	)
-	f.Func(
+	f.StringVar(
+		&c.sortOrder,
 		"sort-order",
-		"Sort in this direction, ASC or DESC. Deprecated",
-		func(s string) error {
-			switch v := strings.ToUpper(s); v {
-			case "ASC", "DESC":
-				c.sortOrder = &v
-			default:
-				return fmt.Errorf("invalid sort-order value: %s", s)
-			}
-
-			return nil
-		},
+		"Sort in this direction.",
+		flag.Deprecated("use -sort-by"),
+		flag.ValidValues("ASC", "DESC"),
+		flag.PredictValues("ASC", "DESC"),
+		flag.TransformString(strings.ToUpper),
 	)
-	f.Func(
+	f.StringVar(
+		&c.search,
 		"search",
 		"Filter to only modules containing this substring in their path.",
-		func(s string) error {
-			c.search = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.groupID,
 		"group-id",
 		"Filter to only modules in this group.",
-		func(s string) error {
-			c.groupID = &s
-			return nil
-		},
 	)
 	f.BoolVar(
 		&c.includeInherited,
 		"include-inherited",
-		false,
 		"Include modules inherited from parent groups.",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 
