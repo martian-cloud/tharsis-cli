@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
@@ -14,6 +14,8 @@ type workspaceSetTerraformVarsCommand struct {
 
 	tfVarFiles []string
 }
+
+var _ Command = (*workspaceSetTerraformVarsCommand)(nil)
 
 // NewWorkspaceSetTerraformVarsCommandFactory returns a workspaceSetTerraformVarsCommand struct.
 func NewWorkspaceSetTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -25,14 +27,11 @@ func NewWorkspaceSetTerraformVarsCommandFactory(baseCommand *BaseCommand) func()
 }
 
 func (c *workspaceSetTerraformVarsCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.tfVarFiles, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *workspaceSetTerraformVarsCommand) Run(args []string) int {
@@ -91,9 +90,8 @@ func (*workspaceSetTerraformVarsCommand) Synopsis() string {
 
 func (*workspaceSetTerraformVarsCommand) Description() string {
 	return `
-   The workspace set-terraform-vars command sets terraform variables for a workspace.
-   Command will overwrite any existing Terraform variables in the target workspace!
-   Note: This command does not support sensitive variables.
+   Replaces all Terraform variables in a workspace from a
+   tfvars file. Does not support sensitive variables.
 `
 }
 
@@ -104,20 +102,18 @@ func (*workspaceSetTerraformVarsCommand) Usage() string {
 func (*workspaceSetTerraformVarsCommand) Example() string {
 	return `
 tharsis workspace set-terraform-vars \
-  --tf-var-file terraform.tfvars \
+  -tf-var-file "terraform.tfvars" \
   trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceSetTerraformVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *workspaceSetTerraformVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringSliceVar(
+		&c.tfVarFiles,
 		"tf-var-file",
-		"Path to a .tfvars file (can be specified multiple times).",
-		func(s string) error {
-			c.tfVarFiles = append(c.tfVarFiles, s)
-			return nil
-		},
+		"Path to a .tfvars file.",
+		flag.Required(),
 	)
 
 	return f

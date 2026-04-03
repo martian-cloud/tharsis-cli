@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
@@ -14,6 +14,8 @@ type groupSetTerraformVarsCommand struct {
 
 	tfVarFiles []string
 }
+
+var _ Command = (*groupSetTerraformVarsCommand)(nil)
 
 // NewGroupSetTerraformVarsCommandFactory returns a groupSetTerraformVarsCommand struct.
 func NewGroupSetTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -25,14 +27,11 @@ func NewGroupSetTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Co
 }
 
 func (c *groupSetTerraformVarsCommand) validate() error {
-	const message = "group-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.tfVarFiles, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: group id")
+	}
+
+	return nil
 }
 
 func (c *groupSetTerraformVarsCommand) Run(args []string) int {
@@ -89,9 +88,8 @@ func (*groupSetTerraformVarsCommand) Synopsis() string {
 
 func (*groupSetTerraformVarsCommand) Description() string {
 	return `
-   The group set-terraform-vars command sets terraform variables for a group.
-   Command will overwrite any existing Terraform variables in the target group!
-   Note: This command does not support sensitive variables.
+   Replaces all Terraform variables in a group from a
+   tfvars file. Does not support sensitive variables.
 `
 }
 
@@ -102,20 +100,18 @@ func (*groupSetTerraformVarsCommand) Usage() string {
 func (*groupSetTerraformVarsCommand) Example() string {
 	return `
 tharsis group set-terraform-vars \
-  --tf-var-file terraform.tfvars \
+  -tf-var-file "terraform.tfvars" \
   trn:group:<group_path>
 `
 }
 
-func (c *groupSetTerraformVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *groupSetTerraformVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringSliceVar(
+		&c.tfVarFiles,
 		"tf-var-file",
-		"Path to a .tfvars file (can be specified multiple times).",
-		func(s string) error {
-			c.tfVarFiles = append(c.tfVarFiles, s)
-			return nil
-		},
+		"Path to a .tfvars file.",
+		flag.Required(),
 	)
 
 	return f

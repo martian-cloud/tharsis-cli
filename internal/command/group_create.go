@@ -1,11 +1,11 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
 	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -16,21 +16,19 @@ type groupCreateCommand struct {
 	*BaseCommand
 
 	parentGroupID *string
-	description   string
-	toJSON        bool
-	ifNotExists   bool
+	description   *string
+	toJSON        *bool
+	ifNotExists   *bool
 }
 
 var _ Command = (*groupCreateCommand)(nil)
 
 func (c *groupCreateCommand) validate() error {
-	const message = "name is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: name")
+	}
+
+	return nil
 }
 
 // NewGroupCreateCommandFactory returns a groupCreateCommand struct.
@@ -55,7 +53,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 
 	name := c.arguments[0]
 
-	if c.ifNotExists {
+	if *c.ifNotExists {
 		var checkID string
 		if c.parentGroupID != nil {
 			c.Logger.Debug("getting parent group", "value", *c.parentGroupID)
@@ -81,7 +79,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 
 		if existingGroup != nil {
 			c.Logger.Debug("group already exists, returning existing group")
-			return outputGroup(c.UI, c.toJSON, existingGroup)
+			return c.Output(existingGroup, c.toJSON)
 		}
 	}
 
@@ -96,7 +94,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 	input := &pb.CreateGroupRequest{
 		Name:        name,
 		ParentId:    c.parentGroupID,
-		Description: c.description,
+		Description: ptr.ToString(c.description),
 	}
 
 	createdGroup, err := c.grpcClient.GroupsClient.CreateGroup(c.Context, input)
@@ -105,7 +103,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputGroup(c.UI, c.toJSON, createdGroup)
+	return c.Output(createdGroup, c.toJSON)
 }
 
 func (*groupCreateCommand) Synopsis() string {
@@ -118,49 +116,42 @@ func (*groupCreateCommand) Usage() string {
 
 func (*groupCreateCommand) Description() string {
 	return `
-   The group create command creates a new group. It allows
-   setting a group's description (optional). Shows final
-   output as JSON, if specified. Idempotent when used with
-   --if-not-exists option.
+   Creates a new group under a parent group with an
+   optional description.
 `
 }
 
 func (*groupCreateCommand) Example() string {
 	return `
 tharsis group create \
-  --parent-group-id trn:group:<group_path> \
-  --description "Operations group" \
+  -parent-group-id "trn:group:<group_path>" \
+  -description "Operations group" \
   <name>
 `
 }
 
-func (c *groupCreateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
-	f.Func(
+func (c *groupCreateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
+	f.StringVar(
+		&c.parentGroupID,
 		"parent-group-id",
 		"Parent group ID.",
-		func(s string) error {
-			c.parentGroupID = &s
-			return nil
-		},
 	)
 	f.StringVar(
 		&c.description,
 		"description",
-		"",
 		"Description for the new group.",
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 	f.BoolVar(
 		&c.ifNotExists,
 		"if-not-exists",
-		false,
 		"Create a group if it does not already exist.",
+		flag.Default(false),
 	)
 
 	return f

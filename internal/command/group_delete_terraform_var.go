@@ -1,20 +1,21 @@
 package command
 
 import (
-	"flag"
-	"strconv"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupDeleteTerraformVarCommand struct {
 	*BaseCommand
 
-	key     string
+	key     *string
 	version *int64
 }
+
+var _ Command = (*groupDeleteTerraformVarCommand)(nil)
 
 // NewGroupDeleteTerraformVarCommandFactory returns a groupDeleteTerraformVarCommand struct.
 func NewGroupDeleteTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -26,14 +27,11 @@ func NewGroupDeleteTerraformVarCommandFactory(baseCommand *BaseCommand) func() (
 }
 
 func (c *groupDeleteTerraformVarCommand) validate() error {
-	const message = "group-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.key, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: group id")
+	}
+
+	return nil
 }
 
 func (c *groupDeleteTerraformVarCommand) Run(args []string) int {
@@ -47,7 +45,7 @@ func (c *groupDeleteTerraformVarCommand) Run(args []string) int {
 		return code
 	}
 
-	// Get group to retrieve full path
+	// Get group to retrieve full path.
 	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0])})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
@@ -55,7 +53,7 @@ func (c *groupDeleteTerraformVarCommand) Run(args []string) int {
 	}
 
 	deleteInput := &pb.DeleteNamespaceVariableRequest{
-		Id:      trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), c.key),
+		Id:      trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), *c.key),
 		Version: c.version,
 	}
 
@@ -74,7 +72,7 @@ func (*groupDeleteTerraformVarCommand) Synopsis() string {
 
 func (*groupDeleteTerraformVarCommand) Description() string {
 	return `
-   The group delete-terraform-var command deletes a terraform variable from a group.
+   Removes a Terraform variable from a group.
 `
 }
 
@@ -85,30 +83,23 @@ func (*groupDeleteTerraformVarCommand) Usage() string {
 func (*groupDeleteTerraformVarCommand) Example() string {
 	return `
 tharsis group delete-terraform-var \
-  --key region \
+  -key "region" \
   trn:group:<group_path>
 `
 }
 
-func (c *groupDeleteTerraformVarCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupDeleteTerraformVarCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.key,
 		"key",
-		"",
 		"Variable key.",
+		flag.Required(),
 	)
-	f.Func(
+	f.Int64Var(
+		&c.version,
 		"version",
-		"Metadata version of the resource to be deleted. In most cases, this is not required.",
-		func(s string) error {
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			c.version = &v
-			return nil
-		},
+		"Optimistic locking version. Usually not required.",
 	)
 
 	return f

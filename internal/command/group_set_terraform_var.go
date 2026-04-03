@@ -1,10 +1,10 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,10 +13,12 @@ import (
 type groupSetTerraformVarCommand struct {
 	*BaseCommand
 
-	key       string
-	value     string
-	sensitive bool
+	key       *string
+	value     *string
+	sensitive *bool
 }
+
+var _ Command = (*groupSetTerraformVarCommand)(nil)
 
 // NewGroupSetTerraformVarCommandFactory returns a groupSetTerraformVarCommand struct.
 func NewGroupSetTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -28,15 +30,11 @@ func NewGroupSetTerraformVarCommandFactory(baseCommand *BaseCommand) func() (Com
 }
 
 func (c *groupSetTerraformVarCommand) validate() error {
-	const message = "group-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.key, validation.Required),
-		validation.Field(&c.value, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: group id")
+	}
+
+	return nil
 }
 
 func (c *groupSetTerraformVarCommand) Run(args []string) int {
@@ -50,15 +48,15 @@ func (c *groupSetTerraformVarCommand) Run(args []string) int {
 		return code
 	}
 
-	// Get group to retrieve full path
+	// Get group to retrieve full path.
 	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0])})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
 	}
 
-	// Build TRN and check if variable exists
-	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), c.key)
+	// Build TRN and check if variable exists.
+	variableTRN := trn.NewResourceTRN(trn.ResourceTypeVariable, group.FullPath, pb.VariableCategory_terraform.String(), *c.key)
 	existingVar, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, &pb.GetNamespaceVariableByIDRequest{
 		Id: variableTRN,
 	})
@@ -69,7 +67,7 @@ func (c *groupSetTerraformVarCommand) Run(args []string) int {
 
 	if existingVar != nil {
 		// Variable exists - check if sensitivity matches
-		if existingVar.Sensitive != c.sensitive {
+		if existingVar.Sensitive != *c.sensitive {
 			c.UI.Errorf("cannot change sensitive flag - delete and recreate the variable instead")
 			return 1
 		}
@@ -77,8 +75,8 @@ func (c *groupSetTerraformVarCommand) Run(args []string) int {
 		// Update existing variable
 		updateInput := &pb.UpdateNamespaceVariableRequest{
 			Id:    existingVar.Metadata.Id,
-			Key:   c.key,
-			Value: c.value,
+			Key:   *c.key,
+			Value: *c.value,
 		}
 
 		if _, err = c.grpcClient.NamespaceVariablesClient.UpdateNamespaceVariable(c.Context, updateInput); err != nil {
@@ -91,9 +89,9 @@ func (c *groupSetTerraformVarCommand) Run(args []string) int {
 		createInput := &pb.CreateNamespaceVariableRequest{
 			NamespacePath: group.FullPath,
 			Category:      pb.VariableCategory_terraform,
-			Key:           c.key,
-			Value:         c.value,
-			Sensitive:     c.sensitive,
+			Key:           *c.key,
+			Value:         *c.value,
+			Sensitive:     *c.sensitive,
 		}
 
 		if _, err = c.grpcClient.NamespaceVariablesClient.CreateNamespaceVariable(c.Context, createInput); err != nil {
@@ -112,7 +110,7 @@ func (*groupSetTerraformVarCommand) Synopsis() string {
 
 func (*groupSetTerraformVarCommand) Description() string {
 	return `
-   The group set-terraform-var command creates or updates a terraform variable for a group.
+   Creates or updates a Terraform variable for a group.
 `
 }
 
@@ -123,31 +121,31 @@ func (*groupSetTerraformVarCommand) Usage() string {
 func (*groupSetTerraformVarCommand) Example() string {
 	return `
 tharsis group set-terraform-var \
-  --key region \
-  --value us-east-1 \
+  -key "region" \
+  -value "us-east-1" \
   trn:group:<group_path>
 `
 }
 
-func (c *groupSetTerraformVarCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *groupSetTerraformVarCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.key,
 		"key",
-		"",
 		"Variable key.",
+		flag.Required(),
 	)
 	f.StringVar(
 		&c.value,
 		"value",
-		"",
 		"Variable value.",
+		flag.Required(),
 	)
 	f.BoolVar(
 		&c.sensitive,
 		"sensitive",
-		false,
 		"Mark variable as sensitive.",
+		flag.Default(false),
 	)
 
 	return f

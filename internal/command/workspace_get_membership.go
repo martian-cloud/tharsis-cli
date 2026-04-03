@@ -2,11 +2,10 @@ package command
 
 import (
 	"errors"
-	"flag"
 
 	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
@@ -16,8 +15,10 @@ type workspaceGetMembershipCommand struct {
 	serviceAccountID *string
 	teamID           *string
 	userID           *string
-	toJSON           bool
+	toJSON           *bool
 }
+
+var _ Command = (*workspaceGetMembershipCommand)(nil)
 
 // NewWorkspaceGetMembershipCommandFactory returns a workspaceGetMembershipCommand struct.
 func NewWorkspaceGetMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -29,30 +30,15 @@ func NewWorkspaceGetMembershipCommandFactory(baseCommand *BaseCommand) func() (C
 }
 
 func (c *workspaceGetMembershipCommand) validate() error {
-	count := 0
-	if c.serviceAccountID != nil {
-		count++
-	}
-
-	if c.teamID != nil {
-		count++
-	}
-
-	if c.userID != nil {
-		count++
-	}
-
-	if count != 1 {
+	if c.serviceAccountID == nil && c.teamID == nil && c.userID == nil {
 		return errors.New("exactly one of service account, team or user ID must be specified")
 	}
 
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *workspaceGetMembershipCommand) Run(args []string) int {
@@ -134,7 +120,7 @@ func (c *workspaceGetMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputMembership(c.UI, c.toJSON, foundMembership)
+	return c.Output(foundMembership, c.toJSON)
 }
 
 func (*workspaceGetMembershipCommand) Synopsis() string {
@@ -143,7 +129,7 @@ func (*workspaceGetMembershipCommand) Synopsis() string {
 
 func (*workspaceGetMembershipCommand) Description() string {
 	return `
-   The workspace get-membership command retrieves details about a specific workspace membership.
+   Retrieves details about a specific workspace membership.
 `
 }
 
@@ -154,59 +140,53 @@ func (*workspaceGetMembershipCommand) Usage() string {
 func (*workspaceGetMembershipCommand) Example() string {
 	return `
 tharsis workspace get-membership \
-  --user-id trn:user:<username> \
+  -user-id "trn:user:<username>" \
   trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceGetMembershipCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceGetMembershipCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.serviceAccountID,
 		"service-account-id",
 		"Service account ID to find the workspace membership for.",
-		func(s string) error {
-			c.serviceAccountID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.userID,
 		"user-id",
 		"User ID to find the workspace membership for.",
-		func(s string) error {
-			c.userID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.teamID,
 		"team-id",
-		"Team ID to find the workspace membership for. Deprecated",
-		func(s string) error {
-			c.teamID = &s
-			return nil
-		},
+		"Team ID to find the workspace membership for.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.userID,
 		"username",
-		"Username to find the workspace membership for. Deprecated",
-		func(s string) error {
-			c.userID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeUser, s))
-			return nil
-		},
+		"Username to find the workspace membership for.",
+		flag.Deprecated("use -user-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeUser, s)
+		}),
 	)
-	f.Func(
+	f.StringVar(
+		&c.teamID,
 		"team-name",
-		"Team name to find the workspace membership for. Deprecated",
-		func(s string) error {
-			c.teamID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeTeam, s))
-			return nil
-		},
+		"Team name to find the workspace membership for.",
+		flag.Deprecated("use -team-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeTeam, s)
+		}),
 	)
+
+	f.MutuallyExclusive("user-id", "service-account-id", "team-id", "username", "team-name")
 
 	return f
 }

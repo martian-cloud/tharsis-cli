@@ -9,6 +9,11 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 )
 
+const (
+	// DefaultProfileName is the name of the default profile
+	DefaultProfileName = "default"
+)
+
 // Profile holds the contents of one profile from a settings file.
 type Profile struct {
 	// token and Name are not serialized to the settings JSON; tokens live

@@ -1,17 +1,20 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 )
 
 type terraformProviderMirrorDeleteVersionCommand struct {
 	*BaseCommand
 
-	force bool
+	force *bool
 }
+
+var _ Command = (*terraformProviderMirrorDeleteVersionCommand)(nil)
 
 // NewTerraformProviderMirrorDeleteVersionCommandFactory returns a terraformProviderMirrorDeleteVersionCommand struct.
 func NewTerraformProviderMirrorDeleteVersionCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -23,13 +26,11 @@ func NewTerraformProviderMirrorDeleteVersionCommandFactory(baseCommand *BaseComm
 }
 
 func (c *terraformProviderMirrorDeleteVersionCommand) validate() error {
-	const message = "version-mirror-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: version mirror id")
+	}
+
+	return nil
 }
 
 func (c *terraformProviderMirrorDeleteVersionCommand) Run(args []string) int {
@@ -39,14 +40,14 @@ func (c *terraformProviderMirrorDeleteVersionCommand) Run(args []string) int {
 		WithCommandName("terraform-provider-mirror delete-version"),
 		WithInputValidator(c.validate),
 		WithClient(true),
-		WithForcePrompt("Are you sure you want to delete this provider version mirror?"),
+		WithWarningPrompt("This will permanently delete the provider version mirror."),
 	); code != 0 {
 		return code
 	}
 
 	input := &pb.DeleteTerraformProviderVersionMirrorRequest{
 		Id:    c.arguments[0],
-		Force: c.force,
+		Force: ptr.ToBool(c.force),
 	}
 
 	if _, err := c.grpcClient.TerraformProviderMirrorsClient.DeleteTerraformProviderVersionMirror(c.Context, input); err != nil {
@@ -64,10 +65,8 @@ func (*terraformProviderMirrorDeleteVersionCommand) Synopsis() string {
 
 func (*terraformProviderMirrorDeleteVersionCommand) Description() string {
 	return `
-   The terraform-provider-mirror delete-version command deletes a terraform provider
-   version and any associated platform binaries from a group's mirror. The --force
-   option must be used when deleting a provider version which actively hosts
-   platform binaries.
+   Removes a mirrored provider version and its platform
+   binaries. Use -force when the version hosts packages.
 `
 }
 
@@ -77,17 +76,17 @@ func (*terraformProviderMirrorDeleteVersionCommand) Usage() string {
 
 func (*terraformProviderMirrorDeleteVersionCommand) Example() string {
 	return `
-tharsis terraform-provider-mirror delete-version --force <version-mirror-id>
+tharsis terraform-provider-mirror delete-version -force <version-mirror-id>
 `
 }
 
-func (c *terraformProviderMirrorDeleteVersionCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *terraformProviderMirrorDeleteVersionCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.force,
 		"force",
-		false,
 		"Skip confirmation prompt.",
+		flag.Aliases("f"),
 	)
 
 	return f

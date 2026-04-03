@@ -1,21 +1,23 @@
 package command
 
 import (
-	"flag"
+	"errors"
 	"time"
 
 	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceListTerraformVarsCommand struct {
 	*BaseCommand
 
-	showSensitive bool
-	toJSON        bool
+	showSensitive *bool
+	toJSON        *bool
 }
+
+var _ Command = (*workspaceListTerraformVarsCommand)(nil)
 
 // NewWorkspaceListTerraformVarsCommandFactory returns a workspaceListTerraformVarsCommand struct.
 func NewWorkspaceListTerraformVarsCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -27,13 +29,11 @@ func NewWorkspaceListTerraformVarsCommandFactory(baseCommand *BaseCommand) func(
 }
 
 func (c *workspaceListTerraformVarsCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	return nil
 }
 
 func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
@@ -55,21 +55,19 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 		return 1
 	}
 
-	input := &pb.GetNamespaceVariablesRequest{
+	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, &pb.GetNamespaceVariablesRequest{
 		NamespacePath: workspace.FullPath,
-	}
-
-	result, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context, input)
+	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to list terraform variables")
 		return 1
 	}
 
-	// Filter to only terraform variables
+	// Filter to only terraform variables.
 	var terraformVars []*pb.NamespaceVariable
 	for _, v := range result.Variables {
 		if v.Category == pb.VariableCategory_terraform.String() {
-			if v.Sensitive && !c.showSensitive {
+			if v.Sensitive && !*c.showSensitive {
 				v.Value = ptr.String("[SENSITIVE]")
 			}
 
@@ -77,29 +75,27 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 		}
 	}
 
-	// Fetch sensitive values if requested
-	if c.showSensitive {
+	// Fetch sensitive values if requested.
+	if *c.showSensitive {
 		for _, v := range terraformVars {
 			if v.Sensitive && v.LatestVersionId != "" {
-				versionInput := &pb.GetNamespaceVariableVersionByIDRequest{
+				version, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, &pb.GetNamespaceVariableVersionByIDRequest{
 					Id:                    v.LatestVersionId,
 					IncludeSensitiveValue: true,
-				}
-
-				version, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableVersionByID(c.Context, versionInput)
+				})
 				if err != nil {
 					c.UI.ErrorWithSummary(err, "failed to get variable version")
 					return 1
 				}
 
 				v.Value = version.Value
-				// Rate limit to avoid overwhelming the API
+				// Rate limit to avoid overwhelming the API.
 				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}
 
-	return outputNamespaceVariables(c.UI, c.toJSON, terraformVars)
+	return c.OutputList(terraformVars, c.toJSON, "trn", "key", "value", "sensitive")
 }
 
 func (*workspaceListTerraformVarsCommand) Synopsis() string {
@@ -108,8 +104,8 @@ func (*workspaceListTerraformVarsCommand) Synopsis() string {
 
 func (*workspaceListTerraformVarsCommand) Description() string {
 	return `
-   The workspace list-terraform-vars command retrieves all terraform
-   variables from a workspace and its parent workspaces.
+   Lists all Terraform variables from a workspace and its
+   parent groups.
 `
 }
 
@@ -119,23 +115,22 @@ func (*workspaceListTerraformVarsCommand) Usage() string {
 
 func (*workspaceListTerraformVarsCommand) Example() string {
 	return `
-tharsis workspace list-terraform-vars --show-sensitive trn:workspace:<workspace_path>
+tharsis workspace list-terraform-vars -show-sensitive trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceListTerraformVarsCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceListTerraformVarsCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.BoolVar(
 		&c.showSensitive,
 		"show-sensitive",
-		false,
 		"Show the actual values of sensitive variables (requires appropriate permissions).",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
 	)
 
 	return f

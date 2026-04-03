@@ -1,23 +1,24 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	"github.com/aws/smithy-go/ptr"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceAddMembershipCommand struct {
 	*BaseCommand
 
-	roleID           string
+	roleID           *string
 	userID           *string
 	serviceAccountID *string
 	teamID           *string
-	toJSON           bool
+	toJSON           *bool
 }
+
+var _ Command = (*workspaceAddMembershipCommand)(nil)
 
 // NewWorkspaceAddMembershipCommandFactory returns a workspaceAddMembershipCommand struct.
 func NewWorkspaceAddMembershipCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -29,14 +30,15 @@ func NewWorkspaceAddMembershipCommandFactory(baseCommand *BaseCommand) func() (C
 }
 
 func (c *workspaceAddMembershipCommand) validate() error {
-	const message = "workspace-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.roleID, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
+	}
+
+	if c.roleID == nil {
+		return errors.New("role id is required")
+	}
+
+	return nil
 }
 
 func (c *workspaceAddMembershipCommand) Run(args []string) int {
@@ -60,7 +62,7 @@ func (c *workspaceAddMembershipCommand) Run(args []string) int {
 
 	input := &pb.CreateNamespaceMembershipRequest{
 		NamespacePath:    workspace.FullPath,
-		RoleId:           c.roleID,
+		RoleId:           *c.roleID,
 		UserId:           c.userID,
 		ServiceAccountId: c.serviceAccountID,
 		TeamId:           c.teamID,
@@ -72,7 +74,7 @@ func (c *workspaceAddMembershipCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputMembership(c.UI, c.toJSON, membership)
+	return c.Output(membership, c.toJSON)
 }
 
 func (*workspaceAddMembershipCommand) Synopsis() string {
@@ -81,8 +83,8 @@ func (*workspaceAddMembershipCommand) Synopsis() string {
 
 func (*workspaceAddMembershipCommand) Description() string {
 	return `
-   The workspace add-membership command adds a membership to a workspace.
-   Exactly one of -user-id, -service-account-id, or -team-id must be specified.
+   Grants a user, service account, or team access to a
+   workspace. Exactly one identity flag must be specified.
 `
 }
 
@@ -93,74 +95,68 @@ func (*workspaceAddMembershipCommand) Usage() string {
 func (*workspaceAddMembershipCommand) Example() string {
 	return `
 tharsis workspace add-membership \
-  --role-id trn:role:owner \
-  --user-id trn:user:john.smith \
+  -role-id "trn:role:owner" \
+  -user-id "trn:user:john.smith" \
   trn:workspace:<workspace_path>
 `
 }
 
-func (c *workspaceAddMembershipCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *workspaceAddMembershipCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.roleID,
 		"role-id",
-		"",
 		"The role ID for the membership.",
 	)
-	f.Func(
+	f.StringVar(
+		&c.userID,
 		"user-id",
 		"The user ID for the membership.",
-		func(s string) error {
-			c.userID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.roleID,
 		"role",
-		"Role name for new membership. Deprecated.",
-		func(s string) error {
-			c.roleID = trn.NewResourceTRN(trn.ResourceTypeRole, s)
-			return nil
-		},
+		"Role name for new membership.",
+		flag.Deprecated("use -role-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeRole, s)
+		}),
 	)
-	f.Func(
+	f.StringVar(
+		&c.userID,
 		"username",
-		"Username for the new membership. Deprecated.",
-		func(s string) error {
-			c.userID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeUser, s))
-			return nil
-		},
+		"Username for the new membership.",
+		flag.Deprecated("use -user-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeUser, s)
+		}),
 	)
-	f.Func(
-		"team-name",
-		"Team name for the new membership. Deprecated.",
-		func(s string) error {
-			c.teamID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeTeam, s))
-			return nil
-		},
-	)
-	f.Func(
+	f.StringVar(
+		&c.serviceAccountID,
 		"service-account-id",
 		"The service account ID for the membership.",
-		func(s string) error {
-			c.serviceAccountID = &s
-			return nil
-		},
 	)
-	f.Func(
+	f.StringVar(
+		&c.teamID,
 		"team-id",
 		"The team ID for the membership.",
-		func(s string) error {
-			c.teamID = &s
-			return nil
-		},
+	)
+	f.StringVar(
+		&c.teamID,
+		"team-name",
+		"Team name for the new membership.",
+		flag.Deprecated("use -team-id"),
+		flag.TransformString(func(s string) string {
+			return trn.NewResourceTRN(trn.ResourceTypeTeam, s)
+		}),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
 	)
+
+	f.MutuallyExclusive("user-id", "service-account-id", "team-id", "username", "team-name")
 
 	return f
 }

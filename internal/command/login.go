@@ -1,9 +1,8 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/auth"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 )
@@ -16,9 +15,11 @@ type loginCommand struct {
 var _ Command = (*loginCommand)(nil)
 
 func (c *loginCommand) validate() error {
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments, validation.Empty),
-	)
+	if len(c.arguments) != 0 {
+		return errors.New("no arguments expected")
+	}
+
+	return nil
 }
 
 // NewLoginCommandFactory returns a loginCommand struct.
@@ -94,12 +95,10 @@ func (c *loginCommand) Usage() string {
 
 func (c *loginCommand) Description() string {
 	return `
-   The login command starts an embedded web server and opens
-   a web browser page or tab pointed at said web server.
-   That redirects to the OAuth2 provider's login page, where
-   the user can sign in. If there is an SSO scheme active,
-   that will sign in the user. The login command captures
-   the authentication token for use in subsequent commands.
+   Starts an embedded web server and opens a browser to the
+   OAuth2 provider's login page. If SSO is active, the user
+   is signed in automatically. The authentication token is
+   captured and stored for use in subsequent commands.
 `
 }
 
@@ -107,8 +106,4 @@ func (c *loginCommand) Example() string {
 	return `
 tharsis sso login
 `
-}
-
-func (c *loginCommand) Flags() *flag.FlagSet {
-	return nil
 }

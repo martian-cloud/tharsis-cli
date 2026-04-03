@@ -1,19 +1,21 @@
 package command
 
 import (
-	"flag"
+	"errors"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type serviceAccountCreateTokenCommand struct {
 	*BaseCommand
 
-	token  string
-	toJSON bool
+	token  *string
+	toJSON *bool
 }
+
+var _ Command = (*serviceAccountCreateTokenCommand)(nil)
 
 // NewServiceAccountCreateTokenCommandFactory returns a serviceAccountCreateTokenCommand struct.
 func NewServiceAccountCreateTokenCommandFactory(baseCommand *BaseCommand) func() (Command, error) {
@@ -25,14 +27,11 @@ func NewServiceAccountCreateTokenCommandFactory(baseCommand *BaseCommand) func()
 }
 
 func (c *serviceAccountCreateTokenCommand) validate() error {
-	const message = "service-account-id is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-		validation.Field(&c.token, validation.Required),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: service account id")
+	}
+
+	return nil
 }
 
 func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
@@ -48,7 +47,7 @@ func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
 
 	input := &pb.CreateOIDCTokenRequest{
 		ServiceAccountId: trn.ToTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
-		Token:            c.token,
+		Token:            *c.token,
 	}
 
 	result, err := c.grpcClient.ServiceAccountsClient.CreateOIDCToken(c.Context, input)
@@ -57,11 +56,12 @@ func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
 		return 1
 	}
 
-	if c.toJSON {
+	if *c.toJSON {
 		if err := c.UI.JSON(result); err != nil {
 			c.UI.ErrorWithSummary(err, "failed to output JSON")
 			return 1
 		}
+
 		return 0
 	}
 
@@ -75,9 +75,8 @@ func (*serviceAccountCreateTokenCommand) Synopsis() string {
 
 func (*serviceAccountCreateTokenCommand) Description() string {
 	return `
-   The service-account create-token command creates a token for a service account using OIDC authentication.
-   The input token is issued by an identity provider specified in the service account's trust policy.
-   The output token can be used to authenticate with the API.
+   Exchanges an identity provider token for a Tharsis
+   API token using OIDC authentication.
 `
 }
 
@@ -88,24 +87,24 @@ func (*serviceAccountCreateTokenCommand) Usage() string {
 func (*serviceAccountCreateTokenCommand) Example() string {
 	return `
 tharsis service-account create-token \
-  --token <oidc-token> \
+  -token "<oidc-token>" \
   trn:service_account:<group_path>/<service_account_name>
 `
 }
 
-func (c *serviceAccountCreateTokenCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *serviceAccountCreateTokenCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.token,
 		"token",
-		"",
 		"Initial authentication token from identity provider.",
+		flag.Required(),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
-		"Output in JSON format.",
+		"Show final output as JSON.",
+		flag.Default(false),
 	)
 
 	return f

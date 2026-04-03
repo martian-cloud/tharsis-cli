@@ -1,11 +1,12 @@
 package command
 
 import (
-	"flag"
+	"errors"
 	"strings"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -15,23 +16,21 @@ import (
 type moduleCreateCommand struct {
 	*BaseCommand
 
-	groupID       string
-	repositoryURL string
-	private       bool
-	toJSON        bool
-	ifNotExists   bool
+	groupID       *string
+	repositoryURL *string
+	private       *bool
+	toJSON        *bool
+	ifNotExists   *bool
 }
 
 var _ Command = (*moduleCreateCommand)(nil)
 
 func (c *moduleCreateCommand) validate() error {
-	const message = "module-name/system is required"
-	return validation.ValidateStruct(c,
-		validation.Field(&c.arguments,
-			validation.Required.Error(message),
-			validation.Length(1, 1).Error(message),
-		),
-	)
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: module-name/system")
+	}
+
+	return nil
 }
 
 // NewModuleCreateCommandFactory returns a moduleCreateCommand struct.
@@ -56,22 +55,24 @@ func (c *moduleCreateCommand) Run(args []string) int {
 
 	moduleArg := c.arguments[0]
 
-	// Parse module-name/system
+	// Parse module-name/system.
 	parts := strings.Split(moduleArg, "/")
-	var name, system string
+	var name, system, groupID string
 	switch len(parts) {
 	case 1:
 		c.UI.Errorf("argument must be in format: module-name/system or group-path/module-name/system")
 		return 1
 	case 2:
-		if c.groupID == "" {
+		if c.groupID == nil {
 			c.UI.Errorf("group-id is required when supplying just the module-name/system in the argument")
 			return 1
 		}
+
 		name = parts[0]
 		system = parts[1]
+		groupID = *c.groupID
 	default:
-		if c.groupID != "" {
+		if c.groupID != nil {
 			c.UI.Errorf("group-id should not be supplied when supplying just the module path in the argument")
 			return 1
 		}
@@ -80,13 +81,13 @@ func (c *moduleCreateCommand) Run(args []string) int {
 		system = parts[len(parts)-1]
 		name = parts[len(parts)-2]
 		groupPath := strings.Join(parts[:len(parts)-2], "/")
-		c.groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, groupPath)
+		groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, groupPath)
 	}
 
-	if c.ifNotExists {
-		c.Logger.Debug("getting parent group", "value", c.groupID)
+	if *c.ifNotExists {
+		c.Logger.Debug("getting parent group", "value", groupID)
 
-		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: c.groupID})
+		group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: groupID})
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to get group")
 			return 1
@@ -103,16 +104,16 @@ func (c *moduleCreateCommand) Run(args []string) int {
 
 		if module != nil {
 			c.Logger.Debug("module already exists, returning existing module")
-			return outputModule(c.UI, c.toJSON, module)
+			return c.Output(module, c.toJSON)
 		}
 	}
 
 	input := &pb.CreateTerraformModuleRequest{
 		Name:          name,
 		System:        system,
-		GroupId:       c.groupID,
-		RepositoryUrl: c.repositoryURL,
-		Private:       c.private,
+		GroupId:       groupID,
+		RepositoryUrl: ptr.ToString(c.repositoryURL),
+		Private:       *c.private,
 	}
 
 	createdModule, err := c.grpcClient.TerraformModulesClient.CreateTerraformModule(c.Context, input)
@@ -121,7 +122,7 @@ func (c *moduleCreateCommand) Run(args []string) int {
 		return 1
 	}
 
-	return outputModule(c.UI, c.toJSON, createdModule)
+	return c.Output(createdModule, c.toJSON)
 }
 
 func (*moduleCreateCommand) Synopsis() string {
@@ -134,55 +135,49 @@ func (*moduleCreateCommand) Usage() string {
 
 func (*moduleCreateCommand) Description() string {
 	return `
-   The module create command creates a new Terraform module. It
-   requires a group ID and repository URL. The argument should be
-   in the format: module-name/system (e.g., vpc/aws). Shows final
-   output as JSON, if specified. Idempotent when used with
-   --if-not-exists option.
+   Creates a new Terraform module in the registry.
+   Argument format: module-name/system (e.g., vpc/aws).
 `
 }
 
 func (*moduleCreateCommand) Example() string {
 	return `
 tharsis module create \
-  --group-id trn:group:<group_path> \
-  --repository-url https://github.com/example/terraform-aws-vpc \
-  --private \
+  -group-id "trn:group:<group_path>" \
+  -repository-url "https://github.com/example/terraform-aws-vpc" \
+  -private \
   vpc/aws
 `
 }
 
-func (c *moduleCreateCommand) Flags() *flag.FlagSet {
-	f := flag.NewFlagSet("Command options", flag.ContinueOnError)
+func (c *moduleCreateCommand) Flags() *flag.Set {
+	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.groupID,
 		"group-id",
-		"",
 		"Parent group ID.",
 	)
 	f.StringVar(
 		&c.repositoryURL,
 		"repository-url",
-		"",
 		"The repository URL for the module.",
 	)
 	f.BoolVar(
 		&c.private,
 		"private",
-		false,
 		"Whether the module is private.",
+		flag.Default(false),
 	)
 	f.BoolVar(
 		&c.toJSON,
 		"json",
-		false,
 		"Show final output as JSON.",
 	)
 	f.BoolVar(
 		&c.ifNotExists,
 		"if-not-exists",
-		false,
 		"Create a module if it does not already exist.",
+		flag.Default(false),
 	)
 
 	return f
