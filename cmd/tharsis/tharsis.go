@@ -169,6 +169,7 @@ func realMain() int {
 		DefaultTLSSkipVerify: DefaultTLSSkipVerify,
 		UserAgent:            userAgent,
 		HTTPClient:           httpClient,
+		RawArgs:              commandArgs,
 	}
 
 	// Defer closing the base command, so the UI output could finish rendering.
