@@ -33,13 +33,27 @@ var (
 // Factory is a function that returns a Command.
 type Factory func() (Command, error)
 
+// helpInterceptor is implemented by commands that want to customize help output.
+// InterceptHelp returns (helpText, true) to replace the default Tharsis-formatted
+// help, or ("", false) to fall back to standard help rendering. This allows
+// commands to forward help to an external binary (e.g. terraform) when appropriate.
+type helpInterceptor interface {
+	InterceptHelp() (string, bool)
+}
+
 // NewWrapper creates a new Wrapper for a Command.
 func NewWrapper(command Command) Wrapper {
 	return Wrapper{command: command, productName: "tharsis"}
 }
 
-// Help formats and returns the help text.
+// Help formats and returns the help text. If the wrapped command implements
+// helpInterceptor and returns handled=true, that text is used directly.
 func (c Wrapper) Help() string {
+	if hi, ok := c.command.(helpInterceptor); ok {
+		if text, handled := hi.InterceptHelp(); handled {
+			return text
+		}
+	}
 	return output.CommandHelp(output.CommandHelpInfo{
 		ProductName: c.productName,
 		Usage:       c.command.Usage(),

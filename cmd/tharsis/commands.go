@@ -88,6 +88,7 @@ func commands(baseCommand *command.BaseCommand, globalFlags *flag.Set) (map[stri
 		"terraform-provider-mirror sync":            command.NewTerraformProviderMirrorSyncCommandFactory(baseCommand),
 		"terraform-provider-mirror delete-version":  command.NewTerraformProviderMirrorDeleteVersionCommandFactory(baseCommand),
 		"terraform-provider-mirror delete-platform": command.NewTerraformProviderMirrorDeletePlatformCommandFactory(baseCommand),
+		"tf-exec":                                   command.NewTfExecCommandFactory(baseCommand),
 		"version":                                   command.NewVersionCommandFactory(baseCommand),
 		"workspace":                                 command.NewHelpCommandFactory(getHelpText("workspace")),
 		"workspace get":                             command.NewWorkspaceGetCommandFactory(baseCommand),

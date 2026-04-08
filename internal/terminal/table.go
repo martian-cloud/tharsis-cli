@@ -1,7 +1,7 @@
 package terminal
 
 import (
-	"github.com/olekukonko/tablewriter"
+	"github.com/fatih/color"
 )
 
 // Color constants for table entries.
@@ -11,10 +11,22 @@ const (
 	Red    = "red"
 )
 
-var colorMapping = map[string]int{
-	Green:  tablewriter.FgGreenColor,
-	Yellow: tablewriter.FgYellowColor,
-	Red:    tablewriter.FgRedColor,
+// colorizeTableEntry returns the entry value with ANSI color applied when color
+// output is enabled and the entry has a recognized color name set.
+func colorizeTableEntry(ent TableEntry) string {
+	if color.NoColor || ent.Color == "" {
+		return ent.Value
+	}
+	switch ent.Color {
+	case Green:
+		return color.GreenString(ent.Value)
+	case Yellow:
+		return color.YellowString(ent.Value)
+	case Red:
+		return color.RedString(ent.Value)
+	default:
+		return ent.Value
+	}
 }
 
 // Table is passed to UI.Table to provide a nicely formatted table.

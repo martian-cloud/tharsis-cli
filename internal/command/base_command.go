@@ -130,16 +130,21 @@ func WithWarningPrompt(prompt string) BaseOptionsFunc {
 // initialize() has been called and are entirely controllable
 // by using the baseOptions above.
 type BaseCommand struct {
-	Context              context.Context
-	Logger               hclog.Logger
-	UI                   terminal.UI
-	HTTPClient           *http.Client
-	grpcClient           *client.Client
-	Version              string
-	BinaryName           string
-	CurrentProfileName   string
-	DefaultHTTPEndpoint  string
-	UserAgent            string
+	Context             context.Context
+	Logger              hclog.Logger
+	UI                  terminal.UI
+	HTTPClient          *http.Client
+	grpcClient          *client.Client
+	Version             string
+	BinaryName          string
+	CurrentProfileName  string
+	DefaultHTTPEndpoint string
+	UserAgent           string
+	// RawArgs holds the command-line arguments after global flag parsing,
+	// starting with the subcommand name (e.g. ["tf-exec", "--workspace", ...]).
+	// Commands that need to inspect their own raw arguments (e.g. for custom
+	// help handling) can read this field.
+	RawArgs              []string
 	arguments            []string
 	DefaultTLSSkipVerify bool
 }
