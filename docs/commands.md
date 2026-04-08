@@ -23,6 +23,7 @@ Currently, the CLI supports the following commands:
 - [sso](#sso-command) — Log in to the OAuth2 provider and return an authentication token.
 - [terraform-provider](#terraform-provider-command) — Do operations on a terraform provider.
 - [terraform-provider-mirror](#terraform-provider-mirror-command) — Mirror Terraform providers from any Terraform registry.
+- [tf-exec](#tf-exec-command) — Run terraform with Tharsis auth and workspace variables injected.
 - [version](#version-command) — Get the CLI's version.
 - [workspace](#workspace-command) — Do operations on workspaces.
   
@@ -2398,6 +2399,81 @@ Platform to sync (format: os_arch). If not specified, syncs all platforms.
 #### version
 
 The provider version to sync. If not specified, uses the latest version.
+
+
+---
+## tf-exec command
+**Run terraform with Tharsis auth and workspace variables injected.**
+  
+Runs terraform with Tharsis authentication and workspace variables
+automatically injected into the process environment.
+
+Available Terraform Subcommands:
+
+apply          Apply the changes required to reach the desired state
+console        Try Terraform expressions at an interactive command prompt
+destroy        Destroy previously-created infrastructure
+force-unlock   Release a stuck lock on the current workspace
+get            Install or upgrade remote Terraform modules
+graph          Generate a Graphviz graph of the steps in an operation
+import         Associate existing infrastructure with a Terraform resource
+metadata       Metadata related commands
+output         Show output values from your root module
+plan           Show changes required by the current configuration
+providers      Show the providers required for this configuration
+refresh        Update the state to match remote systems
+show           Show the current state or a saved plan
+state          Advanced state management
+taint          Mark a resource instance as not fully functional
+test           Execute integration tests for a module
+untaint        Remove the 'tainted' state from a resource instance
+validate       Check whether the configuration is valid
+
+Terraform Binary Resolution:
+
+When -tf-path is not provided, tharsis looks for a cached terraform binary
+matching the workspace's configured version in ~/.tharsis/tf-installs/\<version\>/.
+If not found, it downloads that exact version from releases.hashicorp.com and
+caches it there for future use.
+
+Authentication:
+
+The current profile's auth token is injected as TF_TOKEN_\<host\> where \<host\>
+is the Tharsis instance hostname with dots replaced by underscores. This
+authenticates terraform against the Tharsis remote backend.
+
+Variables:
+
+All variables configured on the workspace and its parent groups are injected:
+
+- Terraform variables (category: terraform) -\> TF_VAR_\<key\>=\<value\>
+- Environment variables (category: environment) -\> \<key\>=\<value\>
+
+Sensitive variable values are automatically fetched and injected.
+
+Exit Code:
+
+The exact exit code returned by terraform is passed through unchanged.
+  
+```bash
+tharsis tf-exec --workspace my/group/workspace show
+tharsis tf-exec --workspace trn:workspace:my/group/workspace plan
+tharsis tf-exec --workspace my/group/workspace --work-dir ./infra apply
+```
+  
+#### Options
+  
+#### tf-path
+
+Path to an existing terraform binary. If omitted, the version from the last applied run is downloaded automatically.
+
+#### work-dir
+
+Working directory for terraform. If omitted, a persistent cache directory keyed by workspace is used.
+
+#### workspace <span style={{color:'red'}}>*</span>
+
+The Tharsis workspace path or TRN (e.g. my/group/workspace or trn:workspace:my/group/workspace).
 
 
 ---

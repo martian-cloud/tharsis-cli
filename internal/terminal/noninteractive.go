@@ -14,6 +14,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
 )
 
 // reAnsi matches ANSI escape sequences including OSC sequences.
@@ -138,43 +139,44 @@ func (ui *nonInteractiveUI) Table(tbl *Table, opts ...Option) {
 		opt(cfg)
 	}
 
-	table := tablewriter.NewWriter(cfg.Writer)
-	table.SetHeader(tbl.Headers)
-	table.SetBorder(false)
-	table.SetAutoWrapText(true)
+	tableOpts := []tablewriter.Option{
+		tablewriter.WithHeader(tbl.Headers),
+		tablewriter.WithRendition(tw.Rendition{
+			Borders: tw.BorderNone,
+			Symbols: tw.NewSymbols(tw.StyleNone),
+		}),
+		tablewriter.WithRowAutoWrap(tw.WrapNormal),
+	}
 
 	if cfg.Style == "Simple" {
 		// Format the table without borders, simple output
-
-		table.SetAutoFormatHeaders(true)
-		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
-		table.SetCenterSeparator("")
-		table.SetColumnSeparator("")
-		table.SetRowSeparator("")
-		table.SetHeaderLine(false)
-		table.SetTablePadding("\t") // pad with tabs
-		table.SetNoWhiteSpace(true)
+		tableOpts = append(tableOpts,
+			tablewriter.WithHeaderAutoFormat(tw.On),
+			tablewriter.WithHeaderAlignment(tw.AlignLeft),
+			tablewriter.WithRowAlignment(tw.AlignLeft),
+			tablewriter.WithRendition(tw.Rendition{
+				Borders: tw.BorderNone,
+				Symbols: tw.NewSymbols(tw.StyleNone),
+				Settings: tw.Settings{
+					Separators: tw.SeparatorsNone,
+					Lines:      tw.LinesNone,
+				},
+			}),
+			tablewriter.WithPadding(tw.Padding{Left: "\t", Right: "", Overwrite: true}),
+		)
 	}
+
+	table := tablewriter.NewTable(cfg.Writer, tableOpts...)
 
 	for _, row := range tbl.Rows {
-		colors := make([]tablewriter.Colors, len(row))
 		entries := make([]string, len(row))
-
 		for i, ent := range row {
-			entries[i] = ent.Value
-
-			if !color.NoColor {
-				if c, ok := colorMapping[ent.Color]; ok {
-					colors[i] = tablewriter.Colors{c}
-				}
-			}
+			entries[i] = colorizeTableEntry(ent)
 		}
-
-		table.Rich(entries, colors)
+		table.Append(entries) //nolint:errcheck
 	}
 
-	table.Render()
+	table.Render() //nolint:errcheck
 }
 
 func (ui *nonInteractiveUI) Confirm(_ string) (bool, error) {
