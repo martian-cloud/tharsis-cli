@@ -16,6 +16,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
 	"golang.org/x/term"
 )
 
@@ -174,28 +175,25 @@ func (ui *basicUI) Table(tbl *Table, opts ...Option) {
 		opt(cfg)
 	}
 
-	table := tablewriter.NewWriter(cfg.Writer)
-	table.SetHeader(tbl.Headers)
-	table.SetBorder(false)
-	table.SetAutoWrapText(true)
+	table := tablewriter.NewTable(cfg.Writer,
+		tablewriter.WithHeader(tbl.Headers),
+		tablewriter.WithHeaderAlignment(tw.AlignLeft),
+		tablewriter.WithRendition(tw.Rendition{
+			Borders: tw.BorderNone,
+			Symbols: tw.NewSymbols(tw.StyleNone),
+		}),
+		tablewriter.WithRowAutoWrap(tw.WrapNormal),
+	)
 
 	for _, row := range tbl.Rows {
-		colors := make([]tablewriter.Colors, len(row))
 		entries := make([]string, len(row))
-
 		for i, ent := range row {
-			entries[i] = ent.Value
-			if !color.NoColor {
-				if c, ok := colorMapping[ent.Color]; ok {
-					colors[i] = tablewriter.Colors{c}
-				}
-			}
+			entries[i] = colorizeTableEntry(ent)
 		}
-
-		table.Rich(entries, colors)
+		table.Append(entries) //nolint:errcheck
 	}
 
-	table.Render()
+	table.Render() //nolint:errcheck
 }
 
 func (ui *basicUI) Confirm(prompt string) (bool, error) {
