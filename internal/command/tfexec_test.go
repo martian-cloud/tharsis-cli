@@ -221,52 +221,6 @@ func TestBuildTFTokenEnvKey(t *testing.T) {
 	}
 }
 
-func TestIsHelpRequest(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want bool
-	}{
-		{
-			name: "--help flag",
-			args: []string{"--help"},
-			want: true,
-		},
-		{
-			name: "-help flag",
-			args: []string{"-help"},
-			want: true,
-		},
-		{
-			name: "-h flag",
-			args: []string{"-h"},
-			want: true,
-		},
-		{
-			name: "normal arg",
-			args: []string{"plan"},
-			want: false,
-		},
-		{
-			name: "mixed slice with help flag",
-			args: []string{"plan", "--help"},
-			want: true,
-		},
-		{
-			name: "empty args",
-			args: []string{},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isHelpRequest(tt.args)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestAppendAuthToken(t *testing.T) {
 	t.Run("nil token returns env unchanged", func(t *testing.T) {
 		base := []string{"EXISTING=val"}

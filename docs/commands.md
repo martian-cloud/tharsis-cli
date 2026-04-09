@@ -1433,7 +1433,7 @@ Show final output as JSON.
 #### private
 
 Whether the module is private.\
-**Default:** `false`
+**Default:** `true`
 
 #### repository-url
 
