@@ -356,7 +356,7 @@ func (*terraformProviderUploadVersionCommand) Usage() string {
 func (*terraformProviderUploadVersionCommand) Example() string {
 	return `
 tharsis terraform-provider upload-version \
-  -directory "./my-provider" \
+  -directory-path "./my-provider" \
   trn:terraform_provider:<group_path>/<name>
 `
 }
@@ -365,7 +365,7 @@ func (c *terraformProviderUploadVersionCommand) Flags() *flag.Set {
 	f := flag.NewSet("Command options")
 	f.StringVar(
 		&c.directory,
-		"directory",
+		"directory-path",
 		"The path of the terraform provider's directory.",
 		flag.Default("."),
 	)
