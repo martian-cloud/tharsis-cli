@@ -31,9 +31,9 @@ import (
 type tfExecCommand struct {
 	*BaseCommand
 
-	workspace *string // --workspace flag value
-	tfPath    *string // --tf-path flag value
-	workDir   *string // --work-dir flag value
+	workspace *string // -workspace flag value
+	tfPath    *string // -tf-path flag value
+	workDir   *string // -work-dir flag value
 }
 
 var _ Command = (*tfExecCommand)(nil)
@@ -97,7 +97,7 @@ func (c *tfExecCommand) Run(args []string) int {
 		return code
 	}
 
-	// initialize enforces --workspace as required; c.arguments holds the
+	// initialize enforces -workspace as required; c.arguments holds the
 	// remaining terraform passthrough args.
 
 	// Get settings for the token getter and endpoint (same pattern as apply.go).
@@ -240,7 +240,7 @@ func (*tfExecCommand) PredictArgs() complete.Predictor {
 
 // Usage returns the usage string for the command.
 func (*tfExecCommand) Usage() string {
-	return "tharsis [global options] tf-exec --workspace <path|trn> [--tf-path <path>] [--work-dir <path>] [terraform-args...]"
+	return "tharsis [global options] tf-exec -workspace <path|trn> [-tf-path <path>] [-work-dir <path>] [terraform-args...]"
 }
 
 // Description returns the full description for the command.
@@ -301,9 +301,9 @@ func (*tfExecCommand) Description() string {
 // Example returns example usage for the command.
 func (*tfExecCommand) Example() string {
 	return `
-tharsis tf-exec --workspace my/group/workspace show
-tharsis tf-exec --workspace trn:workspace:my/group/workspace plan
-tharsis tf-exec --workspace my/group/workspace --work-dir ./infra apply
+tharsis tf-exec -workspace my/group/workspace show
+tharsis tf-exec -workspace trn:workspace:my/group/workspace plan
+tharsis tf-exec -workspace my/group/workspace -work-dir ./infra apply
 `
 }
 
@@ -352,18 +352,18 @@ func (c *tfExecCommand) findLastAppliedRun(workspaceID string) (*pb.Run, error) 
 }
 
 // resolveTerraformBinaryForHelp returns a terraform binary path suitable for
-// help passthrough, without requiring a workspace. Uses --tf-path when provided,
+// help passthrough, without requiring a workspace. Uses -tf-path when provided,
 // otherwise falls back to whatever is on PATH.
 func (c *tfExecCommand) resolveTerraformBinaryForHelp() (string, error) {
 	if p := ptr.ToString(c.tfPath); p != "" {
 		if _, err := os.Stat(p); err != nil {
-			return "", fmt.Errorf("--tf-path %q: %w", p, err)
+			return "", fmt.Errorf("-tf-path %q: %w", p, err)
 		}
 		return p, nil
 	}
 	path, err := exec.LookPath("terraform")
 	if err != nil {
-		return "", fmt.Errorf("terraform not found on PATH and --tf-path not set")
+		return "", fmt.Errorf("terraform not found on PATH and -tf-path not set")
 	}
 	return path, nil
 }
@@ -372,13 +372,13 @@ func (c *tfExecCommand) resolveTerraformBinaryForHelp() (string, error) {
 func (c *tfExecCommand) resolveTerraformBinary(tfVersionStr string) (string, error) {
 	if p := ptr.ToString(c.tfPath); p != "" {
 		if _, err := os.Stat(p); err != nil {
-			return "", fmt.Errorf("--tf-path %q: %w", p, err)
+			return "", fmt.Errorf("-tf-path %q: %w", p, err)
 		}
 		return p, nil
 	}
 
 	if tfVersionStr == "" {
-		return "", fmt.Errorf("no previous applied run found to determine Terraform version; use --tf-path to specify a binary")
+		return "", fmt.Errorf("no previous applied run found to determine Terraform version; use -tf-path to specify a binary")
 	}
 
 	tfVersion, err := goversion.NewVersion(tfVersionStr)
