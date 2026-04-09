@@ -27,7 +27,6 @@ type colorizer struct {
 	productName string
 	bold        *color.Color
 	highlight   *color.Color
-	reCmdRef    *regexp.Regexp
 }
 
 // Colorize applies all syntax highlighting to help text: product name,
@@ -48,17 +47,16 @@ func Colorize(raw, productName string) string {
 		highlight:   PrimaryColor(),
 	}
 
-	if productName != "" {
-		c.reCmdRef = regexp.MustCompile(`"` + regexp.QuoteMeta(productName) + ` (\w\s?)+"`)
-	}
-
 	return c.colorize(raw)
 }
 
 func (c *colorizer) colorize(raw string) string {
 	var buf bytes.Buffer
 
-	productPrefix := c.productName + " "
+	var reProductName *regexp.Regexp
+	if c.productName != "" {
+		reProductName = regexp.MustCompile(`\b` + regexp.QuoteMeta(c.productName) + `\b([^.\w]|$)`)
+	}
 
 	// Lines are processed individually because colorization rules are
 	// context-dependent (e.g. section headers affect subsequent lines).
@@ -71,11 +69,11 @@ func (c *colorizer) colorize(raw string) string {
 
 		first = false
 
-		switch {
-		case c.productName != "" && strings.HasPrefix(line, productPrefix):
-			buf.WriteString(c.highlight.Sprint(c.productName))
-			buf.WriteString(c.colorizeFlags(line[len(c.productName):]))
+		if reProductName != nil {
+			line = reProductName.ReplaceAllString(line, c.highlight.Sprint(c.productName)+"${1}")
+		}
 
+		switch {
 		case reHelpHeader.MatchString(line):
 			buf.WriteString(c.bold.Sprint(line))
 
@@ -83,13 +81,6 @@ func (c *colorizer) colorize(raw string) string {
 			buf.WriteString(c.colorizeFlagMeta(line))
 
 		default:
-			if c.productName != "" {
-				if s, ok := c.colorizeCmdRefs(line); ok {
-					buf.WriteString(s)
-					break
-				}
-			}
-
 			buf.WriteString(c.colorizeFlags(line))
 		}
 	}
@@ -139,36 +130,6 @@ func (c *colorizer) colorizeFlagMeta(line string) string {
 	rest := line[loc[1]:]
 
 	return prefix + c.bold.Sprint(label) + c.colorizeFlags(rest)
-}
-
-// colorizeCmdRefs highlights quoted command references like "product run".
-func (c *colorizer) colorizeCmdRefs(line string) (string, bool) {
-	if c.reCmdRef == nil {
-		return "", false
-	}
-
-	matches := c.reCmdRef.FindAllStringIndex(line, -1)
-	if len(matches) == 0 {
-		return "", false
-	}
-
-	var buf strings.Builder
-	idx := 0
-	for _, m := range matches {
-		if m[1]-m[0] < 3 {
-			buf.WriteString(line[idx:m[1]])
-			idx = m[1]
-			continue
-		}
-
-		buf.WriteString(line[idx : m[0]+1])
-		buf.WriteString(c.highlight.Sprint(line[m[0]+1 : m[1]-1]))
-		idx = m[1] - 1
-	}
-
-	buf.WriteString(line[idx:])
-
-	return buf.String(), true
 }
 
 // processCodeBlocks strips ```lang markers and applies syntax highlighting.

@@ -245,11 +245,12 @@ func TestInt64Var(t *testing.T) {
 
 func TestBoolVar(t *testing.T) {
 	tests := []struct {
-		name      string
-		args      []string
-		opts      []any
-		expectNil bool
-		expectVal bool
+		name       string
+		args       []string
+		opts       []any
+		expectNil  bool
+		expectVal  bool
+		expectArgs []string
 	}{
 		{
 			name:      "optional not set",
@@ -278,6 +279,32 @@ func TestBoolVar(t *testing.T) {
 			opts:      []any{Default(false)},
 			expectVal: true,
 		},
+		{
+			name:      "explicit false not consumed as positional arg",
+			args:      []string{"-b", "false"},
+			expectVal: false,
+		},
+		{
+			name:      "explicit 0 not consumed as positional arg",
+			args:      []string{"-b", "0"},
+			expectVal: false,
+		},
+		{
+			name:      "explicit 1 not consumed as positional arg",
+			args:      []string{"-b", "1"},
+			expectVal: true,
+		},
+		{
+			name:      "equals syntax",
+			args:      []string{"-b=false"},
+			expectVal: false,
+		},
+		{
+			name:       "value not leaked as positional arg",
+			args:       []string{"-b", "false", "my-module/aws"},
+			expectVal:  false,
+			expectArgs: []string{"my-module/aws"},
+		},
 	}
 
 	for _, tc := range tests {
@@ -296,6 +323,9 @@ func TestBoolVar(t *testing.T) {
 
 			require.NotNil(t, val)
 			assert.Equal(t, tc.expectVal, *val)
+			if tc.expectArgs != nil {
+				assert.Equal(t, tc.expectArgs, fs.Args())
+			}
 		})
 	}
 }

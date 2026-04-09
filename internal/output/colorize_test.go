@@ -48,7 +48,7 @@ func TestColorize(t *testing.T) {
 	t.Run("highlights quoted command references", func(t *testing.T) {
 		result := Colorize(`See "tharsis run" for details.`, "tharsis")
 
-		assert.Contains(t, result, green.Sprint("tharsis run"))
+		assert.Contains(t, result, green.Sprint("tharsis"))
 	})
 
 	t.Run("strips code block markers and preserves code", func(t *testing.T) {
@@ -119,5 +119,23 @@ func TestColorize(t *testing.T) {
 		result := Colorize("      This is important * for testing.", "")
 
 		assert.NotContains(t, result, color.New(color.FgRed).Sprint("*"))
+	})
+
+	t.Run("highlights product name mid-line", func(t *testing.T) {
+		result := Colorize("Usage: terraform [global options] plan", "terraform")
+
+		assert.Contains(t, result, green.Sprint("terraform"))
+	})
+
+	t.Run("does not highlight product name in dotted words", func(t *testing.T) {
+		result := Colorize("  edit terraform.tfvars", "terraform")
+
+		assert.NotContains(t, result, green.Sprint("terraform"))
+	})
+
+	t.Run("does not highlight product name in underscored words", func(t *testing.T) {
+		result := Colorize("  the terraform_remote_state data", "terraform")
+
+		assert.NotContains(t, result, green.Sprint("terraform"))
 	})
 }

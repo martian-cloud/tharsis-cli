@@ -24,6 +24,7 @@ import (
 	client "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
@@ -45,47 +46,6 @@ func NewTfExecCommandFactory(baseCommand *BaseCommand) Factory {
 	}
 }
 
-// InterceptHelp implements helpInterceptor. When a terraform subcommand is
-// present in RawArgs, it forwards help to that terraform subcommand and returns
-// the captured output. When only tf-exec flags are present (no terraform
-// subcommand), it returns ("", false) so that Wrapper falls back to the
-// standard Tharsis CLI help for tf-exec.
-func (c *tfExecCommand) InterceptHelp() (string, bool) {
-	// RawArgs[0] is the command name ("tf-exec"); subcommand args follow.
-	var subArgs []string
-	if len(c.RawArgs) > 1 {
-		subArgs = c.RawArgs[1:]
-	}
-
-	if !isHelpRequest(subArgs) {
-		return "", false
-	}
-
-	// Parse tf-exec flags; this populates c.tfPath (used by
-	// resolveTerraformBinaryForHelp) and leaves terraform args in fs.Args().
-	fs := c.Flags()
-	fs.SetOutput(io.Discard)
-	_ = fs.Parse(subArgs)
-
-	// Nothing after tf-exec flags means help is for tf-exec itself.
-	if len(fs.Args()) == 0 {
-		return "", false
-	}
-
-	binaryPath, err := c.resolveTerraformBinaryForHelp()
-	if err != nil {
-		return "", false
-	}
-
-	if !filepath.IsAbs(binaryPath) {
-		return "", false
-	}
-
-	cmd := exec.Command(binaryPath, fs.Args()...) // #nosec G204 -- absolute path validated above
-	out, _ := cmd.CombinedOutput()                // non-zero exit for --help is expected
-	return string(out), true
-}
-
 // Run executes the tf-exec passthrough command.
 func (c *tfExecCommand) Run(args []string) int {
 	if code := c.initialize(
@@ -96,9 +56,6 @@ func (c *tfExecCommand) Run(args []string) int {
 	); code != 0 {
 		return code
 	}
-
-	// initialize enforces -workspace as required; c.arguments holds the
-	// remaining terraform passthrough args.
 
 	// Get settings for the token getter and endpoint (same pattern as apply.go).
 	curSettings, err := c.getCurrentSettings()
@@ -231,11 +188,84 @@ func (*tfExecCommand) Synopsis() string {
 // PredictArgs returns shell-completion candidates for the terraform subcommand
 // positional argument.
 func (*tfExecCommand) PredictArgs() complete.Predictor {
-	return complete.PredictSet(
-		"apply", "console", "destroy", "force-unlock", "get", "graph",
-		"import", "metadata", "output", "plan", "providers", "refresh",
-		"show", "state", "taint", "test", "untaint", "validate",
-	)
+	subcommands := map[string][]string{
+		"":          {"apply", "console", "destroy", "force-unlock", "get", "graph", "import", "metadata", "output", "plan", "providers", "refresh", "show", "state", "taint", "test", "untaint", "validate", "workspace"},
+		"providers": {"lock", "mirror", "schema"},
+		"state":     {"list", "mv", "pull", "push", "replace-provider", "rm", "show"},
+		"workspace": {"delete", "list", "new", "select", "show"},
+	}
+
+	return complete.PredictFunc(func(a complete.Args) []string {
+		if subs, ok := subcommands[a.LastCompleted]; ok {
+			return subs
+		}
+
+		return subcommands[""]
+	})
+}
+
+// PredictFlags returns common terraform flags for shell completion.
+func (*tfExecCommand) PredictFlags() complete.Flags {
+	return complete.Flags{
+		// tf-exec flags
+		"-workspace": complete.PredictAnything,
+		"-tf-path":   complete.PredictAnything,
+		"-work-dir":  complete.PredictAnything,
+		// terraform flags
+		"-auto-approve":        complete.PredictNothing,
+		"-backup":              complete.PredictAnything,
+		"-compact-warnings":    complete.PredictNothing,
+		"-destroy":             complete.PredictNothing,
+		"-detailed-exitcode":   complete.PredictNothing,
+		"-generate-config-out": complete.PredictAnything,
+		"-input":               complete.PredictNothing,
+		"-json":                complete.PredictNothing,
+		"-lock":                complete.PredictNothing,
+		"-lock-timeout":        complete.PredictAnything,
+		"-no-color":            complete.PredictNothing,
+		"-out":                 complete.PredictAnything,
+		"-parallelism":         complete.PredictAnything,
+		"-raw":                 complete.PredictNothing,
+		"-reconfigure":         complete.PredictNothing,
+		"-refresh":             complete.PredictNothing,
+		"-refresh-only":        complete.PredictNothing,
+		"-replace":             complete.PredictAnything,
+		"-state":               complete.PredictAnything,
+		"-state-out":           complete.PredictAnything,
+		"-target":              complete.PredictAnything,
+		"-upgrade":             complete.PredictNothing,
+		"-var":                 complete.PredictAnything,
+		"-var-file":            complete.PredictAnything,
+	}
+}
+
+// Help returns terraform's native help output when a terraform subcommand is
+// present in RawArgs. Returns "" to fall back to standard tf-exec help.
+func (c *tfExecCommand) Help() string {
+	// RawArgs[0] is the command name ("tf-exec"); subcommand args follow.
+	var subArgs []string
+	if len(c.RawArgs) > 1 {
+		subArgs = c.RawArgs[1:]
+	}
+
+	// Parse tf-exec flags; this populates c.tfPath (used by
+	// resolveTerraformBinaryForHelp) and leaves terraform args in fs.Args().
+	fs := c.Flags()
+	fs.SetOutput(io.Discard)
+	_ = fs.Parse(subArgs)
+
+	if len(fs.Args()) == 0 {
+		return ""
+	}
+
+	binaryPath, err := c.resolveTerraformBinaryForHelp()
+	if err != nil {
+		return ""
+	}
+
+	cmd := exec.Command(binaryPath, fs.Args()...) // #nosec G204 -- absolute path validated above
+	out, _ := cmd.CombinedOutput()                // non-zero exit for --help is expected
+	return output.Colorize(strings.TrimSpace(string(out)), "terraform")
 }
 
 // Usage returns the usage string for the command.
@@ -311,9 +341,22 @@ tharsis tf-exec -workspace my/group/workspace -work-dir ./infra apply
 func (c *tfExecCommand) Flags() *flag.Set {
 	f := flag.NewSet("Command options")
 
-	f.StringVar(&c.workspace, "workspace", "The Tharsis workspace path or TRN (e.g. my/group/workspace or trn:workspace:my/group/workspace).", flag.Required())
-	f.StringVar(&c.tfPath, "tf-path", "Path to an existing terraform binary. If omitted, the version from the last applied run is downloaded automatically.")
-	f.StringVar(&c.workDir, "work-dir", "Working directory for terraform. If omitted, a persistent cache directory keyed by workspace is used.")
+	f.StringVar(
+		&c.workspace,
+		"workspace",
+		"The Tharsis workspace path or TRN (e.g. my/group/workspace or trn:workspace:my/group/workspace).",
+		flag.Required(),
+	)
+	f.StringVar(
+		&c.tfPath,
+		"tf-path",
+		"Path to an existing terraform binary. If omitted, the version from the last applied run is downloaded automatically.",
+	)
+	f.StringVar(
+		&c.workDir,
+		"work-dir",
+		"Working directory for terraform. If omitted, a persistent cache directory keyed by workspace is used.",
+	)
 
 	return f
 }
@@ -359,12 +402,23 @@ func (c *tfExecCommand) resolveTerraformBinaryForHelp() (string, error) {
 		if _, err := os.Stat(p); err != nil {
 			return "", fmt.Errorf("-tf-path %q: %w", p, err)
 		}
+
+		if !filepath.IsAbs(p) {
+			return "", fmt.Errorf("-tf-path %q: must be an absolute path", p)
+		}
+
 		return p, nil
 	}
+
 	path, err := exec.LookPath("terraform")
 	if err != nil {
 		return "", fmt.Errorf("terraform not found on PATH and -tf-path not set")
 	}
+
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("terraform resolved to relative path %q", path)
+	}
+
 	return path, nil
 }
 
@@ -534,16 +588,6 @@ func (c *tfExecCommand) buildTerraformEnv(namespacePath, tharsisURL string, toke
 	}
 
 	return env, nil
-}
-
-// isHelpRequest reports whether any arg in tfArgs is a help flag.
-func isHelpRequest(tfArgs []string) bool {
-	for _, arg := range tfArgs {
-		if arg == "-help" || arg == "--help" || arg == "-h" {
-			return true
-		}
-	}
-	return false
 }
 
 // runExec runs the binary with args, env, and an optional working directory,

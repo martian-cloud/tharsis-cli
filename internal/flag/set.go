@@ -404,6 +404,8 @@ func (fs *Set) MapVar(p *map[string]string, name string, usage string, args ...a
 // Both -flag and --flag styles are supported.
 // After a successful parse, call [Set.Deprecations] to check for deprecated flag usage.
 func (fs *Set) Parse(arguments []string) error {
+	arguments = fs.rewriteBoolArgs(arguments)
+
 	if err := fs.stdfs.Parse(arguments); err != nil {
 		return err
 	}
@@ -412,7 +414,6 @@ func (fs *Set) Parse(arguments []string) error {
 	fs.stdfs.Visit(func(sf *stdflag.Flag) { seen[sf.Name] = true })
 
 	// Collect deprecation warnings for used deprecated flags.
-	fs.deprecations = nil
 	for name, f := range fs.flags {
 		if name != f.Name {
 			continue
@@ -463,6 +464,36 @@ func (fs *Set) Parse(arguments []string) error {
 	}
 
 	return nil
+}
+
+// rewriteBoolArgs rewrites "-flag true/false" to "-flag=true/false" for bool
+// flags so that the value is consumed as part of the flag rather than left as
+// a positional argument. This preserves backwards compatibility with the old
+// optparser which treated bool flags as string-valued.
+func (fs *Set) rewriteBoolArgs(args []string) []string {
+	for i := 0; i < len(args)-1; i++ {
+		arg := args[i]
+		name := strings.TrimLeft(arg, "-")
+		if name == "" || strings.Contains(arg, "=") {
+			continue
+		}
+
+		f, ok := fs.flags[name]
+		if !ok || !f.isBool {
+			continue
+		}
+
+		next := args[i+1]
+		if _, err := strconv.ParseBool(next); err != nil {
+			continue
+		}
+
+		args = append(args[:i+1], args[i+2:]...)
+		args[i] = arg + "=" + next
+		fs.deprecations = append(fs.deprecations, fmt.Sprintf("use %s=%s instead of %s %s", arg, next, arg, next))
+	}
+
+	return args
 }
 
 // ---------------------------------------------------------------------------
