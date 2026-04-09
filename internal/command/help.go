@@ -65,6 +65,14 @@ func (c *helpCommand) PredictArgs() complete.Predictor {
 	return complete.PredictNothing
 }
 
+func (c *helpCommand) PredictFlags() complete.Flags {
+	return nil
+}
+
+func (c *helpCommand) Help() string {
+	return ""
+}
+
 func (c *helpCommand) HelpTemplate() string {
 	return output.PrimaryColor().Sprint("{{.Name}}") + ` [global options] {{.SubcommandName}} <subcommand> [options] <args>
 

@@ -15,6 +15,9 @@ type Command interface {
 	Example() string
 	Flags() *flag.Set
 	PredictArgs() complete.Predictor
+	PredictFlags() complete.Flags
+	Help() string
+	HelpTemplate() string
 	Run(args []string) int
 	Synopsis() string
 }
@@ -33,27 +36,18 @@ var (
 // Factory is a function that returns a Command.
 type Factory func() (Command, error)
 
-// helpInterceptor is implemented by commands that want to customize help output.
-// InterceptHelp returns (helpText, true) to replace the default Tharsis-formatted
-// help, or ("", false) to fall back to standard help rendering. This allows
-// commands to forward help to an external binary (e.g. terraform) when appropriate.
-type helpInterceptor interface {
-	InterceptHelp() (string, bool)
-}
-
 // NewWrapper creates a new Wrapper for a Command.
 func NewWrapper(command Command) Wrapper {
 	return Wrapper{command: command, productName: "tharsis"}
 }
 
-// Help formats and returns the help text. If the wrapped command implements
-// helpInterceptor and returns handled=true, that text is used directly.
+// Help formats and returns the help text. If the command's Help returns
+// handled=true, that text is used directly.
 func (c Wrapper) Help() string {
-	if hi, ok := c.command.(helpInterceptor); ok {
-		if text, handled := hi.InterceptHelp(); handled {
-			return text
-		}
+	if text := c.command.Help(); text != "" {
+		return text
 	}
+
 	return output.CommandHelp(output.CommandHelpInfo{
 		ProductName: c.productName,
 		Usage:       c.command.Usage(),
@@ -63,11 +57,11 @@ func (c Wrapper) Help() string {
 	})
 }
 
-// HelpTemplate returns a custom help template if the wrapped command provides one.
-// Otherwise it returns the default template with bold subcommand headers.
+// HelpTemplate returns the command's help template, falling back to the
+// default template with bold subcommand headers.
 func (c Wrapper) HelpTemplate() string {
-	if t, ok := c.command.(interface{ HelpTemplate() string }); ok {
-		return t.HelpTemplate()
+	if t := c.command.HelpTemplate(); t != "" {
+		return t
 	}
 
 	return `{{.Help}}
@@ -95,8 +89,13 @@ func (c Wrapper) AutocompleteArgs() complete.Predictor {
 	return c.command.PredictArgs()
 }
 
-// AutocompleteFlags returns flag completions derived from the command's Flags().
+// AutocompleteFlags returns flag completions. If PredictFlags is provided,
+// those are used directly; otherwise flags are derived from Flags().
 func (c Wrapper) AutocompleteFlags() complete.Flags {
+	if pf := c.command.PredictFlags(); pf != nil {
+		return pf
+	}
+
 	fs := c.command.Flags()
 	if fs == nil {
 		return nil
