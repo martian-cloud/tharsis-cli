@@ -166,7 +166,7 @@ func (c *moduleCreateCommand) Flags() *flag.Set {
 		&c.private,
 		"private",
 		"Whether the module is private.",
-		flag.Default(false),
+		flag.Default(true),
 	)
 	f.BoolVar(
 		&c.toJSON,

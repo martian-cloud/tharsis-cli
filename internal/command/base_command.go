@@ -154,6 +154,24 @@ func (c *BaseCommand) PredictArgs() complete.Predictor {
 	return complete.PredictNothing
 }
 
+// PredictFlags returns additional flag completions. Override in commands
+// that need dynamic flags beyond those derived from Flags().
+func (c *BaseCommand) PredictFlags() complete.Flags {
+	return nil
+}
+
+// Help returns ("", false) by default, falling back to standard help.
+// Override in commands that provide custom help output.
+func (c *BaseCommand) Help() string {
+	return ""
+}
+
+// HelpTemplate returns "" by default, falling back to the wrapper's default.
+// Override in commands that provide a custom help template.
+func (c *BaseCommand) HelpTemplate() string {
+	return ""
+}
+
 // Flags returns the command's flag set. Override in commands that accept flags.
 func (c *BaseCommand) Flags() *flag.Set {
 	return nil
