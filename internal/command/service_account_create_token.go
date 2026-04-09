@@ -40,7 +40,7 @@ func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
 		WithFlags(c.Flags()),
 		WithCommandName("service-account create-token"),
 		WithInputValidator(c.validate),
-		WithClient(true),
+		WithClient(false), // Service account create token is unauthenticated.
 	); code != 0 {
 		return code
 	}
