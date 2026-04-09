@@ -2182,13 +2182,13 @@ registry.
   
 ```bash
 tharsis terraform-provider upload-version \
-  -directory "./my-provider" \
+  -directory-path "./my-provider" \
   trn:terraform_provider:<group_path>/<name>
 ```
   
 #### Options
   
-#### directory
+#### directory-path
 
 The path of the terraform provider's directory.\
 **Default:** `.`
@@ -2456,9 +2456,9 @@ Exit Code:
 The exact exit code returned by terraform is passed through unchanged.
   
 ```bash
-tharsis tf-exec --workspace my/group/workspace show
-tharsis tf-exec --workspace trn:workspace:my/group/workspace plan
-tharsis tf-exec --workspace my/group/workspace --work-dir ./infra apply
+tharsis tf-exec -workspace my/group/workspace show
+tharsis tf-exec -workspace trn:workspace:my/group/workspace plan
+tharsis tf-exec -workspace my/group/workspace -work-dir ./infra apply
 ```
   
 #### Options
