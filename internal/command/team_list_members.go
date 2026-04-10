@@ -13,7 +13,6 @@ import (
 type teamListMembersCommand struct {
 	*BaseCommand
 
-	teamID *string
 	limit  *int32
 	cursor *string
 	sortBy *string
@@ -23,8 +22,8 @@ type teamListMembersCommand struct {
 var _ Command = (*teamListMembersCommand)(nil)
 
 func (c *teamListMembersCommand) validate() error {
-	if len(c.arguments) != 0 {
-		return errors.New("no arguments expected")
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: team id")
 	}
 
 	return nil
@@ -53,7 +52,7 @@ func (c *teamListMembersCommand) Run(args []string) int {
 			First: c.limit,
 			After: c.cursor,
 		},
-		TeamId: c.teamID,
+		TeamId: &c.arguments[0],
 	}
 
 	if c.sortBy != nil {
@@ -74,7 +73,7 @@ func (*teamListMembersCommand) Synopsis() string {
 }
 
 func (*teamListMembersCommand) Usage() string {
-	return "tharsis [global options] team list-members [options]"
+	return "tharsis [global options] team list-members [options] <team-id>"
 }
 
 func (*teamListMembersCommand) Description() string {
@@ -86,7 +85,7 @@ func (*teamListMembersCommand) Description() string {
 
 func (*teamListMembersCommand) Example() string {
 	return `
-tharsis team list-members -team-id "<team_id>" -sort-by "USERNAME_ASC" -limit 5
+tharsis team list-members <team_id>
 `
 }
 
@@ -94,12 +93,6 @@ func (c *teamListMembersCommand) Flags() *flag.Set {
 	sortValues := slices.Collect(maps.Keys(pb.TeamMemberSortableField_value))
 
 	f := flag.NewSet("Command options")
-	f.StringVar(
-		&c.teamID,
-		"team-id",
-		"ID of the team.",
-		flag.Required(),
-	)
 	f.StringVar(
 		&c.cursor,
 		"cursor",

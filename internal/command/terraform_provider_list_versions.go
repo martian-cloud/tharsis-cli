@@ -16,7 +16,6 @@ type terraformProviderListVersionsCommand struct {
 	limit           *int32
 	cursor          *string
 	sortBy          *string
-	providerID      *string
 	semanticVersion *string
 	latest          *bool
 	toJSON          *bool
@@ -34,8 +33,8 @@ func NewTerraformProviderListVersionsCommandFactory(baseCommand *BaseCommand) fu
 }
 
 func (c *terraformProviderListVersionsCommand) validate() error {
-	if len(c.arguments) != 0 {
-		return errors.New("no arguments expected")
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: provider id")
 	}
 
 	return nil
@@ -53,7 +52,7 @@ func (c *terraformProviderListVersionsCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetTerraformProviderVersionsRequest{
-		ProviderId: *c.providerID,
+		ProviderId: c.arguments[0],
 		PaginationOptions: &pb.PaginationOptions{
 			First: c.limit,
 			After: c.cursor,
@@ -88,15 +87,12 @@ func (*terraformProviderListVersionsCommand) Description() string {
 }
 
 func (*terraformProviderListVersionsCommand) Usage() string {
-	return "tharsis [global options] terraform-provider list-versions [options]"
+	return "tharsis [global options] terraform-provider list-versions [options] <provider-id>"
 }
 
 func (*terraformProviderListVersionsCommand) Example() string {
 	return `
-tharsis terraform-provider list-versions \
-  -provider-id "<provider_id>" \
-  -sort-by "CREATED_AT_DESC" \
-  -limit 10
+tharsis terraform-provider list-versions <provider_id>
 `
 }
 
@@ -104,12 +100,6 @@ func (c *terraformProviderListVersionsCommand) Flags() *flag.Set {
 	sortValues := slices.Collect(maps.Keys(pb.TerraformProviderVersionSortableField_value))
 
 	f := flag.NewSet("Command options")
-	f.StringVar(
-		&c.providerID,
-		"provider-id",
-		"Provider ID or TRN to list versions for.",
-		flag.Required(),
-	)
 	f.StringVar(
 		&c.cursor,
 		"cursor",
