@@ -38,6 +38,7 @@ type terraformProviderUploadVersionCommand struct {
 
 	sg        terminal.StepGroup
 	directory *string
+	toJSON    *bool
 }
 
 var _ Command = (*terraformProviderUploadVersionCommand)(nil)
@@ -69,6 +70,11 @@ func (c *terraformProviderUploadVersionCommand) Run(args []string) int {
 		WithClient(true),
 	); code != 0 {
 		return code
+	}
+
+	// Suppress step group output when JSON is requested.
+	if c.toJSON != nil && *c.toJSON {
+		c.sg = terminal.NewNoopUI().StepGroup()
 	}
 
 	dirStat, err := os.Stat(*c.directory)
@@ -162,8 +168,8 @@ func (c *terraformProviderUploadVersionCommand) Run(args []string) int {
 	}
 
 	c.sg.Wait()
-	c.UI.Successf("\nProvider version uploaded successfully!")
-	return 0
+
+	return c.Output(providerVersion, c.toJSON)
 }
 
 func (c *terraformProviderUploadVersionCommand) getProvider() (provider *pb.TerraformProvider, err error) {
@@ -345,7 +351,8 @@ func (*terraformProviderUploadVersionCommand) Synopsis() string {
 func (*terraformProviderUploadVersionCommand) Description() string {
 	return `
    Packages and uploads a new provider version to the
-   registry.
+   registry. Use -json to output the created provider
+   version as JSON and suppress progress updates.
 `
 }
 
@@ -368,6 +375,11 @@ func (c *terraformProviderUploadVersionCommand) Flags() *flag.Set {
 		"directory-path",
 		"The path of the terraform provider's directory.",
 		flag.Default("."),
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		"Output the created provider version as JSON.",
 	)
 
 	return f

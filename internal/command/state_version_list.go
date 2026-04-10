@@ -13,11 +13,10 @@ import (
 type stateVersionListCommand struct {
 	*BaseCommand
 
-	limit       *int32
-	cursor      *string
-	workspaceID *string
-	sortBy      *string
-	toJSON      *bool
+	limit  *int32
+	cursor *string
+	sortBy *string
+	toJSON *bool
 }
 
 var _ Command = (*stateVersionListCommand)(nil)
@@ -30,8 +29,8 @@ func NewStateVersionListCommandFactory(baseCommand *BaseCommand) func() (Command
 }
 
 func (c *stateVersionListCommand) validate() error {
-	if len(c.arguments) != 0 {
-		return errors.New("no arguments expected")
+	if len(c.arguments) != 1 {
+		return errors.New("expected exactly one argument: workspace id")
 	}
 
 	return nil
@@ -49,7 +48,7 @@ func (c *stateVersionListCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetStateVersionsRequest{
-		WorkspaceId: *c.workspaceID,
+		WorkspaceId: c.arguments[0],
 		PaginationOptions: &pb.PaginationOptions{
 			First: c.limit,
 			After: c.cursor,
@@ -74,7 +73,7 @@ func (*stateVersionListCommand) Synopsis() string {
 }
 
 func (*stateVersionListCommand) Usage() string {
-	return "tharsis [global options] state-version list [options]"
+	return "tharsis [global options] state-version list [options] <workspace-id>"
 }
 
 func (*stateVersionListCommand) Description() string {
@@ -85,7 +84,7 @@ func (*stateVersionListCommand) Description() string {
 
 func (*stateVersionListCommand) Example() string {
 	return `
-tharsis state-version list -workspace-id "trn:workspace:<group_path>/<workspace_name>" -json
+tharsis state-version list <workspace_id>
 `
 }
 
@@ -93,12 +92,6 @@ func (c *stateVersionListCommand) Flags() *flag.Set {
 	sortValues := slices.Collect(maps.Keys(pb.StateVersionSortableField_value))
 
 	f := flag.NewSet("Command options")
-	f.StringVar(
-		&c.workspaceID,
-		"workspace-id",
-		"Workspace ID or TRN to list state versions for.",
-		flag.Required(),
-	)
 	f.StringVar(
 		&c.cursor,
 		"cursor",

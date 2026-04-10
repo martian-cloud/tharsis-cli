@@ -68,7 +68,7 @@ func (c *terraformProviderListCommand) Run(args []string) int {
 		return 1
 	}
 
-	return c.OutputList(result, c.toJSON, "trn", "name", "group_id", "private")
+	return c.OutputList(result, c.toJSON, "trn", "name", "private")
 }
 
 func (*terraformProviderListCommand) Synopsis() string {
@@ -88,7 +88,7 @@ func (*terraformProviderListCommand) Description() string {
 
 func (*terraformProviderListCommand) Example() string {
 	return `
-tharsis terraform-provider list -group-id "trn:group:<group_path>" -json
+tharsis terraform-provider list -group-id <group_id>
 `
 }
 
@@ -99,8 +99,7 @@ func (c *terraformProviderListCommand) Flags() *flag.Set {
 	f.StringVar(
 		&c.groupID,
 		"group-id",
-		"Group ID to list terraform providers for.",
-		flag.Required(),
+		"Filter to providers in this group.",
 	)
 	f.StringVar(
 		&c.cursor,

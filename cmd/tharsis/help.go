@@ -163,6 +163,14 @@ Aliases allow referencing managed identities from other groups.
 Use these commands to create and delete managed identity aliases.
 `,
 	},
+	"membership": {
+		"Do operations on namespace memberships.",
+		`
+Namespace memberships control access to groups and workspaces.
+Use membership commands to list memberships for a user, service
+account, or team.
+`,
+	},
 	"module": {
 		"Do operations on a terraform module.",
 		`

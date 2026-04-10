@@ -16,6 +16,7 @@ Currently, the CLI supports the following commands:
 - [managed-identity-access-rule](#managed-identity-access-rule-command) — Do operations on a managed identity access rule.
 - [managed-identity-alias](#managed-identity-alias-command) — Do operations on a managed identity alias.
 - [mcp](#mcp-command) — Start the Tharsis MCP server.
+- [membership](#membership-command) — Do operations on namespace memberships.
 - [module](#module-command) — Do operations on a terraform module.
 - [plan](#plan-command) — Create a speculative plan.
 - [resource-limit](#resource-limit-command) — Do operations on resource limits.
@@ -1551,6 +1552,63 @@ Comma-separated list of toolsets to enable.\
 
 
 ---
+## membership command
+**Do operations on namespace memberships.**
+  
+**Subcommands:**
+  
+- [`list`](#membership-list-subcommand) - List namespace memberships for a user or service account.
+  
+Namespace memberships control access to groups and workspaces.
+Use membership commands to list memberships for a user, service
+account, or team.
+  
+---
+### membership list subcommand
+**List namespace memberships for a user or service account.**
+  
+Lists all namespace memberships for a user or
+service account, showing which namespaces the
+subject has access to and their assigned role.
+Specify exactly one of -user-id or
+-service-account-id.
+  
+```bash
+tharsis membership list -user-id <user_id>
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### service-account-id
+
+List memberships for this service account.\
+**Conflicts:** `user-id`
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `NAMESPACE_PATH_ASC`, `NAMESPACE_PATH_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+#### user-id
+
+List memberships for this user.\
+**Conflicts:** `service-account-id`
+
+
+---
 ## module command
 **Do operations on a terraform module.**
   
@@ -1562,6 +1620,7 @@ Comma-separated list of toolsets to enable.\
 - [`delete-attestation`](#module-delete-attestation-subcommand) - Delete a module attestation.
 - [`delete-version`](#module-delete-version-subcommand) - Delete a module version.
 - [`get`](#module-get-subcommand) - Get a single Terraform module.
+- [`get-attestation`](#module-get-attestation-subcommand) - Get a module attestation.
 - [`get-version`](#module-get-version-subcommand) - Get a module version by ID or TRN.
 - [`list`](#module-list-subcommand) - Retrieve a paginated list of modules.
 - [`list-attestations`](#module-list-attestations-subcommand) - Retrieve a paginated list of module attestations.
@@ -1691,6 +1750,25 @@ Retrieves details about a Terraform module.
   
 ```bash
 tharsis module get trn:terraform_module:<group_path>/<module_name>/<system>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### module get-attestation subcommand
+**Get a module attestation.**
+  
+Retrieves details about a module attestation
+including its data, digest, and associated
+module version.
+  
+```bash
+tharsis module get-attestation <attestation_id>
 ```
   
 #### Options
@@ -1934,7 +2012,9 @@ Show final output as JSON.
 **Upload a new module version to the module registry.**
   
 Packages and uploads a new module version to the
-registry.
+registry. Use -json to output the created module
+version as JSON and suppress progress updates,
+useful for piping the digest to cosign.
   
 ```bash
 tharsis module upload-version \
@@ -1949,6 +2029,10 @@ tharsis module upload-version \
 
 The path of the terraform module's directory.\
 **Default:** `.`
+
+#### json
+
+Output the module digest as JSON.
 
 #### version <span style={{color:'red'}}>*</span>
 
@@ -2821,7 +2905,7 @@ Show final output as JSON.
 Lists state versions for a workspace with pagination and sorting.
   
 ```bash
-tharsis state-version list -workspace-id "trn:workspace:<group_path>/<workspace_name>" -json
+tharsis state-version list <workspace_id>
 ```
   
 #### Options
@@ -2843,10 +2927,6 @@ Maximum number of result elements to return.\
 
 Sort by this field.\
 **Values:** `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
-
-#### workspace-id <span style={{color:'red'}}>*</span>
-
-Workspace ID or TRN to list state versions for.
 
 
 ---
@@ -3027,7 +3107,7 @@ Returns a paginated list of team members with their roles.
 Use -sort-by to order results by username.
   
 ```bash
-tharsis team list-members -team-id "<team_id>" -sort-by "USERNAME_ASC" -limit 5
+tharsis team list-members <team_id>
 ```
   
 #### Options
@@ -3049,10 +3129,6 @@ Maximum number of result elements to return.\
 
 Sort by this field.\
 **Values:** `USERNAME_ASC`, `USERNAME_DESC`
-
-#### team-id <span style={{color:'red'}}>*</span>
-
-ID of the team.
 
 
 ---
@@ -3302,7 +3378,7 @@ Lists Terraform providers within a group with
 pagination and sorting.
   
 ```bash
-tharsis terraform-provider list -group-id "trn:group:<group_path>" -json
+tharsis terraform-provider list -group-id <group_id>
 ```
   
 #### Options
@@ -3311,9 +3387,9 @@ tharsis terraform-provider list -group-id "trn:group:<group_path>" -json
 
 The cursor string for manual pagination.
 
-#### group-id <span style={{color:'red'}}>*</span>
+#### group-id
 
-Group ID to list terraform providers for.
+Filter to providers in this group.
 
 #### json
 
@@ -3395,10 +3471,7 @@ pagination and sorting. Filter by semantic version
 or latest only.
   
 ```bash
-tharsis terraform-provider list-versions \
-  -provider-id "<provider_id>" \
-  -sort-by "CREATED_AT_DESC" \
-  -limit 10
+tharsis terraform-provider list-versions <provider_id>
 ```
   
 #### Options
@@ -3420,10 +3493,6 @@ Filter to only the latest version.\
 
 Maximum number of result elements to return.\
 **Default:** `100`
-
-#### provider-id <span style={{color:'red'}}>*</span>
-
-Provider ID or TRN to list versions for.
 
 #### semantic-version
 
@@ -3473,7 +3542,8 @@ Optimistic locking version. Usually not required.
 **Upload a new Terraform provider version to the provider registry.**
   
 Packages and uploads a new provider version to the
-registry.
+registry. Use -json to output the created provider
+version as JSON and suppress progress updates.
   
 ```bash
 tharsis terraform-provider upload-version \
@@ -3488,6 +3558,10 @@ tharsis terraform-provider upload-version \
 The path of the terraform provider's directory.\
 **Default:** `.`
 
+#### json
+
+Output the created provider version as JSON.
+
 
 ---
 ## terraform-provider-mirror command
@@ -3497,7 +3571,9 @@ The path of the terraform provider's directory.\
   
 - [`delete-platform`](#terraform-provider-mirror-delete-platform-subcommand) - Delete a terraform provider platform from mirror.
 - [`delete-version`](#terraform-provider-mirror-delete-version-subcommand) - Delete a terraform provider version from mirror.
-- [`get-version`](#terraform-provider-mirror-get-version-subcommand) - Get a mirrored terraform provider version.
+- [`get-platform`](#terraform-provider-mirror-get-platform-subcommand) - Get a provider platform mirror.
+- [`get-version`](#terraform-provider-mirror-get-version-subcommand) - Get a provider version mirror.
+- [`list-platform-mirrors`](#terraform-provider-mirror-list-platform-mirrors-subcommand) - List platform mirrors for a provider version mirror.
 - [`list-platforms`](#terraform-provider-mirror-list-platforms-subcommand) - Retrieve a paginated list of provider platform mirrors.
 - [`list-versions`](#terraform-provider-mirror-list-versions-subcommand) - Retrieve a paginated list of provider version mirrors.
 - [`sync`](#terraform-provider-mirror-sync-subcommand) - Sync provider platforms from upstream registry to mirror.
@@ -3538,13 +3614,15 @@ Skip confirmation prompt.
 
 
 ---
-### terraform-provider-mirror get-version subcommand
-**Get a mirrored terraform provider version.**
+### terraform-provider-mirror get-platform subcommand
+**Get a provider platform mirror.**
   
-Retrieves details about a mirrored provider version.
+Retrieves details about a mirrored provider
+platform including its OS, architecture, and
+mirror status.
   
 ```bash
-tharsis terraform-provider-mirror get-version <version-mirror-id>
+tharsis terraform-provider-mirror get-platform <platform_mirror_id>
 ```
   
 #### Options
@@ -3552,6 +3630,65 @@ tharsis terraform-provider-mirror get-version <version-mirror-id>
 #### json
 
 Show final output as JSON.
+
+
+---
+### terraform-provider-mirror get-version subcommand
+**Get a provider version mirror.**
+  
+Retrieves details about a mirrored provider
+version including its semantic version and
+sync status.
+  
+```bash
+tharsis terraform-provider-mirror get-version <version_mirror_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### terraform-provider-mirror list-platform-mirrors subcommand
+**List platform mirrors for a provider version mirror.**
+  
+Lists mirrored platforms for a provider version.
+Filter by OS or architecture.
+  
+```bash
+tharsis terraform-provider-mirror list-platform-mirrors <version_mirror_id>
+```
+  
+#### Options
+  
+#### architecture
+
+Filter to platforms with this architecture.
+
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### os
+
+Filter to platforms with this OS.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `CREATED_AT_ASC`, `CREATED_AT_DESC`
 
 
 ---
@@ -4354,6 +4491,7 @@ Show final output as JSON.\
 - [`list-environment-vars`](#workspace-list-environment-vars-subcommand) - List all environment variables in a workspace.
 - [`list-memberships`](#workspace-list-memberships-subcommand) - Retrieve a list of workspace memberships.
 - [`list-terraform-vars`](#workspace-list-terraform-vars-subcommand) - List all terraform variables in a workspace.
+- [`lock`](#workspace-lock-subcommand) - Lock a workspace.
 - [`migrate`](#workspace-migrate-subcommand) - Migrate a workspace to a new group.
 - [`outputs`](#workspace-outputs-subcommand) - Get the state version outputs for a workspace.
 - [`remove-membership`](#workspace-remove-membership-subcommand) - Remove a workspace membership.
@@ -4361,6 +4499,7 @@ Show final output as JSON.\
 - [`set-terraform-var`](#workspace-set-terraform-var-subcommand) - Set a terraform variable for a workspace.
 - [`set-terraform-vars`](#workspace-set-terraform-vars-subcommand) - Set terraform variables for a workspace.
 - [`unassign-managed-identity`](#workspace-unassign-managed-identity-subcommand) - Unassign a managed identity from a workspace.
+- [`unlock`](#workspace-unlock-subcommand) - Unlock a workspace.
 - [`update`](#workspace-update-subcommand) - Update a workspace.
 - [`update-membership`](#workspace-update-membership-subcommand) - Update a workspace membership.
   
@@ -4807,6 +4946,29 @@ Show the actual values of sensitive variables (requires appropriate permissions)
 
 
 ---
+### workspace lock subcommand
+**Lock a workspace.**
+  
+Locks a workspace to prevent new runs from being
+queued or created. Useful during maintenance windows
+or when coordinating infrastructure changes across
+teams. A workspace is also automatically locked while
+a run is actively executing. VCS-triggered and
+manually created runs will be rejected until the
+workspace is unlocked.
+  
+```bash
+tharsis workspace lock <workspace_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
 ### workspace migrate subcommand
 **Migrate a workspace to a new group.**
   
@@ -4963,6 +5125,28 @@ tharsis workspace unassign-managed-identity \
   trn:managed_identity:<group_path>/<identity_name>
 ```
   
+---
+### workspace unlock subcommand
+**Unlock a workspace.**
+  
+Unlocks a workspace so that new runs can be queued
+and created again. A workspace that is locked by an
+active run cannot be manually unlocked — the lock
+is released automatically when the run completes.
+Only manually applied locks can be removed with
+this command.
+  
+```bash
+tharsis workspace unlock <workspace_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
 ---
 ### workspace update subcommand
 **Update a workspace.**
