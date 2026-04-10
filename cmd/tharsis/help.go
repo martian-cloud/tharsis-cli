@@ -144,8 +144,8 @@ variables, manage memberships, and view workspace outputs.
 		`
 Managed identities provide OIDC-federated credentials for cloud
 providers (AWS, Azure, Kubernetes) without storing secrets. Use
-managed-identity commands to create, update, delete, and get
-managed identities.
+managed-identity commands to create, update, delete, list, and
+get managed identities.
 `,
 	},
 	"managed-identity-access-rule": {
@@ -176,8 +176,9 @@ and versions.
 		"Do operations on a terraform provider.",
 		`
 The provider registry stores Terraform providers with versioning
-support. Use terraform-provider commands to create providers and
-upload provider versions to the registry.
+support. Use terraform-provider commands to create, get, list,
+update, delete providers, upload versions, manage versions and
+platforms.
 `,
 	},
 	"terraform-provider-mirror": {
@@ -196,16 +197,72 @@ get version details, and delete versions or platforms.
 		`
 Runner agents are distributed job executors responsible for
 launching Terraform jobs that deploy infrastructure to the cloud.
-Use runner-agent commands to create, update, delete, get agents,
-and assign or unassign service accounts.
+Use runner-agent commands to create, update, delete, list, get
+agents, and assign or unassign service accounts.
 `,
 	},
 	"service-account": {
-		"Create an authentication token for a service account.",
+		"Do operations on service accounts.",
 		`
 Service accounts provide machine-to-machine authentication for
 CI/CD pipelines and automation. Use service-account commands to
-create authentication tokens.
+create, update, delete, list service accounts, and create
+authentication tokens.
+`,
+	},
+	"gpg-key": {
+		"Do operations on GPG keys.",
+		`
+GPG keys are used for module attestation verification. Use
+gpg-key commands to create, delete, list, and get GPG keys
+within a group hierarchy.
+`,
+	},
+	"resource-limit": {
+		"Do operations on resource limits.",
+		`
+Resource limits control the maximum number of resources that
+can be created. Use resource-limit commands to list and update
+resource limits.
+`,
+	},
+	"state-version": {
+		"Do operations on state versions.",
+		`
+State versions represent snapshots of Terraform state for a
+workspace. Use state-version commands to list and get state
+versions.
+`,
+	},
+	"team": {
+		"Do operations on teams.",
+		`
+Teams group users together for access management. Use team
+commands to create, update, delete, list teams, and manage
+team members.
+`,
+	},
+	"user": {
+		"Do operations on users.",
+		`
+Users represent individuals who can access Tharsis. Use user
+commands to list and get user details.
+`,
+	},
+	"vcs-provider": {
+		"Do operations on VCS providers.",
+		`
+VCS providers integrate GitHub or GitLab for automatic run
+triggering. Use vcs-provider commands to create, update,
+delete, list, get, reset OAuth tokens, and create runs.
+`,
+	},
+	"vcs-provider-link": {
+		"Do operations on workspace VCS provider links.",
+		`
+VCS provider links connect workspaces to VCS repositories for
+automatic run triggering. Use vcs-provider-link commands to
+create, update, delete, and get workspace VCS provider links.
 `,
 	},
 	"run": {
@@ -214,6 +271,15 @@ create authentication tokens.
 Runs are units of execution (plan or apply) that create, update,
 or destroy infrastructure resources. Use run commands to cancel
 runs gracefully or forcefully.
+`,
+	},
+	"role": {
+		"Do operations on roles.",
+		`
+Roles define sets of permissions that can be assigned to users,
+service accounts, and teams via namespace memberships. Use role
+commands to create, update, delete, list roles, and view
+available permissions.
 `,
 	},
 	"plan": {

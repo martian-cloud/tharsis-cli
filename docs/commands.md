@@ -10,6 +10,7 @@ Currently, the CLI supports the following commands:
 - [caller-identity](#caller-identity-command) — Get the caller's identity.
 - [configure](#configure-command) — Create or update a profile.
 - [destroy](#destroy-command) — Destroy workspace resources.
+- [gpg-key](#gpg-key-command) — Do operations on GPG keys.
 - [group](#group-command) — Do operations on groups.
 - [managed-identity](#managed-identity-command) — Do operations on a managed identity.
 - [managed-identity-access-rule](#managed-identity-access-rule-command) — Do operations on a managed identity access rule.
@@ -17,13 +18,20 @@ Currently, the CLI supports the following commands:
 - [mcp](#mcp-command) — Start the Tharsis MCP server.
 - [module](#module-command) — Do operations on a terraform module.
 - [plan](#plan-command) — Create a speculative plan.
+- [resource-limit](#resource-limit-command) — Do operations on resource limits.
+- [role](#role-command) — Do operations on roles.
 - [run](#run-command) — Do operations on runs.
 - [runner-agent](#runner-agent-command) — Do operations on runner agents.
-- [service-account](#service-account-command) — Create an authentication token for a service account.
+- [service-account](#service-account-command) — Do operations on service accounts.
 - [sso](#sso-command) — Log in to the OAuth2 provider and return an authentication token.
+- [state-version](#state-version-command) — Do operations on state versions.
+- [team](#team-command) — Do operations on teams.
 - [terraform-provider](#terraform-provider-command) — Do operations on a terraform provider.
 - [terraform-provider-mirror](#terraform-provider-mirror-command) — Mirror Terraform providers from any Terraform registry.
 - [tf-exec](#tf-exec-command) — Run terraform with Tharsis auth and workspace variables injected.
+- [user](#user-command) — Do operations on users.
+- [vcs-provider](#vcs-provider-command) — Do operations on VCS providers.
+- [vcs-provider-link](#vcs-provider-link-command) — Do operations on workspace VCS provider links.
 - [version](#version-command) — Get the CLI's version.
 - [workspace](#workspace-command) — Do operations on workspaces.
   
@@ -302,6 +310,126 @@ A terraform variable as a key=value pair.
 #### tf-var-file <span style={{color:'green'}}>...</span>
 
 The path to a .tfvars variables file.
+
+
+---
+## gpg-key command
+**Do operations on GPG keys.**
+  
+**Subcommands:**
+  
+- [`create`](#gpg-key-create-subcommand) - Create a new GPG key.
+- [`delete`](#gpg-key-delete-subcommand) - Delete a GPG key.
+- [`get`](#gpg-key-get-subcommand) - Get a GPG key.
+- [`list`](#gpg-key-list-subcommand) - Retrieve a paginated list of GPG keys.
+  
+GPG keys are used for module attestation verification. Use
+gpg-key commands to create, delete, list, and get GPG keys
+within a group hierarchy.
+  
+---
+### gpg-key create subcommand
+**Create a new GPG key.**
+  
+Creates a new GPG key within a group.
+GPG keys are used to verify Terraform
+module attestations. The key is used to
+sign or verify module versions.
+  
+```bash
+tharsis gpg-key create \
+  -group-id "trn:group:<group_path>" \
+  -ascii-armor "-----BEGIN PGP PUBLIC KEY BLOCK-----..."
+```
+  
+#### Options
+  
+#### ascii-armor <span style={{color:'red'}}>*</span>
+
+ASCII-armored GPG public key.
+
+#### group-id <span style={{color:'red'}}>*</span>
+
+Group ID or TRN where the GPG key will be created.
+
+#### json
+
+Show final output as JSON.
+
+
+---
+### gpg-key delete subcommand
+**Delete a GPG key.**
+  
+Permanently removes a GPG key. This
+action is irreversible. Any module
+attestations signed with this key can
+no longer be verified.
+  
+```bash
+tharsis gpg-key delete <gpg_key_id>
+```
+  
+---
+### gpg-key get subcommand
+**Get a GPG key.**
+  
+Retrieves details about a GPG key
+including its ASCII-armored public key,
+fingerprint, and associated group.
+  
+```bash
+tharsis gpg-key get <gpg_key_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### gpg-key list subcommand
+**Retrieve a paginated list of GPG keys.**
+  
+Lists GPG keys scoped to a namespace.
+Use -include-inherited to also show keys
+from parent groups. Supports pagination
+and sorting.
+  
+```bash
+tharsis gpg-key list -namespace-path "<group_path>" -include-inherited -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### include-inherited
+
+Include GPG keys inherited from parent groups.\
+**Default:** `false`
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### namespace-path <span style={{color:'red'}}>*</span>
+
+Namespace path to list GPG keys for.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
 
 
 ---
@@ -872,12 +1000,13 @@ Optimistic locking version. Usually not required.
 - [`create`](#managed-identity-create-subcommand) - Create a new managed identity.
 - [`delete`](#managed-identity-delete-subcommand) - Delete a managed identity.
 - [`get`](#managed-identity-get-subcommand) - Get a single managed identity.
+- [`list`](#managed-identity-list-subcommand) - Retrieve a paginated list of managed identities.
 - [`update`](#managed-identity-update-subcommand) - Update a managed identity.
   
 Managed identities provide OIDC-federated credentials for cloud
 providers (AWS, Azure, Kubernetes) without storing secrets. Use
-managed-identity commands to create, update, delete, and get
-managed identities.
+managed-identity commands to create, update, delete, list, and
+get managed identities.
   
 ---
 ### managed-identity create subcommand
@@ -978,6 +1107,52 @@ tharsis managed-identity get trn:managed_identity:<group_path>/<managed_identity
 #### json
 
 Show final output as JSON.
+
+
+---
+### managed-identity list subcommand
+**Retrieve a paginated list of managed identities.**
+  
+Lists managed identities within a namespace.
+Identities are inherited from parent groups and
+can be filtered with -include-inherited.
+  
+```bash
+tharsis managed-identity list -namespace-path "<group_path>" -include-inherited -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### include-inherited
+
+Include managed identities inherited from parent groups.\
+**Default:** `false`
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### namespace-path <span style={{color:'red'}}>*</span>
+
+Namespace path to list managed identities for.
+
+#### search
+
+Filter to managed identities containing this substring.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `CREATED_AT_ASC`, `CREATED_AT_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
 
 
 ---
@@ -1863,6 +2038,248 @@ The path to a .tfvars variables file.
 
 
 ---
+## resource-limit command
+**Do operations on resource limits.**
+  
+**Subcommands:**
+  
+- [`list`](#resource-limit-list-subcommand) - List all resource limits.
+- [`update`](#resource-limit-update-subcommand) - Update a resource limit.
+  
+Resource limits control the maximum number of resources that
+can be created. Use resource-limit commands to list and update
+resource limits.
+  
+---
+### resource-limit list subcommand
+**List all resource limits.**
+  
+Lists all configured resource limits.
+Resource limits control the maximum
+number of resources (e.g. workspaces,
+webhooks) allowed per namespace.
+  
+```bash
+tharsis resource-limit list -json
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### resource-limit update subcommand
+**Update a resource limit.**
+  
+Changes the maximum allowed count for a
+resource limit. Requires the exact limit
+name (e.g. ResourceLimitWebhooksPerNamespace).
+  
+```bash
+tharsis resource-limit update -value 200 ResourceLimitWebhooksPerNamespace
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+#### value <span style={{color:'red'}}>*</span>
+
+New value for the resource limit.
+
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+## role command
+**Do operations on roles.**
+  
+**Subcommands:**
+  
+- [`create`](#role-create-subcommand) - Create a new role.
+- [`delete`](#role-delete-subcommand) - Delete a role.
+- [`get`](#role-get-subcommand) - Get a role.
+- [`get-available-permissions`](#role-get-available-permissions-subcommand) - Get available permissions for roles.
+- [`list`](#role-list-subcommand) - Retrieve a paginated list of roles.
+- [`update`](#role-update-subcommand) - Update a role.
+  
+Roles define sets of permissions that can be assigned to users,
+service accounts, and teams via namespace memberships. Use role
+commands to create, update, delete, list roles, and view
+available permissions.
+  
+---
+### role create subcommand
+**Create a new role.**
+  
+Creates a new role with the specified
+permissions. Roles define a set of
+permissions assignable to users, service
+accounts, or teams via memberships.
+  
+```bash
+tharsis role create \
+  -description "<description>" \
+  -permission "run:create" \
+  -permission "workspace:view" \
+  <name>
+```
+  
+#### Options
+  
+#### description
+
+Description for the role.
+
+#### json
+
+Show final output as JSON.
+
+#### permission <span style={{color:'green'}}>...</span>
+
+Permission to assign to the role.
+
+
+---
+### role delete subcommand
+**Delete a role.**
+  
+Permanently removes a role. This action
+is irreversible. Any memberships using
+this role will lose the associated
+permissions.
+  
+```bash
+tharsis role delete <role_id>
+```
+  
+#### Options
+  
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+### role get subcommand
+**Get a role.**
+  
+Retrieves details about a role including
+its name, description, and assigned
+permissions.
+  
+```bash
+tharsis role get <role_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### role get-available-permissions subcommand
+**Get available permissions for roles.**
+  
+Returns the list of available permissions that can be
+assigned to roles.
+  
+```bash
+tharsis role get-available-permissions
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### role list subcommand
+**Retrieve a paginated list of roles.**
+  
+Returns a paginated list of roles with
+sorting support. Use -search to filter
+roles by name.
+  
+```bash
+tharsis role list \
+  -sort-by "NAME_ASC" \
+  -limit 5 \
+  -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### search
+
+Filter to only roles containing this substring in their name.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `NAME_ASC`, `NAME_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+
+---
+### role update subcommand
+**Update a role.**
+  
+Updates a role's description or permissions.
+When permissions are specified, they fully
+replace the existing set.
+  
+```bash
+tharsis role update \
+  -description "<description>" \
+  -permission "run:create" \
+  -permission "workspace:view" \
+  <role_id>
+```
+  
+#### Options
+  
+#### description
+
+Description for the role.
+
+#### json
+
+Show final output as JSON.
+
+#### permission <span style={{color:'green'}}>...</span>
+
+Permission to assign to the role.
+
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
 ## run command
 **Do operations on runs.**
   
@@ -1902,13 +2319,14 @@ Force the run to cancel.
 - [`create`](#runner-agent-create-subcommand) - Create a new runner agent.
 - [`delete`](#runner-agent-delete-subcommand) - Delete a runner agent.
 - [`get`](#runner-agent-get-subcommand) - Get a runner agent.
+- [`list`](#runner-agent-list-subcommand) - Retrieve a paginated list of runner agents.
 - [`unassign-service-account`](#runner-agent-unassign-service-account-subcommand) - Unassign a service account from a runner agent.
 - [`update`](#runner-agent-update-subcommand) - Update a runner agent.
   
 Runner agents are distributed job executors responsible for
 launching Terraform jobs that deploy infrastructure to the cloud.
-Use runner-agent commands to create, update, delete, get agents,
-and assign or unassign service accounts.
+Use runner-agent commands to create, update, delete, list, get
+agents, and assign or unassign service accounts.
   
 ---
 ### runner-agent assign-service-account subcommand
@@ -2013,6 +2431,48 @@ Show final output as JSON.
 
 
 ---
+### runner-agent list subcommand
+**Retrieve a paginated list of runner agents.**
+  
+Lists runner agents with pagination and sorting.
+Filter by namespace and use -include-inherited
+for parent group runners.
+  
+```bash
+tharsis runner-agent list -namespace-path "<group_path>" -include-inherited -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### include-inherited
+
+Include runner agents inherited from parent groups.\
+**Default:** `false`
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### namespace-path
+
+Namespace path to list runner agents for.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+
+---
 ### runner-agent unassign-service-account subcommand
 **Unassign a service account from a runner agent.**
   
@@ -2068,16 +2528,75 @@ Optimistic locking version. Usually not required.
 
 ---
 ## service-account command
-**Create an authentication token for a service account.**
+**Do operations on service accounts.**
   
 **Subcommands:**
   
+- [`create`](#service-account-create-subcommand) - Create a new service account.
 - [`create-token`](#service-account-create-token-subcommand) - Create a token for a service account.
+- [`delete`](#service-account-delete-subcommand) - Delete a service account.
+- [`get`](#service-account-get-subcommand) - Get a service account.
+- [`list`](#service-account-list-subcommand) - Retrieve a paginated list of service accounts.
+- [`update`](#service-account-update-subcommand) - Update a service account.
   
 Service accounts provide machine-to-machine authentication for
 CI/CD pipelines and automation. Use service-account commands to
-create authentication tokens.
+create, update, delete, list service accounts, and create
+authentication tokens.
   
+---
+### service-account create subcommand
+**Create a new service account.**
+  
+Creates a service account for machine-to-
+machine auth using OIDC trust policies.
+Created within a group for CI/CD pipelines
+and automation workflows.
+  
+OIDC trust policy JSON format:
+
+```json
+{
+  "issuer": "https://gitlab.com",
+  "bound_claims_type": "STRING",
+  "bound_claims": {
+    "namespace_path": "<namespace_path>"
+  }
+}
+```
+
+```bash
+tharsis service-account create \
+  -group-id "trn:group:<group_path>" \
+  -description "<description>" \
+  -oidc-trust-policy '{"issuer":"https://gitlab.com","bound_claims_type":"STRING","bound_claims":{"namespace_path":"<namespace_path>"}}' \
+  <name>
+```
+  
+#### Options
+  
+#### description
+
+Description for the service account.
+
+#### enable-client-credentials
+
+Enable client credentials authentication.\
+**Default:** `false`
+
+#### group-id <span style={{color:'red'}}>*</span>
+
+Group ID or TRN where the service account will be created.
+
+#### json
+
+Show final output as JSON.
+
+#### oidc-trust-policy <span style={{color:'green'}}>...</span>
+
+OIDC trust policy as JSON.
+
+
 ---
 ### service-account create-token subcommand
 **Create a token for a service account.**
@@ -2101,6 +2620,142 @@ Show final output as JSON.\
 #### token <span style={{color:'red'}}>*</span>
 
 Initial authentication token from identity provider.
+
+
+---
+### service-account delete subcommand
+**Delete a service account.**
+  
+Permanently deletes a service account.
+This is irreversible and revokes all
+tokens issued to the account.
+  
+```bash
+tharsis service-account delete trn:service_account:<group_path>/<service_account_name>
+```
+  
+#### Options
+  
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+### service-account get subcommand
+**Get a service account.**
+  
+Returns a service account's details
+including its OIDC trust policies and
+associated group.
+  
+```bash
+tharsis service-account get trn:service_account:<group_path>/<service_account_name>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### service-account list subcommand
+**Retrieve a paginated list of service accounts.**
+  
+Lists service accounts within a namespace
+with pagination and sorting.
+  
+```bash
+tharsis service-account list -namespace-path "<group_path>" -include-inherited -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### include-inherited
+
+Include service accounts inherited from parent groups.\
+**Default:** `false`
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### namespace-path <span style={{color:'red'}}>*</span>
+
+Namespace path to list service accounts for.
+
+#### runner-id
+
+Filter to service accounts assigned to this runner.
+
+#### search
+
+Filter to service accounts containing this substring.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `CREATED_AT_ASC`, `CREATED_AT_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+
+---
+### service-account update subcommand
+**Update a service account.**
+  
+Modifies an existing service account's configuration.
+OIDC trust policies are fully replaced when specified.
+  
+OIDC trust policy JSON format:
+
+```json
+{
+  "issuer": "https://gitlab.com",
+  "bound_claims_type": "STRING",
+  "bound_claims": {
+    "namespace_path": "<namespace_path>"
+  }
+}
+```
+
+```bash
+tharsis service-account update \
+  -description "<description>" \
+  -oidc-trust-policy '{"issuer":"https://gitlab.com","bound_claims_type":"STRING","bound_claims":{"namespace_path":"<namespace_path>"}}' \
+  <service_account_id>
+```
+  
+#### Options
+  
+#### description
+
+Description for the service account.
+
+#### enable-client-credentials
+
+Enable client credentials authentication.
+
+#### json
+
+Show final output as JSON.
+
+#### oidc-trust-policy <span style={{color:'green'}}>...</span>
+
+OIDC trust policy as JSON.
+
+#### version
+
+Optimistic locking version. Usually not required.
 
 
 ---
@@ -2128,17 +2783,376 @@ tharsis sso login
 ```
   
 ---
+## state-version command
+**Do operations on state versions.**
+  
+**Subcommands:**
+  
+- [`get`](#state-version-get-subcommand) - Get a state version.
+- [`list`](#state-version-list-subcommand) - Retrieve a paginated list of state versions.
+  
+State versions represent snapshots of Terraform state for a
+workspace. Use state-version commands to list and get state
+versions.
+  
+---
+### state-version get subcommand
+**Get a state version.**
+  
+Returns details about a Terraform state
+version including its status and
+associated workspace.
+  
+```bash
+tharsis state-version get <state_version_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### state-version list subcommand
+**Retrieve a paginated list of state versions.**
+  
+Lists state versions for a workspace with pagination and sorting.
+  
+```bash
+tharsis state-version list -workspace-id "trn:workspace:<group_path>/<workspace_name>" -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+#### workspace-id <span style={{color:'red'}}>*</span>
+
+Workspace ID or TRN to list state versions for.
+
+
+---
+## team command
+**Do operations on teams.**
+  
+**Subcommands:**
+  
+- [`add-member`](#team-add-member-subcommand) - Add a user to a team.
+- [`create`](#team-create-subcommand) - Create a new team.
+- [`delete`](#team-delete-subcommand) - Delete a team.
+- [`get`](#team-get-subcommand) - Get a team.
+- [`get-member`](#team-get-member-subcommand) - Get a team member.
+- [`list`](#team-list-subcommand) - Retrieve a paginated list of teams.
+- [`list-members`](#team-list-members-subcommand) - List members of a team.
+- [`remove-member`](#team-remove-member-subcommand) - Remove a user from a team.
+- [`update`](#team-update-subcommand) - Update a team.
+- [`update-member`](#team-update-member-subcommand) - Update a team member.
+  
+Teams group users together for access management. Use team
+commands to create, update, delete, list teams, and manage
+team members.
+  
+---
+### team add-member subcommand
+**Add a user to a team.**
+  
+Adds a user to a team by username. Use -maintainer to
+grant the user team maintenance privileges.
+  
+```bash
+tharsis team add-member -team-name "<team_name>" -maintainer <username>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+#### maintainer
+
+Whether the user is a team maintainer.\
+**Default:** `false`
+
+#### team-name <span style={{color:'red'}}>*</span>
+
+Name of the team.
+
+
+---
+### team create subcommand
+**Create a new team.**
+  
+Creates a new team. Teams group users together for access
+management. Assign teams to namespaces to grant members
+access.
+  
+```bash
+tharsis team create -description "<description>" <name>
+```
+  
+#### Options
+  
+#### description
+
+Description for the team.
+
+#### json
+
+Show final output as JSON.
+
+
+---
+### team delete subcommand
+**Delete a team.**
+  
+Permanently deletes a team. This is irreversible and
+revokes all team-based namespace access for its members.
+  
+```bash
+tharsis team delete <team_id>
+```
+  
+#### Options
+  
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+### team get subcommand
+**Get a team.**
+  
+Retrieves details about a team including
+its name and description.
+  
+```bash
+tharsis team get <team_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### team get-member subcommand
+**Get a team member.**
+  
+Returns the team membership details for a user, including
+whether they are a maintainer.
+  
+```bash
+tharsis team get-member -team-name "<team_name>" <username>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+#### team-name <span style={{color:'red'}}>*</span>
+
+Name of the team.
+
+
+---
+### team list subcommand
+**Retrieve a paginated list of teams.**
+  
+Returns a paginated list of teams. Filter by name prefix
+using -name-prefix or by teams containing a specific user
+using -user-id.
+  
+```bash
+tharsis team list -sort-by "NAME_ASC" -limit 5 -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### name-prefix
+
+Filter to teams whose name starts with this prefix.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `NAME_ASC`, `NAME_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+#### user-id
+
+Filter to teams that contain this user.
+
+
+---
+### team list-members subcommand
+**List members of a team.**
+  
+Returns a paginated list of team members with their roles.
+Use -sort-by to order results by username.
+  
+```bash
+tharsis team list-members -team-id "<team_id>" -sort-by "USERNAME_ASC" -limit 5
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `USERNAME_ASC`, `USERNAME_DESC`
+
+#### team-id <span style={{color:'red'}}>*</span>
+
+ID of the team.
+
+
+---
+### team remove-member subcommand
+**Remove a user from a team.**
+  
+Removes a user from a team, revoking their team-based
+access to any namespaces the team is assigned to.
+  
+```bash
+tharsis team remove-member -team-name "<team_name>" <username>
+```
+  
+#### Options
+  
+#### team-name <span style={{color:'red'}}>*</span>
+
+Name of the team.
+
+
+---
+### team update subcommand
+**Update a team.**
+  
+Updates a team's description. Use
+-description to set the new value.
+  
+```bash
+tharsis team update -description "<description>" <team_id>
+```
+  
+#### Options
+  
+#### description
+
+Description for the team.
+
+#### json
+
+Show final output as JSON.
+
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+### team update-member subcommand
+**Update a team member.**
+  
+Updates a team member's role, such as promoting or
+demoting maintainer status.
+  
+```bash
+tharsis team update-member -team-name "<team_name>" -maintainer <username>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+#### maintainer
+
+Whether the user is a team maintainer.\
+**Default:** `false`
+
+#### team-name <span style={{color:'red'}}>*</span>
+
+Name of the team.
+
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
 ## terraform-provider command
 **Do operations on a terraform provider.**
   
 **Subcommands:**
   
 - [`create`](#terraform-provider-create-subcommand) - Create a new terraform provider.
+- [`delete`](#terraform-provider-delete-subcommand) - Delete a terraform provider.
+- [`delete-platform`](#terraform-provider-delete-platform-subcommand) - Delete a Terraform provider platform.
+- [`delete-version`](#terraform-provider-delete-version-subcommand) - Delete a terraform provider version.
+- [`get`](#terraform-provider-get-subcommand) - Get a terraform provider.
+- [`get-platform`](#terraform-provider-get-platform-subcommand) - Get a terraform provider platform by ID or TRN.
+- [`get-version`](#terraform-provider-get-version-subcommand) - Get a terraform provider version by ID or TRN.
+- [`list`](#terraform-provider-list-subcommand) - Retrieve a paginated list of terraform providers.
+- [`list-platforms`](#terraform-provider-list-platforms-subcommand) - Retrieve a paginated list of Terraform provider platforms.
+- [`list-versions`](#terraform-provider-list-versions-subcommand) - Retrieve a paginated list of terraform provider versions.
+- [`update`](#terraform-provider-update-subcommand) - Update a terraform provider.
 - [`upload-version`](#terraform-provider-upload-version-subcommand) - Upload a new Terraform provider version to the provider registry.
   
 The provider registry stores Terraform providers with versioning
-support. Use terraform-provider commands to create providers and
-upload provider versions to the registry.
+support. Use terraform-provider commands to create, get, list,
+update, delete providers, upload versions, manage versions and
+platforms.
   
 ---
 ### terraform-provider create subcommand
@@ -2171,6 +3185,287 @@ Set to false to allow all groups to view and use the terraform provider.\
 #### repository-url
 
 The repository URL for this terraform provider.
+
+
+---
+### terraform-provider delete subcommand
+**Delete a terraform provider.**
+  
+Permanently removes a Terraform provider and all
+its versions. This operation is irreversible.
+  
+```bash
+tharsis terraform-provider delete trn:terraform_provider:<group_path>/<provider_name>
+```
+  
+#### Options
+  
+---
+### terraform-provider delete-platform subcommand
+**Delete a Terraform provider platform.**
+  
+Permanently removes a Terraform provider platform
+binary. This operation is irreversible.
+  
+```bash
+tharsis terraform-provider delete-platform <id>
+```
+  
+#### Options
+  
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+### terraform-provider delete-version subcommand
+**Delete a terraform provider version.**
+  
+Permanently removes a Terraform provider version
+and all its platforms. This operation is
+irreversible.
+  
+```bash
+tharsis terraform-provider delete-version <provider-version-id>
+```
+  
+#### Options
+  
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+### terraform-provider get subcommand
+**Get a terraform provider.**
+  
+Retrieves details about a Terraform provider
+including its name, group, repository URL, and
+privacy setting.
+  
+```bash
+tharsis terraform-provider get trn:terraform_provider:<group_path>/<provider_name>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### terraform-provider get-platform subcommand
+**Get a terraform provider platform by ID or TRN.**
+  
+Retrieves details about a Terraform provider
+platform including its OS, architecture, and
+binary upload status.
+  
+```bash
+tharsis terraform-provider get-platform <provider-platform-id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### terraform-provider get-version subcommand
+**Get a terraform provider version by ID or TRN.**
+  
+Retrieves details about a Terraform provider
+version including its semantic version and upload
+status.
+  
+```bash
+tharsis terraform-provider get-version <provider-version-id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### terraform-provider list subcommand
+**Retrieve a paginated list of terraform providers.**
+  
+Lists Terraform providers within a group with
+pagination and sorting.
+  
+```bash
+tharsis terraform-provider list -group-id "trn:group:<group_path>" -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### group-id <span style={{color:'red'}}>*</span>
+
+Group ID to list terraform providers for.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### search
+
+Filter to terraform providers containing this substring.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `NAME_ASC`, `NAME_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+
+---
+### terraform-provider list-platforms subcommand
+**Retrieve a paginated list of Terraform provider platforms.**
+  
+Lists platforms for a Terraform provider. Filter
+by provider version, OS, or architecture.
+  
+```bash
+tharsis terraform-provider list-platforms \
+  -provider-version-id "<version_id>" \
+  -operating-system "linux" \
+  -architecture "amd64" \
+  -json
+```
+  
+#### Options
+  
+#### architecture
+
+Filter to platforms with this architecture.
+
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### operating-system
+
+Filter to platforms with this operating system.
+
+#### provider-id
+
+Filter to platforms for this provider.
+
+#### provider-version-id
+
+Filter to platforms for this provider version.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+
+---
+### terraform-provider list-versions subcommand
+**Retrieve a paginated list of terraform provider versions.**
+  
+Lists versions of a Terraform provider with
+pagination and sorting. Filter by semantic version
+or latest only.
+  
+```bash
+tharsis terraform-provider list-versions \
+  -provider-id "<provider_id>" \
+  -sort-by "CREATED_AT_DESC" \
+  -limit 10
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### latest
+
+Filter to only the latest version.\
+**Conflicts:** `semantic-version`
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### provider-id <span style={{color:'red'}}>*</span>
+
+Provider ID or TRN to list versions for.
+
+#### semantic-version
+
+Filter to a specific semantic version.\
+**Conflicts:** `latest`
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `CREATED_AT_ASC`, `CREATED_AT_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`, `VERSION_ASC`, `VERSION_DESC`
+
+
+---
+### terraform-provider update subcommand
+**Update a terraform provider.**
+  
+Updates a Terraform provider's repository URL or
+privacy setting.
+  
+```bash
+tharsis terraform-provider update \
+  -repository-url "https://github.com/example/terraform-provider-example" \
+  <terraform_provider_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+#### private
+
+Set to false to allow all groups to view and use the terraform provider.
+
+#### repository-url
+
+The repository URL for this terraform provider.
+
+#### version
+
+Optimistic locking version. Usually not required.
 
 
 ---
@@ -2474,6 +3769,551 @@ Working directory for terraform. If omitted, a persistent cache directory keyed 
 #### workspace <span style={{color:'red'}}>*</span>
 
 The Tharsis workspace path or TRN (e.g. my/group/workspace or trn:workspace:my/group/workspace).
+
+
+---
+## user command
+**Do operations on users.**
+  
+**Subcommands:**
+  
+- [`create`](#user-create-subcommand) - Create a new user.
+- [`delete`](#user-delete-subcommand) - Delete a user.
+- [`get`](#user-get-subcommand) - Get a user.
+- [`list`](#user-list-subcommand) - Retrieve a paginated list of users.
+  
+Users represent individuals who can access Tharsis. Use user
+commands to list and get user details.
+  
+---
+### user create subcommand
+**Create a new user.**
+  
+Creates a new user account with the given
+email address. Use -admin to grant
+administrator privileges.
+  
+```bash
+tharsis user create -email "<email>" -admin <username>
+```
+  
+#### Options
+  
+#### admin
+
+Whether the user is an admin.\
+**Default:** `false`
+
+#### email <span style={{color:'red'}}>*</span>
+
+Email address for the user.
+
+#### json
+
+Show final output as JSON.
+
+#### password
+
+Password for the user.
+
+
+---
+### user delete subcommand
+**Delete a user.**
+  
+Permanently deletes a user. This is
+irreversible and removes all memberships
+and access for the user.
+  
+```bash
+tharsis user delete <user_id>
+```
+  
+---
+### user get subcommand
+**Get a user.**
+  
+Returns user details including username,
+email, and admin status.
+  
+```bash
+tharsis user get <user_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### user list subcommand
+**Retrieve a paginated list of users.**
+  
+Returns a paginated list of users with
+sorting support. Use -search to filter
+by username or email.
+  
+```bash
+tharsis user list -search "<name>" -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### search
+
+Filter to users containing this substring.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+
+---
+## vcs-provider command
+**Do operations on VCS providers.**
+  
+**Subcommands:**
+  
+- [`create`](#vcs-provider-create-subcommand) - Create a new VCS provider.
+- [`create-run`](#vcs-provider-create-run-subcommand) - Create a run from a VCS repository.
+- [`delete`](#vcs-provider-delete-subcommand) - Delete a VCS provider.
+- [`get`](#vcs-provider-get-subcommand) - Get a VCS provider.
+- [`list`](#vcs-provider-list-subcommand) - Retrieve a paginated list of VCS providers.
+- [`reset-oauth-token`](#vcs-provider-reset-oauth-token-subcommand) - Reset the OAuth token for a VCS provider.
+- [`update`](#vcs-provider-update-subcommand) - Update a VCS provider.
+  
+VCS providers integrate GitHub or GitLab for automatic run
+triggering. Use vcs-provider commands to create, update,
+delete, list, get, reset OAuth tokens, and create runs.
+  
+---
+### vcs-provider create subcommand
+**Create a new VCS provider.**
+  
+Creates a new VCS provider that establishes an
+OAuth-authenticated connection between Tharsis and GitHub
+or GitLab. VCS providers are created within a group and
+inherited by child groups. Requires an OAuth application
+ID and secret from the host provider. Returns an OAuth
+authorization URL that must be visited to complete setup.
+  
+```bash
+tharsis vcs-provider create \
+  -group-id "trn:group:<group_path>" \
+  -type "GITHUB" \
+  -oauth-client-id "<client_id>" \
+  -oauth-client-secret "<client_secret>" \
+  -auto-create-webhooks \
+  <name>
+```
+  
+#### Options
+  
+#### auto-create-webhooks
+
+Automatically create webhooks.\
+**Default:** `false`
+
+#### description
+
+Description for the VCS provider.
+
+#### group-id <span style={{color:'red'}}>*</span>
+
+Group ID or TRN where the VCS provider will be created.
+
+#### json
+
+Show final output as JSON.
+
+#### oauth-client-id <span style={{color:'red'}}>*</span>
+
+OAuth client ID.
+
+#### oauth-client-secret <span style={{color:'red'}}>*</span>
+
+OAuth client secret.
+
+#### type <span style={{color:'red'}}>*</span>
+
+VCS provider type.\
+**Values:** `GITHUB`, `GITLAB`
+
+#### url
+
+Custom URL for self-hosted VCS instances.
+
+
+---
+### vcs-provider create-run subcommand
+**Create a run from a VCS repository.**
+  
+Manually triggers a Terraform run using
+the configuration from the workspace's
+linked VCS repository. Optionally specify
+a Git reference (branch or tag) with
+-reference-name. Use -destroy to create
+a destroy run.
+  
+```bash
+tharsis vcs-provider create-run -reference-name "<reference>" <workspace_id>
+```
+  
+#### Options
+  
+#### destroy
+
+Create a destroy run.\
+**Default:** `false`
+
+#### reference-name
+
+Git reference name (e.g. refs/heads/main, refs/tags/v1.0.0).
+
+
+---
+### vcs-provider delete subcommand
+**Delete a VCS provider.**
+  
+Permanently removes a VCS provider, severing the OAuth
+connection and unlinking all connected workspaces. This
+operation is irreversible. Use -force to delete even if
+linked to workspaces (prompts for confirmation).
+  
+```bash
+tharsis vcs-provider delete -force <vcs_provider_id>
+```
+  
+#### Options
+  
+#### force
+
+Force delete even if linked to workspaces.
+
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+### vcs-provider get subcommand
+**Get a VCS provider.**
+  
+Retrieves details about a VCS provider including its type
+(GitHub or GitLab), URL, auto-create webhooks setting, and
+associated group.
+  
+```bash
+tharsis vcs-provider get <vcs_provider_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### vcs-provider list subcommand
+**Retrieve a paginated list of VCS providers.**
+  
+Lists VCS providers within a namespace. Providers are
+inherited from parent groups and can be filtered with
+-include-inherited. Supports pagination and sorting.
+  
+```bash
+tharsis vcs-provider list -namespace-path "<group_path>" -include-inherited -json
+```
+  
+#### Options
+  
+#### cursor
+
+The cursor string for manual pagination.
+
+#### include-inherited
+
+Include VCS providers inherited from parent groups.\
+**Default:** `false`
+
+#### json
+
+Show final output as JSON.
+
+#### limit
+
+Maximum number of result elements to return.\
+**Default:** `100`
+
+#### namespace-path <span style={{color:'red'}}>*</span>
+
+Namespace path to list VCS providers for.
+
+#### search
+
+Filter to VCS providers containing this substring.
+
+#### sort-by
+
+Sort by this field.\
+**Values:** `CREATED_AT_ASC`, `CREATED_AT_DESC`, `GROUP_LEVEL_ASC`, `GROUP_LEVEL_DESC`, `UPDATED_AT_ASC`, `UPDATED_AT_DESC`
+
+
+---
+### vcs-provider reset-oauth-token subcommand
+**Reset the OAuth token for a VCS provider.**
+  
+Invalidates the current OAuth token for a
+VCS provider and generates a new
+authorization URL. The URL must be visited
+in a browser to reauthorize the VCS
+provider with the OAuth application.
+Useful after updating OAuth credentials or
+if the token has been compromised.
+  
+```bash
+tharsis vcs-provider reset-oauth-token <provider_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### vcs-provider update subcommand
+**Update a VCS provider.**
+  
+Updates a VCS provider's description and OAuth credentials
+(application ID and secret). After updating OAuth
+credentials, you may need to reset the OAuth token to
+reauthorize the connection.
+  
+```bash
+tharsis vcs-provider update \
+  -description "<description>" \
+  <vcs_provider_id>
+```
+  
+#### Options
+  
+#### description
+
+Description for the VCS provider.
+
+#### json
+
+Show final output as JSON.
+
+#### oauth-client-id
+
+OAuth client ID.
+
+#### oauth-client-secret
+
+OAuth client secret.
+
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+## vcs-provider-link command
+**Do operations on workspace VCS provider links.**
+  
+**Subcommands:**
+  
+- [`create`](#vcs-provider-link-create-subcommand) - Link a workspace to a VCS provider.
+- [`delete`](#vcs-provider-link-delete-subcommand) - Delete a workspace VCS provider link.
+- [`get`](#vcs-provider-link-get-subcommand) - Get a workspace VCS provider link.
+- [`update`](#vcs-provider-link-update-subcommand) - Update a workspace VCS provider link.
+  
+VCS provider links connect workspaces to VCS repositories for
+automatic run triggering. Use vcs-provider-link commands to
+create, update, delete, and get workspace VCS provider links.
+  
+---
+### vcs-provider-link create subcommand
+**Link a workspace to a VCS provider.**
+  
+Connects a workspace to a VCS repository,
+enabling automatic runs on commits to the
+configured branch. A workspace can only be
+linked to one VCS provider. Configure glob
+patterns to trigger runs only when specific
+files change, and enable auto-speculative-plan
+for automatic plan previews on pull/merge requests.
+The repository path cannot be changed after creation.
+  
+```bash
+tharsis vcs-provider-link create \
+  -workspace-id "<workspace_id>" \
+  -provider-id "<provider_id>" \
+  -repository-path "<repository_path>" \
+  -branch "<branch>" \
+  -auto-speculative-plan
+```
+  
+#### Options
+  
+#### auto-speculative-plan
+
+Automatically create speculative plans for pull requests.\
+**Default:** `false`
+
+#### branch
+
+Branch to track.
+
+#### glob-pattern <span style={{color:'green'}}>...</span>
+
+Glob pattern to filter file changes.
+
+#### json
+
+Show final output as JSON.
+
+#### module-directory
+
+Subdirectory containing the Terraform module.
+
+#### provider-id <span style={{color:'red'}}>*</span>
+
+VCS provider ID or TRN to link.
+
+#### repository-path <span style={{color:'red'}}>*</span>
+
+Repository path (e.g. owner/repo).
+
+#### tag-regex
+
+Tag regex pattern to trigger runs.
+
+#### webhook-disabled
+
+Disable webhook creation.\
+**Default:** `false`
+
+#### workspace-id <span style={{color:'red'}}>*</span>
+
+Workspace ID or TRN to link.
+
+
+---
+### vcs-provider-link delete subcommand
+**Delete a workspace VCS provider link.**
+  
+Disconnects the workspace from its VCS
+repository and removes the associated
+webhook. Use -force if the webhook cannot
+be removed from the VCS host.
+  
+```bash
+tharsis vcs-provider-link delete -force <link_id>
+```
+  
+#### Options
+  
+#### force
+
+Force delete even if the webhook cannot be removed.
+
+#### version
+
+Optimistic locking version. Usually not required.
+
+
+---
+### vcs-provider-link get subcommand
+**Get a workspace VCS provider link.**
+  
+Retrieves details about a workspace VCS
+provider link, including its repository
+path, branch, module directory, tag regex,
+glob patterns, and webhook settings.
+  
+```bash
+tharsis vcs-provider-link get <link_id>
+```
+  
+#### Options
+  
+#### json
+
+Show final output as JSON.
+
+
+---
+### vcs-provider-link update subcommand
+**Update a workspace VCS provider link.**
+  
+Updates an existing workspace VCS provider
+link. All fields except the repository
+path can be modified, including branch,
+module directory, tag regex, glob patterns,
+speculative plan settings, and webhook
+configuration.
+  
+```bash
+tharsis vcs-provider-link update \
+  -branch "<branch>" \
+  -auto-speculative-plan \
+  <link_id>
+```
+  
+#### Options
+  
+#### auto-speculative-plan
+
+Automatically create speculative plans for pull requests.
+
+#### branch
+
+Branch to track.
+
+#### glob-pattern <span style={{color:'green'}}>...</span>
+
+Glob pattern to filter file changes. Can be specified multiple times.
+
+#### json
+
+Show final output as JSON.
+
+#### module-directory
+
+Subdirectory containing the Terraform module.
+
+#### tag-regex
+
+Tag regex pattern to trigger runs.
+
+#### version
+
+Optimistic locking version. Usually not required.
+
+#### webhook-disabled
+
+Disable webhook creation.
 
 
 ---

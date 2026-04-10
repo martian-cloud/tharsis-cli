@@ -22,10 +22,6 @@ const (
 	// because ISO dates are hard to scan quickly in CLI output.
 	humanTimeFormat = "January 2 2006, 3:04:05 PM MST"
 
-	// maxValueLen prevents single field values from dominating
-	// the named-values display (e.g. long descriptions or paths).
-	maxValueLen = 120
-
 	// ellipsis is appended to truncated column values in table output.
 	ellipsis = "..."
 )
@@ -69,10 +65,6 @@ func ProtoToNamedValues(msg proto.Message) []terminal.NamedValue {
 		s := formatValue(f.value)
 		if s == "" {
 			continue
-		}
-
-		if len(s) > maxValueLen {
-			s = s[:maxValueLen] + "..."
 		}
 
 		values = append(values, terminal.NamedValue{Name: f.name, Value: s})
