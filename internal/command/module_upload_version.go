@@ -26,6 +26,7 @@ type moduleUploadVersionCommand struct {
 	sg            terminal.StepGroup
 	directoryPath *string
 	version       *string
+	toJSON        *bool
 }
 
 var _ Command = (*moduleUploadVersionCommand)(nil)
@@ -57,6 +58,11 @@ func (c *moduleUploadVersionCommand) Run(args []string) int {
 		WithClient(true),
 	); code != 0 {
 		return code
+	}
+
+	// Suppress step group output when JSON is requested.
+	if c.toJSON != nil && *c.toJSON {
+		c.sg = terminal.NewNoopUI().StepGroup()
 	}
 
 	dirStat, err := os.Stat(*c.directoryPath)
@@ -102,8 +108,8 @@ func (c *moduleUploadVersionCommand) Run(args []string) int {
 	}
 
 	c.sg.Wait()
-	c.UI.Successf("\nModule version uploaded successfully!")
-	return 0
+
+	return c.Output(moduleVersion, c.toJSON)
 }
 
 func (c *moduleUploadVersionCommand) getModule() (module *pb.TerraformModule, err error) {
@@ -224,7 +230,9 @@ func (*moduleUploadVersionCommand) Synopsis() string {
 func (*moduleUploadVersionCommand) Description() string {
 	return `
    Packages and uploads a new module version to the
-   registry.
+   registry. Use -json to output the created module
+   version as JSON and suppress progress updates,
+   useful for piping the digest to cosign.
 `
 }
 
@@ -254,6 +262,11 @@ func (c *moduleUploadVersionCommand) Flags() *flag.Set {
 		"version",
 		"The semantic version for the new module version.",
 		flag.Required(),
+	)
+	f.BoolVar(
+		&c.toJSON,
+		"json",
+		"Output the module digest as JSON.",
 	)
 
 	return f

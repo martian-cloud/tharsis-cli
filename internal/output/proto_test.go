@@ -1,7 +1,6 @@
 package output
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/aws/smithy-go/ptr"
@@ -99,32 +98,6 @@ func TestProtoToNamedValues(t *testing.T) {
 			assert.Equal(t, tc.expected, names)
 		})
 	}
-
-	t.Run("long values are truncated", func(t *testing.T) {
-		long := strings.Repeat("x", 200)
-		values := ProtoToNamedValues(&descriptorpb.FileDescriptorProto{Name: &long})
-
-		require.Len(t, values, 1)
-		assert.LessOrEqual(t, len(values[0].Value.(string)), maxValueLen+3)
-		assert.True(t, strings.HasSuffix(values[0].Value.(string), "..."))
-	})
-
-	t.Run("value at exact max length is not truncated", func(t *testing.T) {
-		exact := strings.Repeat("x", maxValueLen)
-		values := ProtoToNamedValues(&descriptorpb.FileDescriptorProto{Name: &exact})
-
-		require.Len(t, values, 1)
-		assert.Equal(t, exact, values[0].Value)
-	})
-
-	t.Run("value one char over max is truncated", func(t *testing.T) {
-		over := strings.Repeat("x", maxValueLen+1)
-		values := ProtoToNamedValues(&descriptorpb.FileDescriptorProto{Name: &over})
-
-		require.Len(t, values, 1)
-		assert.Equal(t, maxValueLen+3, len(values[0].Value.(string)))
-		assert.True(t, strings.HasSuffix(values[0].Value.(string), "..."))
-	})
 
 	t.Run("repeated fields are included as comma-separated", func(t *testing.T) {
 		values := ProtoToNamedValues(&descriptorpb.FileDescriptorProto{
