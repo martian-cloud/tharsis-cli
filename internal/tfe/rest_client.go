@@ -124,21 +124,14 @@ func (c *restClient) UploadConfigurationVersion(ctx context.Context, input *Uplo
 		return fmt.Errorf("service url for %q not found", provider.TFEServiceID)
 	}
 
-	tarFile, err := os.CreateTemp("", "config-version-*.tar.gz")
-	if err != nil {
-		return fmt.Errorf("failed to create temp tar file: %w", err)
-	}
-	tarPath := tarFile.Name()
-	tarFile.Close() // Close immediately, NewSlug will reopen it
-	defer os.Remove(tarPath)
-
-	s, err := slug.NewSlug(input.DirectoryPath, tarPath)
+	s, err := slug.NewSlug(input.DirectoryPath)
 	if err != nil {
 		return fmt.Errorf("failed to create slug: %w", err)
 	}
+	defer os.Remove(s.SlugPath)
 
 	// Get actual file size
-	fileInfo, err := os.Stat(tarPath)
+	fileInfo, err := os.Stat(s.SlugPath)
 	if err != nil {
 		return fmt.Errorf("failed to stat slug file: %w", err)
 	}
