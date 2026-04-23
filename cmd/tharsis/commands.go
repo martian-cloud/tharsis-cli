@@ -68,6 +68,7 @@ func commands(baseCommand *command.BaseCommand, globalFlags *flag.Set) (map[stri
 		"module get-version":                       command.NewModuleGetVersionCommandFactory(baseCommand),
 		"module delete-version":                    command.NewModuleDeleteVersionCommandFactory(baseCommand),
 		"module upload-version":                    command.NewModuleUploadVersionCommandFactory(baseCommand),
+		"module digest":                            command.NewModuleDigestCommandFactory(baseCommand),
 		"plan":                                     command.NewPlanCommandFactory(baseCommand),
 		"role":                                     command.NewHelpCommandFactory(getHelpText("role")),
 		"role get":                                 command.NewRoleGetCommandFactory(baseCommand),
