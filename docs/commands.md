@@ -1619,6 +1619,7 @@ List memberships for this user.\
 - [`delete`](#module-delete-subcommand) - Delete a Terraform module.
 - [`delete-attestation`](#module-delete-attestation-subcommand) - Delete a module attestation.
 - [`delete-version`](#module-delete-version-subcommand) - Delete a module version.
+- [`digest`](#module-digest-subcommand) - Compute the SHA256 digest for a module version package.
 - [`get`](#module-get-subcommand) - Get a single Terraform module.
 - [`get-attestation`](#module-get-attestation-subcommand) - Get a module attestation.
 - [`get-version`](#module-get-version-subcommand) - Get a module version by ID or TRN.
@@ -1740,6 +1741,32 @@ tharsis module delete-version trn:terraform_module_version:<group_path>/<module_
 #### version
 
 Optimistic locking version. Usually not required.
+
+
+---
+### module digest subcommand
+**Compute the SHA256 digest for a module version package.**
+  
+Packages the module directory and returns its SHA256
+digest. Useful for verifying deterministic builds or
+pre-computing the digest before uploading.
+  
+```bash
+tharsis module digest -directory-path "./my-module"
+tharsis module digest -directory-path "./my-module" -json
+```
+  
+#### Options
+  
+#### directory-path
+
+The path of the terraform module's directory.\
+**Default:** `.`
+
+#### json
+
+Show final output as JSON.\
+**Default:** `false`
 
 
 ---
