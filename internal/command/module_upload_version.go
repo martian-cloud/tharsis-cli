@@ -132,18 +132,12 @@ func (c *moduleUploadVersionCommand) createModulePackage() (slugPath string, sha
 	step := c.sg.Add("Create module package")
 	defer func() { c.finalizeStep(step, err) }()
 
-	slugFile, err := os.CreateTemp("", "terraform-slug.tgz")
+	s, err := slug.NewSlug(*c.directoryPath)
 	if err != nil {
 		return "", nil, err
 	}
 
-	s, err := slug.NewSlug(*c.directoryPath, slugFile.Name())
-	if err != nil {
-		os.Remove(slugFile.Name())
-		return "", nil, err
-	}
-
-	return slugFile.Name(), s.SHASum, nil
+	return s.SlugPath, s.SHASum, nil
 }
 
 func (c *moduleUploadVersionCommand) createModuleVersion(moduleID string, shaSum []byte) (version *pb.TerraformModuleVersion, err error) {

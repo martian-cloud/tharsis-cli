@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,21 +15,21 @@ func TestNewSlug(t *testing.T) {
 		srcDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte(`resource "null" "test" {}`), 0o600))
 
-		slugPath := filepath.Join(t.TempDir(), "test.tar.gz")
-		s, err := NewSlug(srcDir, slugPath)
+		s, err := NewSlug(srcDir)
 
 		require.NoError(t, err)
-		assert.Equal(t, slugPath, s.SlugPath)
+		defer os.Remove(s.SlugPath)
+		assert.NotEmpty(t, s.SlugPath)
 		assert.NotEmpty(t, s.SHASum)
 		assert.Greater(t, s.Size, int64(0))
 
-		info, err := os.Stat(slugPath)
+		info, err := os.Stat(s.SlugPath)
 		require.NoError(t, err)
 		assert.Greater(t, info.Size(), int64(0))
 	})
 
 	t.Run("errors on nonexistent directory", func(t *testing.T) {
-		_, err := NewSlug("/nonexistent/path", filepath.Join(t.TempDir(), "test.tar.gz"))
+		_, err := NewSlug("/nonexistent/path")
 
 		assert.Error(t, err)
 	})
@@ -37,7 +38,7 @@ func TestNewSlug(t *testing.T) {
 		file := filepath.Join(t.TempDir(), "notadir.txt")
 		require.NoError(t, os.WriteFile(file, []byte("hello"), 0o600))
 
-		_, err := NewSlug(file, filepath.Join(t.TempDir(), "test.tar.gz"))
+		_, err := NewSlug(file)
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "not a directory")
@@ -47,11 +48,33 @@ func TestNewSlug(t *testing.T) {
 		srcDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte(`resource "null" "test" {}`), 0o600))
 
-		s1, err := NewSlug(srcDir, filepath.Join(t.TempDir(), "a.tar.gz"))
+		s1, err := NewSlug(srcDir)
 		require.NoError(t, err)
+		defer os.Remove(s1.SlugPath)
 
-		s2, err := NewSlug(srcDir, filepath.Join(t.TempDir(), "b.tar.gz"))
+		s2, err := NewSlug(srcDir)
 		require.NoError(t, err)
+		defer os.Remove(s2.SlugPath)
+
+		assert.Equal(t, s1.SHASum, s2.SHASum)
+	})
+
+	t.Run("digest is stable after changing file timestamps", func(t *testing.T) {
+		srcDir := t.TempDir()
+		filePath := filepath.Join(srcDir, "main.tf")
+		require.NoError(t, os.WriteFile(filePath, []byte(`resource "null" "test" {}`), 0o600))
+
+		s1, err := NewSlug(srcDir)
+		require.NoError(t, err)
+		defer os.Remove(s1.SlugPath)
+
+		// Change the file's modification time.
+		future := time.Now().Add(48 * time.Hour)
+		require.NoError(t, os.Chtimes(filePath, future, future))
+
+		s2, err := NewSlug(srcDir)
+		require.NoError(t, err)
+		defer os.Remove(s2.SlugPath)
 
 		assert.Equal(t, s1.SHASum, s2.SHASum)
 	})
@@ -61,9 +84,9 @@ func TestSlugOpen(t *testing.T) {
 	srcDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# test"), 0o600))
 
-	slugPath := filepath.Join(t.TempDir(), "test.tar.gz")
-	s, err := NewSlug(srcDir, slugPath)
+	s, err := NewSlug(srcDir)
 	require.NoError(t, err)
+	defer os.Remove(s.SlugPath)
 
 	reader, err := s.Open()
 	require.NoError(t, err)
