@@ -223,18 +223,12 @@ func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*uploadM
 			return nil, nil, fmt.Errorf("path is not a directory: %s", directoryPath)
 		}
 
-		// Create temporary slug file
-		slugFile, err := os.CreateTemp("", "terraform-slug.tgz")
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create temporary package file: %w", err)
-		}
-		defer os.Remove(slugFile.Name())
-
 		// Create the module package
-		moduleSlug, err := slug.NewSlug(directoryPath, slugFile.Name())
+		moduleSlug, err := slug.NewSlug(directoryPath)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create module package: %w", err)
 		}
+		defer os.Remove(moduleSlug.SlugPath)
 
 		// Create module version with SHA sum
 		version, err := tc.grpcClient.TerraformModulesClient.CreateTerraformModuleVersion(ctx, &pb.CreateTerraformModuleVersionRequest{
@@ -249,7 +243,7 @@ func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*uploadM
 		// Upload the module version
 		if err := tc.tfeClient.UploadModuleVersion(ctx, &tfe.UploadModuleVersionInput{
 			ModuleVersionID: version.Metadata.Id,
-			PackagePath:     slugFile.Name(),
+			PackagePath:     moduleSlug.SlugPath,
 		}); err != nil {
 			// Delete the version on upload failure
 			_, _ = tc.grpcClient.TerraformModulesClient.DeleteTerraformModuleVersion(ctx, &pb.DeleteTerraformModuleVersionRequest{Id: version.Metadata.Id})
