@@ -4181,7 +4181,7 @@ tharsis vcs-provider delete -force <vcs_provider_id>
   
 #### Options
   
-#### force
+#### force, f
 
 Force delete even if linked to workspaces.
 
@@ -4413,7 +4413,7 @@ tharsis vcs-provider-link delete -force <link_id>
   
 #### Options
   
-#### force
+#### force, f
 
 Force delete even if the webhook cannot be removed.
 
