@@ -85,6 +85,7 @@ func (c *vcsProviderLinkDeleteCommand) Flags() *flag.Set {
 		&c.force,
 		"force",
 		"Force delete even if the webhook cannot be removed.",
+		flag.Aliases("f"),
 	)
 	f.Int64Var(
 		&c.version,
