@@ -1,11 +1,11 @@
 module gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli
 
-go 1.25.6
+go 1.25.8
 
 require (
 	github.com/alecthomas/chroma/v2 v2.23.1
 	github.com/apparentlymart/go-versions v1.0.3
-	github.com/aws/smithy-go v1.24.3
+	github.com/aws/smithy-go v1.25.0
 	github.com/bgentry/speakeasy v0.2.0
 	github.com/briandowns/spinner v1.23.2
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
@@ -33,25 +33,22 @@ require (
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zclconf/go-cty v1.18.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.85.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.87.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/term v0.41.0
-	golang.org/x/text v0.35.0
+	golang.org/x/term v0.42.0
+	golang.org/x/text v0.36.0
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 )
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
-	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/RoaringBitmap/roaring/v2 v2.16.0 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
-	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
@@ -121,7 +118,7 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
-	github.com/spf13/afero v1.12.0 // indirect
+	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
@@ -133,14 +130,14 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.49.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/exp v0.0.0-20250210185358-939b2ce775ac // indirect
 	golang.org/x/mod v0.34.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

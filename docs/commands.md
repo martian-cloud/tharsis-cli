@@ -125,6 +125,11 @@ An environment variable as a key=value pair.
 
 The path to an environment variables file.
 
+#### include-module-prereleases
+
+When module-version is empty or a constraint range, allow prerelease module versions to be selected as latest.\
+**Default:** `false`
+
 #### input
 
 Ask for input for variables if not directly set.\
@@ -276,6 +281,11 @@ An environment variable as a key=value pair.
 #### env-var-file <span style={{color:'green'}}>...</span>
 
 The path to an environment variables file.
+
+#### include-module-prereleases
+
+When module-version is empty or a constraint range, allow prerelease module versions to be selected as latest.\
+**Default:** `false`
 
 #### input
 
@@ -2111,6 +2121,11 @@ An environment variable as a key=value pair.
 #### env-var-file <span style={{color:'green'}}>...</span>
 
 The path to an environment variables file.
+
+#### include-module-prereleases
+
+When module-version is empty or a constraint range, allow prerelease module versions to be selected as latest.\
+**Default:** `false`
 
 #### module-source
 
