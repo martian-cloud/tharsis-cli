@@ -148,16 +148,17 @@ func getRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getRunInput, *getRun
 
 // createRunInput is the input for the create_run tool.
 type createRunInput struct {
-	WorkspaceID            string   `json:"workspace_id" jsonschema:"required,Workspace ID or TRN (e.g. Ul8yZ... or trn:workspace:group/workspace-name)"`
-	ConfigurationVersionID *string  `json:"configuration_version_id,omitempty" jsonschema:"ID of an existing configuration version to use for this run"`
-	ModuleSource           *string  `json:"module_source,omitempty" jsonschema:"Source location of the Terraform module (e.g. registry.terraform.io/namespace/module)"`
-	ModuleVersion          *string  `json:"module_version,omitempty" jsonschema:"Version of the module to use (e.g. 1.0.0)"`
-	TerraformVersion       *string  `json:"terraform_version,omitempty" jsonschema:"Version of Terraform to use (e.g. 1.5.0)"`
-	IsDestroy              bool     `json:"is_destroy,omitempty" jsonschema:"True to destroy resources instead of creating/updating them"`
-	Speculative            *bool    `json:"speculative,omitempty" jsonschema:"True for a speculative plan (plan-only no apply will occur)"`
-	Refresh                bool     `json:"refresh,omitempty" jsonschema:"True to refresh the state"`
-	RefreshOnly            bool     `json:"refresh_only,omitempty" jsonschema:"True to only refresh the state without applying changes"`
-	TargetAddresses        []string `json:"target_addresses,omitempty" jsonschema:"List of resource addresses to target (e.g. aws_instance.example)"`
+	WorkspaceID              string   `json:"workspace_id" jsonschema:"required,Workspace ID or TRN (e.g. Ul8yZ... or trn:workspace:group/workspace-name)"`
+	ConfigurationVersionID   *string  `json:"configuration_version_id,omitempty" jsonschema:"ID of an existing configuration version to use for this run"`
+	ModuleSource             *string  `json:"module_source,omitempty" jsonschema:"Source location of the Terraform module (e.g. registry.terraform.io/namespace/module)"`
+	ModuleVersion            *string  `json:"module_version,omitempty" jsonschema:"Version of the module to use (e.g. 1.0.0)"`
+	TerraformVersion         *string  `json:"terraform_version,omitempty" jsonschema:"Version of Terraform to use (e.g. 1.5.0)"`
+	IsDestroy                bool     `json:"is_destroy,omitempty" jsonschema:"True to destroy resources instead of creating/updating them"`
+	Speculative              *bool    `json:"speculative,omitempty" jsonschema:"True for a speculative plan (plan-only no apply will occur)"`
+	Refresh                  bool     `json:"refresh,omitempty" jsonschema:"True to refresh the state"`
+	RefreshOnly              bool     `json:"refresh_only,omitempty" jsonschema:"True to only refresh the state without applying changes"`
+	IncludeModulePrereleases *bool    `json:"include_module_prereleases,omitempty" jsonschema:"When module_version is empty or a constraint range, allow prerelease module versions to be selected as latest"`
+	TargetAddresses          []string `json:"target_addresses,omitempty" jsonschema:"List of resource addresses to target (e.g. aws_instance.example)"`
 }
 
 // createRunOutput is the output for the create_run tool.
@@ -182,16 +183,17 @@ func createRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createRunInput, *
 		}
 
 		resp, err := tc.grpcClient.RunsClient.CreateRun(ctx, &pb.CreateRunRequest{
-			WorkspaceId:            input.WorkspaceID,
-			ConfigurationVersionId: input.ConfigurationVersionID,
-			ModuleSource:           input.ModuleSource,
-			ModuleVersion:          input.ModuleVersion,
-			TerraformVersion:       input.TerraformVersion,
-			IsDestroy:              input.IsDestroy,
-			Speculative:            input.Speculative,
-			Refresh:                input.Refresh,
-			RefreshOnly:            input.RefreshOnly,
-			TargetAddresses:        input.TargetAddresses,
+			WorkspaceId:              input.WorkspaceID,
+			ConfigurationVersionId:   input.ConfigurationVersionID,
+			ModuleSource:             input.ModuleSource,
+			ModuleVersion:            input.ModuleVersion,
+			TerraformVersion:         input.TerraformVersion,
+			IsDestroy:                input.IsDestroy,
+			Speculative:              input.Speculative,
+			Refresh:                  input.Refresh,
+			RefreshOnly:              input.RefreshOnly,
+			IncludeModulePrereleases: input.IncludeModulePrereleases,
+			TargetAddresses:          input.TargetAddresses,
 		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create run in workspace %q: %w", input.WorkspaceID, err)

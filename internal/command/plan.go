@@ -11,18 +11,19 @@ import (
 type planCommand struct {
 	*BaseCommand
 
-	directoryPath    *string
-	moduleSource     *string
-	moduleVersion    *string
-	terraformVersion *string
-	tfVarFiles       []string
-	envVarFiles      []string
-	tfVariables      []string
-	envVariables     []string
-	targetAddresses  []string
-	destroy          *bool
-	refresh          *bool
-	refreshOnly      *bool
+	directoryPath            *string
+	moduleSource             *string
+	moduleVersion            *string
+	terraformVersion         *string
+	tfVarFiles               []string
+	envVarFiles              []string
+	tfVariables              []string
+	envVariables             []string
+	targetAddresses          []string
+	destroy                  *bool
+	refresh                  *bool
+	refreshOnly              *bool
+	includeModulePrereleases *bool
 }
 
 var _ Command = (*planCommand)(nil)
@@ -74,20 +75,21 @@ func (c *planCommand) Run(args []string) int {
 	}
 
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
-		WorkspaceID:      trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
-		DirectoryPath:    c.directoryPath,
-		ModuleSource:     c.moduleSource,
-		ModuleVersion:    c.moduleVersion,
-		TerraformVersion: c.terraformVersion,
-		TfVarFiles:       c.tfVarFiles,
-		EnvVarFiles:      c.envVarFiles,
-		TfVariables:      c.tfVariables,
-		EnvVariables:     c.envVariables,
-		TargetAddresses:  c.targetAddresses,
-		IsDestroy:        *c.destroy,
-		IsSpeculative:    true,
-		Refresh:          *c.refresh,
-		RefreshOnly:      *c.refreshOnly,
+		WorkspaceID:              trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		DirectoryPath:            c.directoryPath,
+		ModuleSource:             c.moduleSource,
+		ModuleVersion:            c.moduleVersion,
+		TerraformVersion:         c.terraformVersion,
+		TfVarFiles:               c.tfVarFiles,
+		EnvVarFiles:              c.envVarFiles,
+		TfVariables:              c.tfVariables,
+		EnvVariables:             c.envVariables,
+		TargetAddresses:          c.targetAddresses,
+		IsDestroy:                *c.destroy,
+		IsSpeculative:            true,
+		Refresh:                  *c.refresh,
+		RefreshOnly:              *c.refreshOnly,
+		IncludeModulePrereleases: *c.includeModulePrereleases,
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to plan")
@@ -173,6 +175,12 @@ func (c *planCommand) Flags() *flag.Set {
 		&c.refreshOnly,
 		"refresh-only",
 		"Whether to do ONLY a refresh operation.",
+		flag.Default(false),
+	)
+	f.BoolVar(
+		&c.includeModulePrereleases,
+		"include-module-prereleases",
+		"When module-version is empty or a constraint range, allow prerelease module versions to be selected as latest.",
 		flag.Default(false),
 	)
 	f.StringSliceVar(

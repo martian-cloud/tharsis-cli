@@ -1,8 +1,6 @@
 package tools
 
 import (
-	"fmt"
-
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/mcp/tools"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/prompts"
 )
@@ -178,10 +176,7 @@ func BuildToolsetGroup(readOnly bool, tc *ToolContext) (*tools.ToolsetGroup, err
 		)
 
 	// Documentation tools
-	docService, err := tools.NewDocumentSearchService(tc.httpClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create documentation search service: %w", err)
-	}
+	docService := tools.NewDocumentSearchService(tc.httpClient)
 
 	documentation := tools.NewToolset(ToolsetMetadataDocumentation).
 		AddReadTools(
