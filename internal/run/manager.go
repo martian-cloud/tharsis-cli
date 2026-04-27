@@ -49,6 +49,9 @@ type CreateRunInput struct {
 	IsSpeculative    bool
 	Refresh          bool
 	RefreshOnly      bool
+	// IncludeModulePrereleases, when true and ModuleVersion is unset or a constraint
+	// range, allows prerelease module versions to be selected as "latest".
+	IncludeModulePrereleases bool
 }
 
 // NewManager creates a new run manager
@@ -123,17 +126,18 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 
 	// Create run
 	createRunInput := &pb.CreateRunRequest{
-		WorkspaceId:            workspace.Metadata.Id,
-		ConfigurationVersionId: configVersionID,
-		IsDestroy:              input.IsDestroy,
-		ModuleSource:           input.ModuleSource,
-		ModuleVersion:          input.ModuleVersion,
-		Variables:              runVariables,
-		TargetAddresses:        input.TargetAddresses,
-		Refresh:                input.Refresh,
-		RefreshOnly:            input.RefreshOnly,
-		Speculative:            &input.IsSpeculative,
-		TerraformVersion:       input.TerraformVersion,
+		WorkspaceId:              workspace.Metadata.Id,
+		ConfigurationVersionId:   configVersionID,
+		IsDestroy:                input.IsDestroy,
+		ModuleSource:             input.ModuleSource,
+		ModuleVersion:            input.ModuleVersion,
+		Variables:                runVariables,
+		TargetAddresses:          input.TargetAddresses,
+		Refresh:                  input.Refresh,
+		RefreshOnly:              input.RefreshOnly,
+		Speculative:              &input.IsSpeculative,
+		TerraformVersion:         input.TerraformVersion,
+		IncludeModulePrereleases: &input.IncludeModulePrereleases,
 	}
 
 	m.logger.Debug("create run input", "input", createRunInput)
