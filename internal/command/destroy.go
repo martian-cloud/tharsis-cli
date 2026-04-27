@@ -12,18 +12,19 @@ import (
 type destroyCommand struct {
 	*BaseCommand
 
-	directoryPath    *string
-	moduleSource     *string
-	moduleVersion    *string
-	terraformVersion *string
-	tfVarFiles       []string
-	envVarFiles      []string
-	tfVariables      []string
-	envVariables     []string
-	targetAddresses  []string
-	autoApprove      *bool
-	input            *bool
-	refresh          *bool
+	directoryPath            *string
+	moduleSource             *string
+	moduleVersion            *string
+	terraformVersion         *string
+	tfVarFiles               []string
+	envVarFiles              []string
+	tfVariables              []string
+	envVariables             []string
+	targetAddresses          []string
+	autoApprove              *bool
+	input                    *bool
+	refresh                  *bool
+	includeModulePrereleases *bool
 }
 
 var _ Command = (*destroyCommand)(nil)
@@ -76,19 +77,20 @@ func (c *destroyCommand) Run(args []string) int {
 
 	// Create non-speculative destroy run
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
-		WorkspaceID:      trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
-		DirectoryPath:    c.directoryPath,
-		ModuleSource:     c.moduleSource,
-		ModuleVersion:    c.moduleVersion,
-		TerraformVersion: c.terraformVersion,
-		TfVarFiles:       c.tfVarFiles,
-		EnvVarFiles:      c.envVarFiles,
-		TfVariables:      c.tfVariables,
-		EnvVariables:     c.envVariables,
-		TargetAddresses:  c.targetAddresses,
-		IsDestroy:        true,
-		IsSpeculative:    false,
-		Refresh:          *c.refresh,
+		WorkspaceID:              trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		DirectoryPath:            c.directoryPath,
+		ModuleSource:             c.moduleSource,
+		ModuleVersion:            c.moduleVersion,
+		TerraformVersion:         c.terraformVersion,
+		TfVarFiles:               c.tfVarFiles,
+		EnvVarFiles:              c.envVarFiles,
+		TfVariables:              c.tfVariables,
+		EnvVariables:             c.envVariables,
+		TargetAddresses:          c.targetAddresses,
+		IsDestroy:                true,
+		IsSpeculative:            false,
+		Refresh:                  *c.refresh,
+		IncludeModulePrereleases: *c.includeModulePrereleases,
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to destroy")
@@ -202,6 +204,12 @@ func (c *destroyCommand) Flags() *flag.Set {
 		"refresh",
 		"Whether to do the usual refresh step.",
 		flag.Default(true),
+	)
+	f.BoolVar(
+		&c.includeModulePrereleases,
+		"include-module-prereleases",
+		"When module-version is empty or a constraint range, allow prerelease module versions to be selected as latest.",
+		flag.Default(false),
 	)
 	f.StringSliceVar(
 		&c.tfVarFiles,
