@@ -85,6 +85,7 @@ func (c *vcsProviderDeleteCommand) Flags() *flag.Set {
 		&c.force,
 		"force",
 		"Force delete even if linked to workspaces.",
+		flag.Aliases("f"),
 	)
 	f.Int64Var(
 		&c.version,

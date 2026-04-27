@@ -81,7 +81,7 @@ func AvailableToolsets() []string {
 }
 
 // BuildToolsetGroup creates and configures all toolsets for the CLI MCP server.
-func BuildToolsetGroup(readOnly bool, tc *ToolContext) (*tools.ToolsetGroup, error) {
+func BuildToolsetGroup(readOnly bool, tc *ToolContext) *tools.ToolsetGroup {
 	group := tools.NewToolsetGroup(readOnly)
 
 	// Authentication tools
@@ -236,5 +236,5 @@ func BuildToolsetGroup(readOnly bool, tc *ToolContext) (*tools.ToolsetGroup, err
 	group.AddToolset(terraformProviders)
 	group.AddToolset(terraformProviderPlatforms)
 
-	return group, nil
+	return group
 }

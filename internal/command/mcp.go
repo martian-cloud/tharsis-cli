@@ -106,12 +106,6 @@ func (c *mcpCommand) Run(args []string) int {
 		return 1
 	}
 
-	toolsetGroup, err := tools.BuildToolsetGroup(ptr.ToBool(c.readOnly), toolContext)
-	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to build toolset group")
-		return 1
-	}
-
 	var normalizedProfileName string
 	if c.CurrentProfileName != "default" {
 		// Normalize the profile name so it conforms to tool naming.
@@ -128,7 +122,7 @@ func (c *mcpCommand) Run(args []string) int {
 		EnabledTools:    enabledTools,
 		Prefix:          normalizedProfileName,
 		ReadOnly:        ptr.ToBool(c.readOnly),
-	}, toolsetGroup)
+	}, tools.BuildToolsetGroup(ptr.ToBool(c.readOnly), toolContext))
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create server")
 		return 1
