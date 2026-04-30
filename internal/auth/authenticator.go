@@ -21,7 +21,7 @@ type Authenticator interface {
 type Options struct {
 	logger     hclog.Logger
 	ui         terminal.UI
-	grpcClient *client.Client
+	grpcClient *client.GRPCClient
 }
 
 // Option is a functional option for authenticator options.
@@ -42,7 +42,7 @@ func WithUI(u terminal.UI) Option {
 }
 
 // WithGRPCClient sets the gRPC client.
-func WithGRPCClient(grpcClient *client.Client) Option {
+func WithGRPCClient(grpcClient *client.GRPCClient) Option {
 	return func(c *Options) {
 		c.grpcClient = grpcClient
 	}

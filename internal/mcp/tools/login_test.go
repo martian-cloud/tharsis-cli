@@ -83,7 +83,7 @@ func TestGetConnectionInfo(t *testing.T) {
 			toolCtx := &ToolContext{
 				tharsisURL:  tharsisURL,
 				profileName: tc.profileName,
-				grpcClient:  &client.Client{CallerIdentityClient: mockCaller},
+				grpcClient:  &client.GRPCClient{CallerIdentityClient: mockCaller},
 			}
 
 			_, handler := getConnectionInfo(toolCtx)

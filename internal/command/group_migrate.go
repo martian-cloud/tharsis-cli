@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupMigrateCommand struct {
@@ -51,7 +51,7 @@ func (c *groupMigrateCommand) Run(args []string) int {
 	}
 
 	input := &pb.MigrateGroupRequest{
-		GroupId:     trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		GroupId:     trn.TypeGroup.Normalize(c.arguments[0]),
 		NewParentId: c.newParentID,
 	}
 
@@ -99,7 +99,7 @@ func (c *groupMigrateCommand) Flags() *flag.Set {
 		"New parent path for the group.",
 		flag.Deprecated("use -new-parent-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return trn.TypeGroup.Build(s)
 		}),
 	)
 	f.BoolVar(

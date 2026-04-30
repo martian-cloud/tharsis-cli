@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -36,7 +36,7 @@ func TestAssignManagedIdentity(t *testing.T) {
 				ManagedIdentityID: "mi1",
 			},
 			mockSetup: func(m *managedIdentityMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.managedIdentities.On("AssignManagedIdentityToWorkspace", mock.Anything, &pb.AssignManagedIdentityToWorkspaceRequest{
 					ManagedIdentityId: "mi1",
 					WorkspaceId:       "ws1",
@@ -50,7 +50,7 @@ func TestAssignManagedIdentity(t *testing.T) {
 				ManagedIdentityID: "mi1",
 			},
 			mockSetup: func(m *managedIdentityMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -61,7 +61,7 @@ func TestAssignManagedIdentity(t *testing.T) {
 				ManagedIdentityID: "mi1",
 			},
 			mockSetup: func(m *managedIdentityMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.TypeWorkspace).Return(nil)
 				m.managedIdentities.On("AssignManagedIdentityToWorkspace", mock.Anything, &pb.AssignManagedIdentityToWorkspaceRequest{
 					ManagedIdentityId: "mi1",
 					WorkspaceId:       "nonexistent",
@@ -83,7 +83,7 @@ func TestAssignManagedIdentity(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					ManagedIdentitiesClient: testMocks.managedIdentities,
 				},
 				acl: testMocks.acl,
@@ -119,7 +119,7 @@ func TestUnassignManagedIdentity(t *testing.T) {
 				ManagedIdentityID: "mi1",
 			},
 			mockSetup: func(m *managedIdentityMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.managedIdentities.On("RemoveManagedIdentityFromWorkspace", mock.Anything, &pb.RemoveManagedIdentityFromWorkspaceRequest{
 					ManagedIdentityId: "mi1",
 					WorkspaceId:       "ws1",
@@ -133,7 +133,7 @@ func TestUnassignManagedIdentity(t *testing.T) {
 				ManagedIdentityID: "mi1",
 			},
 			mockSetup: func(m *managedIdentityMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -144,7 +144,7 @@ func TestUnassignManagedIdentity(t *testing.T) {
 				ManagedIdentityID: "mi1",
 			},
 			mockSetup: func(m *managedIdentityMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.managedIdentities.On("RemoveManagedIdentityFromWorkspace", mock.Anything, &pb.RemoveManagedIdentityFromWorkspaceRequest{
 					ManagedIdentityId: "mi1",
 					WorkspaceId:       "ws1",
@@ -166,7 +166,7 @@ func TestUnassignManagedIdentity(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					ManagedIdentitiesClient: testMocks.managedIdentities,
 				},
 				acl: testMocks.acl,

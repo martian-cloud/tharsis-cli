@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -97,7 +97,7 @@ func TestListGroups(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					GroupsClient: testMocks.groups,
 				},
 			}
@@ -162,7 +162,7 @@ func TestGetGroup(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					GroupsClient: testMocks.groups,
 				},
 			}
@@ -198,7 +198,7 @@ func TestCreateGroup(t *testing.T) {
 				Description: "test child group",
 			},
 			mockSetup: func(m *groupMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:parent1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:parent1", trn.TypeGroup).Return(nil)
 				m.groups.On("CreateGroup", mock.Anything, &pb.CreateGroupRequest{
 					ParentId:    ptr.String("trn:group:parent1"),
 					Name:        "child-group",
@@ -218,7 +218,7 @@ func TestCreateGroup(t *testing.T) {
 				Description: "test child group",
 			},
 			mockSetup: func(m *groupMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:parent1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:parent1", trn.TypeGroup).Return(nil)
 				m.groups.On("CreateGroup", mock.Anything, &pb.CreateGroupRequest{
 					ParentId:    ptr.String("trn:group:parent1"),
 					Name:        "child-group",
@@ -234,7 +234,7 @@ func TestCreateGroup(t *testing.T) {
 				Name:     "child-group",
 			},
 			mockSetup: func(m *groupMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "p1", trn.ResourceTypeGroup).Return(assert.AnError)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "p1", trn.TypeGroup).Return(assert.AnError)
 			},
 			expectError: true,
 		},
@@ -253,7 +253,7 @@ func TestCreateGroup(t *testing.T) {
 
 			toolCtx := &ToolContext{
 				acl: testMocks.acl,
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					GroupsClient: testMocks.groups,
 				},
 			}
@@ -288,7 +288,7 @@ func TestUpdateGroup(t *testing.T) {
 				Description: ptr.String("updated description"),
 			},
 			mockSetup: func(m *groupMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.TypeGroup).Return(nil)
 				m.groups.On("UpdateGroup", mock.Anything, &pb.UpdateGroupRequest{
 					Id:          "trn:group:g1/g2",
 					Description: ptr.String("updated description"),
@@ -306,7 +306,7 @@ func TestUpdateGroup(t *testing.T) {
 				Description: ptr.String("updated"),
 			},
 			mockSetup: func(m *groupMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.TypeGroup).Return(nil)
 				m.groups.On("UpdateGroup", mock.Anything, &pb.UpdateGroupRequest{
 					Id:          "trn:group:g1/g2",
 					Description: ptr.String("updated"),
@@ -321,7 +321,7 @@ func TestUpdateGroup(t *testing.T) {
 				Description: ptr.String("updated"),
 			},
 			mockSetup: func(m *groupMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(assert.AnError)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.TypeGroup).Return(assert.AnError)
 			},
 			expectError: true,
 		},
@@ -340,7 +340,7 @@ func TestUpdateGroup(t *testing.T) {
 
 			toolCtx := &ToolContext{
 				acl: testMocks.acl,
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					GroupsClient: testMocks.groups,
 				},
 			}
@@ -380,7 +380,7 @@ func TestDeleteGroup(t *testing.T) {
 					},
 					FullPath: "g1/g2",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.TypeGroup).Return(nil)
 				m.groups.On("DeleteGroup", mock.Anything, &pb.DeleteGroupRequest{Id: "trn:group:g1/g2"}).Return(nil, nil)
 			},
 		},
@@ -418,7 +418,7 @@ func TestDeleteGroup(t *testing.T) {
 					},
 					FullPath: "g1/g2",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.ResourceTypeGroup).Return(assert.AnError)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:group:g1/g2", trn.TypeGroup).Return(assert.AnError)
 			},
 			expectError: true,
 		},
@@ -437,7 +437,7 @@ func TestDeleteGroup(t *testing.T) {
 
 			toolCtx := &ToolContext{
 				acl: testMocks.acl,
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					GroupsClient: testMocks.groups,
 				},
 			}

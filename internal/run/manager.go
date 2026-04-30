@@ -16,7 +16,6 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
 
@@ -27,8 +26,8 @@ const (
 
 // Manager provides high-level run management operations
 type Manager struct {
-	grpcClient *client.Client
-	tfeClient  tfe.RESTClient
+	grpcClient *client.GRPCClient
+	tfeClient  client.RESTClient
 	logger     hclog.Logger
 	ui         terminal.UI
 }
@@ -56,14 +55,14 @@ type CreateRunInput struct {
 
 // NewManager creates a new run manager
 func NewManager(
-	grpcClient *client.Client,
-	tokenGetter client.TokenGetter,
+	grpcClient *client.GRPCClient,
+	tokenResolver client.TokenResolver,
 	httpClient *http.Client,
 	endpoint string,
 	logger hclog.Logger,
 	ui terminal.UI,
 ) (*Manager, error) {
-	tfeClient, err := tfe.NewRESTClient(endpoint, tokenGetter, httpClient)
+	tfeClient, err := client.NewRESTClient(endpoint, tokenResolver, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +295,7 @@ func (m *Manager) uploadConfigVersion(ctx context.Context, workspaceGID, directo
 	m.ui.Output("Uploading configuration version")
 
 	// Upload the directory using GID
-	if err = m.tfeClient.UploadConfigurationVersion(ctx, &tfe.UploadConfigurationVersionInput{
+	if err = m.tfeClient.UploadConfigurationVersion(ctx, &client.UploadConfigurationVersionInput{
 		WorkspaceID:     workspaceGID,
 		ConfigVersionID: createdConfigVersion.Metadata.Id,
 		DirectoryPath:   directoryPath,

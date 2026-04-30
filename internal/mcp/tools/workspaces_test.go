@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -70,7 +70,7 @@ func TestListWorkspaces(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					WorkspacesClient: testMocks.workspaces,
 				},
 			}
@@ -134,7 +134,7 @@ func TestGetWorkspace(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					WorkspacesClient: testMocks.workspaces,
 				},
 			}
@@ -170,7 +170,7 @@ func TestCreateWorkspace(t *testing.T) {
 				Description: "test workspace",
 			},
 			mockSetup: func(m *workspaceMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.TypeGroup).Return(nil)
 				m.workspaces.On("CreateWorkspace", mock.Anything, &pb.CreateWorkspaceRequest{
 					GroupId:     "group1",
 					Name:        "new-workspace",
@@ -189,7 +189,7 @@ func TestCreateWorkspace(t *testing.T) {
 				Name:    "new-workspace",
 			},
 			mockSetup: func(m *workspaceMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.TypeGroup).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -207,7 +207,7 @@ func TestCreateWorkspace(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					GroupsClient:     testMocks.groups,
 					WorkspacesClient: testMocks.workspaces,
 				},
@@ -245,7 +245,7 @@ func TestUpdateWorkspace(t *testing.T) {
 				Description: ptr.String("updated description"),
 			},
 			mockSetup: func(m *workspaceMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.workspaces.On("UpdateWorkspace", mock.Anything, &pb.UpdateWorkspaceRequest{
 					Id:          "ws1",
 					Description: ptr.String("updated description"),
@@ -263,7 +263,7 @@ func TestUpdateWorkspace(t *testing.T) {
 				Description: ptr.String("updated"),
 			},
 			mockSetup: func(m *workspaceMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -274,7 +274,7 @@ func TestUpdateWorkspace(t *testing.T) {
 				Description: ptr.String("updated"),
 			},
 			mockSetup: func(m *workspaceMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.TypeWorkspace).Return(nil)
 				m.workspaces.On("UpdateWorkspace", mock.Anything, &pb.UpdateWorkspaceRequest{
 					Id:          "nonexistent",
 					Description: ptr.String("updated"),
@@ -297,7 +297,7 @@ func TestUpdateWorkspace(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					GroupsClient:     testMocks.groups,
 					WorkspacesClient: testMocks.workspaces,
 				},
@@ -331,7 +331,7 @@ func TestDeleteWorkspace(t *testing.T) {
 			name:  "delete workspace successfully",
 			input: &deleteWorkspaceInput{ID: "ws1"},
 			mockSetup: func(m *workspaceMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.workspaces.On("DeleteWorkspace", mock.Anything, &pb.DeleteWorkspaceRequest{Id: "ws1"}).Return(nil, nil)
 			},
 		},
@@ -339,7 +339,7 @@ func TestDeleteWorkspace(t *testing.T) {
 			name:  "acl denial",
 			input: &deleteWorkspaceInput{ID: "ws1"},
 			mockSetup: func(m *workspaceMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -347,7 +347,7 @@ func TestDeleteWorkspace(t *testing.T) {
 			name:  "workspace not found",
 			input: &deleteWorkspaceInput{ID: "nonexistent"},
 			mockSetup: func(m *workspaceMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.TypeWorkspace).Return(nil)
 				m.workspaces.On("DeleteWorkspace", mock.Anything, &pb.DeleteWorkspaceRequest{Id: "nonexistent"}).
 					Return(nil, status.Error(codes.NotFound, "not found"))
 			},
@@ -368,7 +368,7 @@ func TestDeleteWorkspace(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					GroupsClient:     testMocks.groups,
 					WorkspacesClient: testMocks.workspaces,
 				},

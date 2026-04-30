@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 )
 
 type runnerAgentAssignServiceAccountCommand struct {
@@ -41,8 +41,8 @@ func (c *runnerAgentAssignServiceAccountCommand) Run(args []string) int {
 	}
 
 	input := &pb.AssignServiceAccountToRunnerRequest{
-		ServiceAccountId: trn.ToTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
-		RunnerId:         trn.ToTRN(trn.ResourceTypeRunner, c.arguments[1]),
+		ServiceAccountId: trn.TypeServiceAccount.Normalize(c.arguments[0]),
+		RunnerId:         trn.TypeRunner.Normalize(c.arguments[1]),
 	}
 
 	if _, err := c.grpcClient.RunnersClient.AssignServiceAccountToRunner(c.Context, input); err != nil {

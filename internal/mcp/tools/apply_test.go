@@ -53,7 +53,7 @@ func TestGetApply(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{RunsClient: mockRuns},
+				grpcClient: &client.GRPCClient{RunsClient: mockRuns},
 			}
 
 			_, handler := getApply(toolCtx)

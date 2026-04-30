@@ -7,7 +7,7 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 )
 
 // terraformModule is the output type for Terraform modules.
@@ -152,7 +152,7 @@ func createTerraformModule(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*creat
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *createTerraformModuleInput) (*mcp.CallToolResult, *createTerraformModuleOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.GroupID, trn.ResourceTypeGroup); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.GroupID, trn.TypeGroup); err != nil {
 			return nil, nil, err
 		}
 
@@ -200,7 +200,7 @@ func updateTerraformModule(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*updat
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *updateTerraformModuleInput) (*mcp.CallToolResult, *updateTerraformModuleOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeTerraformModule); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeTerraformModule); err != nil {
 			return nil, nil, err
 		}
 
@@ -244,7 +244,7 @@ func deleteTerraformModule(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*delet
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *deleteTerraformModuleInput) (*mcp.CallToolResult, *deleteTerraformModuleOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeTerraformModule); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeTerraformModule); err != nil {
 			return nil, nil, err
 		}
 

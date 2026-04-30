@@ -7,7 +7,7 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 )
 
 // assignManagedIdentityInput is the input for assigning a managed identity.
@@ -33,7 +33,7 @@ func assignManagedIdentity(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*assig
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *assignManagedIdentityInput) (*mcp.CallToolResult, *assignManagedIdentityOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.WorkspaceID, trn.ResourceTypeWorkspace); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.WorkspaceID, trn.TypeWorkspace); err != nil {
 			return nil, nil, err
 		}
 
@@ -77,7 +77,7 @@ func unassignManagedIdentity(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*una
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *unassignManagedIdentityInput) (*mcp.CallToolResult, *unassignManagedIdentityOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.WorkspaceID, trn.ResourceTypeWorkspace); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.WorkspaceID, trn.TypeWorkspace); err != nil {
 			return nil, nil, err
 		}
 

@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // moduleGetCommand is the top-level structure for the module get command.
@@ -46,7 +46,7 @@ func (c *moduleGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetTerraformModuleByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Id: trn.TypeTerraformModule.Normalize(c.arguments[0]),
 	}
 
 	module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, input)

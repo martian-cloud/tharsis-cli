@@ -9,10 +9,10 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/slug"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 )
 
 // terraformModuleVersion is the output type for Terraform module versions.
@@ -162,7 +162,7 @@ func deleteTerraformModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *deleteTerraformModuleVersionInput) (*mcp.CallToolResult, *deleteTerraformModuleVersionOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeTerraformModuleVersion); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeTerraformModuleVersion); err != nil {
 			return nil, nil, err
 		}
 
@@ -206,7 +206,7 @@ func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*uploadM
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *uploadModuleVersionInput) (*mcp.CallToolResult, *uploadModuleVersionOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ModuleID, trn.ResourceTypeTerraformModule); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ModuleID, trn.TypeTerraformModule); err != nil {
 			return nil, nil, err
 		}
 
@@ -224,7 +224,7 @@ func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*uploadM
 		}
 
 		// Create the module package
-		moduleSlug, err := slug.NewSlug(directoryPath)
+		moduleSlug, err := slug.New(directoryPath)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create module package: %w", err)
 		}
@@ -241,7 +241,7 @@ func uploadModuleVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*uploadM
 		}
 
 		// Upload the module version
-		if err := tc.tfeClient.UploadModuleVersion(ctx, &tfe.UploadModuleVersionInput{
+		if err := tc.tfeClient.UploadModuleVersion(ctx, &client.UploadModuleVersionInput{
 			ModuleVersionID: version.Metadata.Id,
 			PackagePath:     moduleSlug.SlugPath,
 		}); err != nil {

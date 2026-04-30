@@ -9,11 +9,11 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/hashicorp/go-hclog"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/mcp"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 )
 
 // mcpCommand is the top-level structure for the mcp command.
@@ -81,13 +81,13 @@ func (c *mcpCommand) Run(args []string) int {
 		return 1
 	}
 
-	tokenGetter, err := currentSettings.CurrentProfile.NewTokenGetter(c.Context)
+	tokenResolver, err := currentSettings.CurrentProfile.NewTokenResolver(c.Context)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create token getter")
 		return 1
 	}
 
-	tfeClient, err := tfe.NewRESTClient(currentSettings.CurrentProfile.Endpoint, tokenGetter, c.HTTPClient)
+	tfeClient, err := client.NewRESTClient(currentSettings.CurrentProfile.Endpoint, tokenResolver, c.HTTPClient)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create tfe rest client")
 		return 1

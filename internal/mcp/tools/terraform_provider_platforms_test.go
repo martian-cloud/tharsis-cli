@@ -59,7 +59,7 @@ func TestGetTerraformProviderPlatform(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{TerraformProvidersClient: mockProviders},
+				grpcClient: &client.GRPCClient{TerraformProvidersClient: mockProviders},
 			}
 
 			_, handler := getTerraformProviderPlatform(toolCtx)
