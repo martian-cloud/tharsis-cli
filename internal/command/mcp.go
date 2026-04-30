@@ -87,7 +87,11 @@ func (c *mcpCommand) Run(args []string) int {
 		return 1
 	}
 
-	tfeClient, err := client.NewRESTClient(currentSettings.CurrentProfile.Endpoint, tokenResolver, c.HTTPClient)
+	tfeClient, err := client.NewRESTClient(&client.RESTClientConfig{
+		Endpoint:      currentSettings.CurrentProfile.Endpoint,
+		TokenResolver: tokenResolver,
+		HTTPClient:    c.HTTPClient,
+	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create tfe rest client")
 		return 1

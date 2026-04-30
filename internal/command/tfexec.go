@@ -70,7 +70,11 @@ func (c *tfExecCommand) Run(args []string) int {
 		return 1
 	}
 
-	restClient, err := client.NewRESTClient(profile.Endpoint, tokenResolver, c.HTTPClient)
+	restClient, err := client.NewRESTClient(&client.RESTClientConfig{
+		Endpoint:      profile.Endpoint,
+		TokenResolver: tokenResolver,
+		HTTPClient:    c.HTTPClient,
+	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create REST client")
 		return 1

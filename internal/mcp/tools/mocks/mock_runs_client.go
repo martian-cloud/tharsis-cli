@@ -6,6 +6,8 @@ import (
 	context "context"
 
 	gen "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
+
 	grpc "google.golang.org/grpc"
 
 	mock "github.com/stretchr/testify/mock"
@@ -304,6 +306,43 @@ func (_m *RunsClient) GetRuns(ctx context.Context, in *gen.GetRunsRequest, opts 
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, *gen.GetRunsRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// SetVariablesIncludedInTFConfig provides a mock function with given fields: ctx, in, opts
+func (_m *RunsClient) SetVariablesIncludedInTFConfig(ctx context.Context, in *gen.SetVariablesIncludedInTFConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetVariablesIncludedInTFConfig")
+	}
+
+	var r0 *emptypb.Empty
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.SetVariablesIncludedInTFConfigRequest, ...grpc.CallOption) (*emptypb.Empty, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.SetVariablesIncludedInTFConfigRequest, ...grpc.CallOption) *emptypb.Empty); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*emptypb.Empty)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.SetVariablesIncludedInTFConfigRequest, ...grpc.CallOption) error); ok {
 		r1 = rf(ctx, in, opts...)
 	} else {
 		r1 = ret.Error(1)
