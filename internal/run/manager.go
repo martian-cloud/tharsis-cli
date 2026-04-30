@@ -62,7 +62,11 @@ func NewManager(
 	logger hclog.Logger,
 	ui terminal.UI,
 ) (*Manager, error) {
-	tfeClient, err := client.NewRESTClient(endpoint, tokenResolver, httpClient)
+	tfeClient, err := client.NewRESTClient(&client.RESTClientConfig{
+		Endpoint:      endpoint,
+		TokenResolver: tokenResolver,
+		HTTPClient:    httpClient,
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -169,7 +169,11 @@ func (c *moduleUploadVersionCommand) uploadModuleVersion(moduleVersionID, slugPa
 		return err
 	}
 
-	tfeClient, err := client.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenResolver, c.HTTPClient)
+	tfeClient, err := client.NewRESTClient(&client.RESTClientConfig{
+		Endpoint:      curSettings.CurrentProfile.Endpoint,
+		TokenResolver: tokenResolver,
+		HTTPClient:    c.HTTPClient,
+	})
 	if err != nil {
 		return err
 	}
