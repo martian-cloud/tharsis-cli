@@ -20,15 +20,14 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/auth"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 )
 
 // ToolContext holds dependencies for tool execution.
 type ToolContext struct {
 	tharsisURL    string
 	profileName   string
-	grpcClient    *client.Client
-	tfeClient     tfe.RESTClient
+	grpcClient    *client.GRPCClient
+	tfeClient     client.RESTClient
 	httpClient    *http.Client
 	authenticator auth.Authenticator
 	acl           acl.Checker
@@ -54,8 +53,8 @@ func NewToolContext(
 	tharsisURL,
 	profileName string,
 	httpClient *http.Client,
-	client *client.Client,
-	restClient tfe.RESTClient,
+	client *client.GRPCClient,
+	restClient client.RESTClient,
 	opts ...ToolContextOption,
 ) (*ToolContext, error) {
 	tc := &ToolContext{

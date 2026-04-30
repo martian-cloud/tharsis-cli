@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type terraformProviderManifestType struct {
@@ -124,13 +124,13 @@ func (c *terraformProviderUploadVersionCommand) Run(args []string) int {
 		return 1
 	}
 
-	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
+	tokenResolver, err := curSettings.CurrentProfile.NewTokenResolver(c.Context)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get token")
 		return 1
 	}
 
-	tfeClient, err := tfe.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenGetter, c.HTTPClient)
+	tfeClient, err := client.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenResolver, c.HTTPClient)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create REST client")
 		return 1
@@ -177,7 +177,7 @@ func (c *terraformProviderUploadVersionCommand) getProvider() (provider *pb.Terr
 	defer func() { c.finalizeStep(step, err) }()
 
 	provider, err = c.grpcClient.TerraformProvidersClient.GetTerraformProviderByID(c.Context, &pb.GetTerraformProviderByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeTerraformProvider, c.arguments[0]),
+		Id: trn.TypeTerraformProvider.Normalize(c.arguments[0]),
 	})
 	if err != nil {
 		return nil, err
@@ -249,7 +249,7 @@ func (c *terraformProviderUploadVersionCommand) createProviderVersion(providerID
 	return pv, err
 }
 
-func (c *terraformProviderUploadVersionCommand) uploadReadme(restClient tfe.RESTClient, providerVersionID string) (err error) {
+func (c *terraformProviderUploadVersionCommand) uploadReadme(restClient client.RESTClient, providerVersionID string) (err error) {
 	step := c.sg.Add("Upload README")
 	defer func() { c.finalizeStep(step, err) }()
 
@@ -263,13 +263,13 @@ func (c *terraformProviderUploadVersionCommand) uploadReadme(restClient tfe.REST
 		return nil
 	}
 
-	return restClient.UploadProviderReadme(c.Context, &tfe.UploadProviderReadmeInput{
+	return restClient.UploadProviderReadme(c.Context, &client.UploadProviderReadmeInput{
 		ProviderVersionID: providerVersionID,
 		ReadmePath:        matches[0],
 	})
 }
 
-func (c *terraformProviderUploadVersionCommand) uploadChecksums(restClient tfe.RESTClient, providerVersionID, artifactPath string) (checksumMap map[string]string, err error) {
+func (c *terraformProviderUploadVersionCommand) uploadChecksums(restClient client.RESTClient, providerVersionID, artifactPath string) (checksumMap map[string]string, err error) {
 	step := c.sg.Add("Upload checksums")
 	defer func() { c.finalizeStep(step, err) }()
 
@@ -287,7 +287,7 @@ func (c *terraformProviderUploadVersionCommand) uploadChecksums(restClient tfe.R
 		}
 	}
 
-	if err = restClient.UploadProviderChecksums(c.Context, &tfe.UploadProviderChecksumsInput{
+	if err = restClient.UploadProviderChecksums(c.Context, &client.UploadProviderChecksumsInput{
 		ProviderVersionID: providerVersionID,
 		ChecksumsPath:     filepath.Join(*c.directory, artifactPath),
 	}); err != nil {
@@ -297,17 +297,17 @@ func (c *terraformProviderUploadVersionCommand) uploadChecksums(restClient tfe.R
 	return checksumMap, nil
 }
 
-func (c *terraformProviderUploadVersionCommand) uploadSignature(restClient tfe.RESTClient, providerVersionID, artifactPath string) (err error) {
+func (c *terraformProviderUploadVersionCommand) uploadSignature(restClient client.RESTClient, providerVersionID, artifactPath string) (err error) {
 	step := c.sg.Add("Upload checksums signature")
 	defer func() { c.finalizeStep(step, err) }()
 
-	return restClient.UploadProviderChecksumSignature(c.Context, &tfe.UploadProviderChecksumSignatureInput{
+	return restClient.UploadProviderChecksumSignature(c.Context, &client.UploadProviderChecksumSignatureInput{
 		ProviderVersionID: providerVersionID,
 		SignaturePath:     filepath.Join(*c.directory, artifactPath),
 	})
 }
 
-func (c *terraformProviderUploadVersionCommand) uploadPlatformArchive(restClient tfe.RESTClient, providerVersionID string, artifact *artifactType, checksumMap map[string]string) (err error) {
+func (c *terraformProviderUploadVersionCommand) uploadPlatformArchive(restClient client.RESTClient, providerVersionID string, artifact *artifactType, checksumMap map[string]string) (err error) {
 	step := c.sg.Add("Upload platform %s_%s", artifact.OperatingSystem, artifact.Architecture)
 	defer func() { c.finalizeStep(step, err) }()
 
@@ -327,7 +327,7 @@ func (c *terraformProviderUploadVersionCommand) uploadPlatformArchive(restClient
 		return err
 	}
 
-	return restClient.UploadProviderPlatformBinary(c.Context, &tfe.UploadProviderPlatformBinaryInput{
+	return restClient.UploadProviderPlatformBinary(c.Context, &client.UploadProviderPlatformBinaryInput{
 		PlatformID: platform.Metadata.Id,
 		BinaryPath: filepath.Join(*c.directory, artifact.Path),
 	})

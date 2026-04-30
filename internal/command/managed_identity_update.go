@@ -7,8 +7,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // managedIdentityUpdateCommand is the top-level structure for the managed identity update command.
@@ -62,7 +62,7 @@ func (c *managedIdentityUpdateCommand) Run(args []string) int {
 		return code
 	}
 
-	managedIdentityID := trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0])
+	managedIdentityID := trn.TypeManagedIdentity.Normalize(c.arguments[0])
 
 	var encodedData *string
 	if c.hasDataUpdate() {

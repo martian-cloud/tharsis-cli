@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // moduleUpdateCommand is the top-level structure for the module update command.
@@ -49,7 +49,7 @@ func (c *moduleUpdateCommand) Run(args []string) int {
 	}
 
 	input := &pb.UpdateTerraformModuleRequest{
-		Id:            trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Id:            trn.TypeTerraformModule.Normalize(c.arguments[0]),
 		RepositoryUrl: c.repositoryURL,
 		Private:       c.private,
 		Version:       c.version,

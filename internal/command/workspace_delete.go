@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // workspaceDeleteCommand is the top-level structure for the workspace delete command.
@@ -48,7 +48,7 @@ func (c *workspaceDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteWorkspaceRequest{
-		Id:      trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id:      trn.TypeWorkspace.Normalize(c.arguments[0]),
 		Version: c.version,
 		Force:   c.force,
 	}

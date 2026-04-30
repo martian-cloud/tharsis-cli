@@ -5,8 +5,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // moduleCreateAttestationCommand is the top-level structure for the module create attestation command.
@@ -49,7 +49,7 @@ func (c *moduleCreateAttestationCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateTerraformModuleAttestationRequest{
-		ModuleId:        trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		ModuleId:        trn.TypeTerraformModule.Normalize(c.arguments[0]),
 		Description:     ptr.ToString(c.description),
 		AttestationData: *c.data,
 	}

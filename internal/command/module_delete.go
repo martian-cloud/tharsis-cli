@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // moduleDeleteCommand is the top-level structure for the module delete command.
@@ -43,7 +43,7 @@ func (c *moduleDeleteCommand) Run(args []string) int {
 	}
 
 	input := &pb.DeleteTerraformModuleRequest{
-		Id: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Id: trn.TypeTerraformModule.Normalize(c.arguments[0]),
 	}
 
 	if _, err := c.grpcClient.TerraformModulesClient.DeleteTerraformModule(c.Context, input); err != nil {

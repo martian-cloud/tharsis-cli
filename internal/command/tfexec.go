@@ -23,10 +23,9 @@ import (
 	"github.com/posener/complete"
 	client "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/output"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type tfExecCommand struct {
@@ -65,19 +64,19 @@ func (c *tfExecCommand) Run(args []string) int {
 	}
 	profile := curSettings.CurrentProfile
 
-	tokenGetter, err := profile.NewTokenGetter(c.Context)
+	tokenResolver, err := profile.NewTokenResolver(c.Context)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create token getter")
 		return 1
 	}
 
-	restClient, err := tfe.NewRESTClient(profile.Endpoint, tokenGetter, c.HTTPClient)
+	restClient, err := client.NewRESTClient(profile.Endpoint, tokenResolver, c.HTTPClient)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create REST client")
 		return 1
 	}
 
-	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: trn.ToTRN(trn.ResourceTypeWorkspace, ptr.ToString(c.workspace))})
+	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: trn.TypeWorkspace.Normalize(ptr.ToString(c.workspace))})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
 		return 1
@@ -100,7 +99,7 @@ func (c *tfExecCommand) Run(args []string) int {
 		return 1
 	}
 
-	env, err := c.buildTerraformEnv(workspace.FullPath, profile.Endpoint, tokenGetter)
+	env, err := c.buildTerraformEnv(workspace.FullPath, profile.Endpoint, tokenResolver)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to build environment")
 		return 1
@@ -478,7 +477,7 @@ func (c *tfExecCommand) resolveTerraformBinary(tfVersionStr string) (string, err
 // downloadLastRunConfig fetches the configuration version associated with the
 // last applied run and unpacks it into destDir.
 // If lastRun is nil (no qualifying run), the function is a no-op.
-func (c *tfExecCommand) downloadLastRunConfig(restClient tfe.RESTClient, lastRun *pb.Run, destDir string) error {
+func (c *tfExecCommand) downloadLastRunConfig(restClient client.RESTClient, lastRun *pb.Run, destDir string) error {
 	if lastRun == nil {
 		c.Logger.Debug("no applied run available, proceeding without config download", "destDir", destDir)
 		return nil
@@ -501,7 +500,7 @@ func (c *tfExecCommand) downloadLastRunConfig(restClient tfe.RESTClient, lastRun
 	defer tmpFile.Close()           //nolint:errcheck
 	defer os.Remove(tmpFile.Name()) //nolint:errcheck
 
-	if err := restClient.DownloadConfigurationVersion(c.Context, &tfe.DownloadConfigurationVersionInput{
+	if err := restClient.DownloadConfigurationVersion(c.Context, &client.DownloadConfigurationVersionInput{
 		ConfigVersionID: cvID,
 		Writer:          tmpFile,
 	}); err != nil {
@@ -529,13 +528,13 @@ func (c *tfExecCommand) downloadLastRunConfig(restClient tfe.RESTClient, lastRun
 
 // buildTerraformEnv constructs the environment for the terraform subprocess,
 // injecting the Tharsis auth token and all workspace variables.
-func (c *tfExecCommand) buildTerraformEnv(namespacePath, tharsisURL string, tokenGetter client.TokenGetter) ([]string, error) {
+func (c *tfExecCommand) buildTerraformEnv(namespacePath, tharsisURL string, tokenResolver client.TokenResolver) ([]string, error) {
 	env := os.Environ()
 
 	if _, err := buildTFTokenEnvKey(tharsisURL); err != nil {
 		c.Logger.Debug("skipping TF_TOKEN injection: could not derive env key from URL", "url", tharsisURL, "error", err)
 	} else {
-		tokenStr, err := tokenGetter.Token(c.Context)
+		tokenStr, err := tokenResolver.Token(c.Context)
 		if err != nil {
 			c.Logger.Debug("skipping TF_TOKEN injection: could not get token", "error", err)
 		} else {

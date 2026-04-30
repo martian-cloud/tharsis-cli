@@ -7,7 +7,7 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 )
 
 // run represents a Tharsis run in MCP responses.
@@ -178,7 +178,7 @@ func createRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createRunInput, *
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *createRunInput) (*mcp.CallToolResult, *createRunOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.WorkspaceID, trn.ResourceTypeWorkspace); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.WorkspaceID, trn.TypeWorkspace); err != nil {
 			return nil, nil, err
 		}
 
@@ -230,7 +230,7 @@ func applyRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*applyRunInput, *ap
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *applyRunInput) (*mcp.CallToolResult, *applyRunOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeRun); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeRun); err != nil {
 			return nil, nil, err
 		}
 
@@ -272,7 +272,7 @@ func cancelRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*cancelRunInput, *
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *cancelRunInput) (*mcp.CallToolResult, *cancelRunOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeRun); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeRun); err != nil {
 			return nil, nil, err
 		}
 

@@ -7,12 +7,12 @@ import (
 	"os"
 	"time"
 
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/slug"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 const (
@@ -117,7 +117,7 @@ func (c *moduleUploadVersionCommand) getModule() (module *pb.TerraformModule, er
 	defer func() { c.finalizeStep(step, err) }()
 
 	module, err = c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		Id: trn.TypeTerraformModule.Normalize(c.arguments[0]),
 	})
 	if err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func (c *moduleUploadVersionCommand) createModulePackage() (slugPath string, sha
 	step := c.sg.Add("Create module package")
 	defer func() { c.finalizeStep(step, err) }()
 
-	s, err := slug.NewSlug(*c.directoryPath)
+	s, err := slug.New(*c.directoryPath)
 	if err != nil {
 		return "", nil, err
 	}
@@ -164,17 +164,17 @@ func (c *moduleUploadVersionCommand) uploadModuleVersion(moduleVersionID, slugPa
 		return err
 	}
 
-	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
+	tokenResolver, err := curSettings.CurrentProfile.NewTokenResolver(c.Context)
 	if err != nil {
 		return err
 	}
 
-	tfeClient, err := tfe.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenGetter, c.HTTPClient)
+	tfeClient, err := client.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenResolver, c.HTTPClient)
 	if err != nil {
 		return err
 	}
 
-	if err = tfeClient.UploadModuleVersion(c.Context, &tfe.UploadModuleVersionInput{
+	if err = tfeClient.UploadModuleVersion(c.Context, &client.UploadModuleVersionInput{
 		ModuleVersionID: moduleVersionID,
 		PackagePath:     slugPath,
 	}); err != nil {

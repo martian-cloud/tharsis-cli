@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupUpdateMembershipCommand struct {
@@ -97,7 +97,7 @@ func (c *groupUpdateMembershipCommand) Flags() *flag.Set {
 		"New role for the membership.",
 		flag.Deprecated("use -role-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeRole, s)
+			return trn.TypeRole.Build(s)
 		}),
 	)
 	f.Int64Var(

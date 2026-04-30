@@ -3,10 +3,10 @@ package command
 import (
 	"errors"
 
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type destroyCommand struct {
@@ -63,13 +63,13 @@ func (c *destroyCommand) Run(args []string) int {
 		return 1
 	}
 
-	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
+	tokenResolver, err := curSettings.CurrentProfile.NewTokenResolver(c.Context)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create token getter")
 		return 1
 	}
 
-	runMgr, err := run.NewManager(c.grpcClient, tokenGetter, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
+	runMgr, err := run.NewManager(c.grpcClient, tokenResolver, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create run manager")
 		return 1
@@ -77,7 +77,7 @@ func (c *destroyCommand) Run(args []string) int {
 
 	// Create non-speculative destroy run
 	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
-		WorkspaceID:              trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		WorkspaceID:              trn.TypeWorkspace.Normalize(c.arguments[0]),
 		DirectoryPath:            c.directoryPath,
 		ModuleSource:             c.moduleSource,
 		ModuleVersion:            c.moduleVersion,

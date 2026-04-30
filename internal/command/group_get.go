@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // groupGetCommand is the top-level structure for the group get command.
@@ -46,7 +46,7 @@ func (c *groupGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetGroupByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		Id: trn.TypeGroup.Normalize(c.arguments[0]),
 	}
 
 	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, input)

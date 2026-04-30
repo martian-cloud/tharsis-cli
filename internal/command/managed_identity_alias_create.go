@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // managedIdentityAliasCreateCommand is the top-level structure for the managed identity alias create command.
@@ -113,7 +113,7 @@ func (c *managedIdentityAliasCreateCommand) Flags() *flag.Set {
 		"Full path of the group where the managed identity alias will be created.",
 		flag.Deprecated("use -group-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return trn.TypeGroup.Build(s)
 		}),
 	)
 	f.StringVar(
@@ -127,7 +127,7 @@ func (c *managedIdentityAliasCreateCommand) Flags() *flag.Set {
 		"The alias source path.",
 		flag.Deprecated("use -alias-source-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
+			return trn.TypeManagedIdentity.Build(s)
 		}),
 	)
 	f.StringVar(

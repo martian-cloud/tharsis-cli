@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -47,7 +47,7 @@ func TestSetVariable(t *testing.T) {
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.variables.On("GetNamespaceVariableByID", mock.Anything, &pb.GetNamespaceVariableByIDRequest{
 					Id: "trn:variable:group/workspace/terraform/region",
 				}).Return(nil, status.Error(codes.NotFound, "not found"))
@@ -76,7 +76,7 @@ func TestSetVariable(t *testing.T) {
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -93,7 +93,7 @@ func TestSetVariable(t *testing.T) {
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.variables.On("GetNamespaceVariableByID", mock.Anything, &pb.GetNamespaceVariableByIDRequest{
 					Id: "trn:variable:group/workspace/environment/PATH",
 				}).Return(&pb.NamespaceVariable{
@@ -135,7 +135,7 @@ func TestSetVariable(t *testing.T) {
 					Return(nil, status.Error(codes.NotFound, "not found"))
 				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "group1"}).
 					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.TypeGroup).Return(nil)
 				m.variables.On("GetNamespaceVariableByID", mock.Anything, &pb.GetNamespaceVariableByIDRequest{
 					Id: "trn:variable:group1/terraform/region",
 				}).Return(nil, status.Error(codes.NotFound, "not found"))
@@ -183,7 +183,7 @@ func TestSetVariable(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					NamespaceVariablesClient: testMocks.variables,
 					WorkspacesClient:         testMocks.workspaces,
 					GroupsClient:             testMocks.groups,
@@ -226,7 +226,7 @@ func TestDeleteVariable(t *testing.T) {
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.variables.On("DeleteNamespaceVariable", mock.Anything, &pb.DeleteNamespaceVariableRequest{
 					Id: "trn:variable:group/workspace/terraform/region",
 				}).Return(nil, nil)
@@ -244,7 +244,7 @@ func TestDeleteVariable(t *testing.T) {
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -269,7 +269,7 @@ func TestDeleteVariable(t *testing.T) {
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.variables.On("DeleteNamespaceVariable", mock.Anything, &pb.DeleteNamespaceVariableRequest{
 					Id: "trn:variable:group/workspace/terraform/nonexistent",
 				}).Return(nil, status.Error(codes.NotFound, "not found"))
@@ -288,7 +288,7 @@ func TestDeleteVariable(t *testing.T) {
 					Return(nil, status.Error(codes.NotFound, "not found"))
 				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "group1"}).
 					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.TypeGroup).Return(nil)
 				m.variables.On("DeleteNamespaceVariable", mock.Anything, &pb.DeleteNamespaceVariableRequest{
 					Id: "trn:variable:group1/terraform/region",
 				}).Return(nil, nil)
@@ -325,7 +325,7 @@ func TestDeleteVariable(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					NamespaceVariablesClient: testMocks.variables,
 					WorkspacesClient:         testMocks.workspaces,
 					GroupsClient:             testMocks.groups,
@@ -377,7 +377,7 @@ instance_type = "t2.micro"`), 0600)
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
 					return req.NamespacePath == "group/workspace" && req.Category == pb.VariableCategory_terraform && len(req.Variables) == 2
 				})).Return(nil, nil)
@@ -402,7 +402,7 @@ instance_type = "t2.micro"`), 0600)
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -422,7 +422,7 @@ instance_type = "t2.micro"`), 0600)
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 			},
 			expectError: true,
 		},
@@ -444,7 +444,7 @@ instance_type = "t2.micro"`), 0600)
 					Return(nil, status.Error(codes.NotFound, "not found"))
 				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "group1"}).
 					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.TypeGroup).Return(nil)
 				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
 					return req.NamespacePath == "group1" && req.Category == pb.VariableCategory_terraform && len(req.Variables) == 1
 				})).Return(nil, nil)
@@ -470,7 +470,7 @@ instance_type = "t2.micro"`), 0600)
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					NamespaceVariablesClient: testMocks.variables,
 					WorkspacesClient:         testMocks.workspaces,
 					GroupsClient:             testMocks.groups,
@@ -523,7 +523,7 @@ HOME=/home/user`), 0600)
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
 					return req.NamespacePath == "group/workspace" && req.Category == pb.VariableCategory_environment && len(req.Variables) == 2
 				})).Return(nil, nil)
@@ -548,7 +548,7 @@ HOME=/home/user`), 0600)
 					Metadata: &pb.ResourceMetadata{Id: "ws1"},
 					FullPath: "group/workspace",
 				}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -570,7 +570,7 @@ HOME=/home/user`), 0600)
 					Return(nil, status.Error(codes.NotFound, "not found"))
 				m.groups.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "group1"}).
 					Return(&pb.Group{Metadata: &pb.ResourceMetadata{Id: "group1"}, FullPath: "group1"}, nil)
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "group1", trn.TypeGroup).Return(nil)
 				m.variables.On("SetNamespaceVariables", mock.Anything, mock.MatchedBy(func(req *pb.SetNamespaceVariablesRequest) bool {
 					return req.NamespacePath == "group1" && req.Category == pb.VariableCategory_environment && len(req.Variables) == 1
 				})).Return(nil, nil)
@@ -596,7 +596,7 @@ HOME=/home/user`), 0600)
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					NamespaceVariablesClient: testMocks.variables,
 					WorkspacesClient:         testMocks.workspaces,
 					GroupsClient:             testMocks.groups,
