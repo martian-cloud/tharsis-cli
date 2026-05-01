@@ -91,7 +91,7 @@ func (a *checker) resolveNamespacePath(ctx context.Context, client *client.GRPCC
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve run: %w", err)
 		}
-		pathParts := trn.MustParse(resp.Metadata.Trn).PathParts()
+		pathParts := trn.MustParseAny(resp.Metadata.Trn).PathParts()
 		return strings.Join(pathParts[:len(pathParts)-1], "/"), nil
 
 	case trn.TypeConfigurationVersion:
@@ -99,7 +99,7 @@ func (a *checker) resolveNamespacePath(ctx context.Context, client *client.GRPCC
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve configuration version: %w", err)
 		}
-		pathParts := trn.MustParse(resp.Metadata.Trn).PathParts()
+		pathParts := trn.MustParseAny(resp.Metadata.Trn).PathParts()
 		return strings.Join(pathParts[:len(pathParts)-1], "/"), nil
 
 	case trn.TypeTerraformModule:
@@ -108,7 +108,7 @@ func (a *checker) resolveNamespacePath(ctx context.Context, client *client.GRPCC
 			return "", fmt.Errorf("failed to resolve terraform module: %w", err)
 		}
 		// TRN format: trn:terraform_module:group/name/system
-		pathParts := trn.MustParse(resp.Metadata.Trn).PathParts()
+		pathParts := trn.MustParseAny(resp.Metadata.Trn).PathParts()
 		return strings.Join(pathParts[:len(pathParts)-2], "/"), nil
 
 	case trn.TypeTerraformModuleVersion:
@@ -117,7 +117,7 @@ func (a *checker) resolveNamespacePath(ctx context.Context, client *client.GRPCC
 			return "", fmt.Errorf("failed to resolve terraform module version: %w", err)
 		}
 		// TRN format: trn:terraform_module_version:group/name/system/version
-		pathParts := trn.MustParse(resp.Metadata.Trn).PathParts()
+		pathParts := trn.MustParseAny(resp.Metadata.Trn).PathParts()
 		return strings.Join(pathParts[:len(pathParts)-3], "/"), nil
 
 	default:
