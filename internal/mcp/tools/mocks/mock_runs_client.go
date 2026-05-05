@@ -92,6 +92,43 @@ func (_m *RunsClient) CancelRun(ctx context.Context, in *gen.CancelRunRequest, o
 	return r0, r1
 }
 
+// CreateDestroyRunForWorkspace provides a mock function with given fields: ctx, in, opts
+func (_m *RunsClient) CreateDestroyRunForWorkspace(ctx context.Context, in *gen.CreateDestroyRunForWorkspaceRequest, opts ...grpc.CallOption) (*gen.Run, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateDestroyRunForWorkspace")
+	}
+
+	var r0 *gen.Run
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.CreateDestroyRunForWorkspaceRequest, ...grpc.CallOption) (*gen.Run, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.CreateDestroyRunForWorkspaceRequest, ...grpc.CallOption) *gen.Run); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gen.Run)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.CreateDestroyRunForWorkspaceRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // CreateRun provides a mock function with given fields: ctx, in, opts
 func (_m *RunsClient) CreateRun(ctx context.Context, in *gen.CreateRunRequest, opts ...grpc.CallOption) (*gen.Run, error) {
 	_va := make([]interface{}, len(opts))
