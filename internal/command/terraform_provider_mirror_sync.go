@@ -239,6 +239,8 @@ func (c *terraformProviderMirrorSyncCommand) uploadMissingPlatforms(registry *re
 		return err
 	}
 
+	defer tokenResolver.Close()
+
 	tfeClient, err := client.NewRESTClient(&client.RESTClientConfig{
 		Endpoint:      curSettings.CurrentProfile.Endpoint,
 		TokenResolver: tokenResolver,
@@ -345,6 +347,7 @@ func (c *terraformProviderMirrorSyncCommand) resolveRegistryToken(hostname strin
 				continue
 			}
 
+			defer tokenResolver.Close()
 			token, err := tokenResolver.Token(c.Context)
 			if err != nil {
 				continue

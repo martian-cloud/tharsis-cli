@@ -169,6 +169,8 @@ func (c *moduleUploadVersionCommand) uploadModuleVersion(moduleVersionID, slugPa
 		return err
 	}
 
+	defer tokenResolver.Close()
+
 	tfeClient, err := client.NewRESTClient(&client.RESTClientConfig{
 		Endpoint:      curSettings.CurrentProfile.Endpoint,
 		TokenResolver: tokenResolver,

@@ -130,6 +130,8 @@ func (c *terraformProviderUploadVersionCommand) Run(args []string) int {
 		return 1
 	}
 
+	defer tokenResolver.Close()
+
 	tfeClient, err := client.NewRESTClient(&client.RESTClientConfig{
 		Endpoint:      curSettings.CurrentProfile.Endpoint,
 		TokenResolver: tokenResolver,

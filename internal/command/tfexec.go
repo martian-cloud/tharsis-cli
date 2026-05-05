@@ -70,6 +70,8 @@ func (c *tfExecCommand) Run(args []string) int {
 		return 1
 	}
 
+	defer tokenResolver.Close()
+
 	restClient, err := client.NewRESTClient(&client.RESTClientConfig{
 		Endpoint:      profile.Endpoint,
 		TokenResolver: tokenResolver,
