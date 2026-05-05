@@ -7,6 +7,7 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/hashicorp/go-hclog"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client/token"
 )
 
 const (
@@ -35,7 +36,7 @@ func (p *Profile) SetToken(token string) {
 // re-reads the file on each call so long-lived processes (e.g. MCP server)
 // pick up tokens refreshed by a concurrent `sso login`.
 func (p *Profile) NewTokenResolver(ctx context.Context) (client.TokenResolver, error) {
-	tc := &client.TokenConfig{
+	tc := &token.Config{
 		StaticToken: ptr.ToString(p.token),
 	}
 
@@ -57,7 +58,7 @@ func (p *Profile) NewTokenResolver(ctx context.Context) (client.TokenResolver, e
 		}
 	}
 
-	return tc.Resolve(ctx, p.Endpoint, p.TLSSkipVerify, staticTokenFunc)
+	return tc.Resolve(ctx, p.Endpoint, staticTokenFunc, token.WithTLSSkipVerify(p.TLSSkipVerify))
 }
 
 // NewClient returns a Tharsis client based on the specified profile.

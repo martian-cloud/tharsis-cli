@@ -74,6 +74,8 @@ func (c *applyCommand) Run(args []string) int {
 		return 1
 	}
 
+	defer tokenResolver.Close()
+
 	runMgr, err := run.NewManager(c.grpcClient, tokenResolver, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create run manager")
