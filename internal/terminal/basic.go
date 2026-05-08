@@ -18,7 +18,17 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/tw"
 	"golang.org/x/term"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
+
+// protoJSONOpts emits zero-values so the JSON output includes all fields,
+// matching the named values display.
+var protoJSONOpts = protojson.MarshalOptions{
+	EmitDefaultValues: true,
+	UseProtoNames:     true,
+	Indent:            "    ",
+}
 
 type basicUI struct {
 	ctx    context.Context
@@ -230,7 +240,15 @@ func (ui *basicUI) Infof(format string, a ...any) {
 }
 
 func (ui *basicUI) JSON(v any) error {
-	buf, err := json.MarshalIndent(v, "", "    ")
+	var buf []byte
+	var err error
+
+	if msg, ok := v.(proto.Message); ok {
+		buf, err = protoJSONOpts.Marshal(msg)
+	} else {
+		buf, err = json.MarshalIndent(v, "", "    ")
+	}
+
 	if err != nil {
 		return err
 	}
