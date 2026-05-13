@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/tw"
+	"google.golang.org/protobuf/proto"
 )
 
 // reAnsi matches ANSI escape sequences including OSC sequences.
@@ -208,10 +209,19 @@ func (ui *nonInteractiveUI) ErrorWithSummary(err error, summary string, a ...any
 }
 
 func (ui *nonInteractiveUI) JSON(v any) error {
-	buf, err := json.MarshalIndent(v, "", "    ")
+	var buf []byte
+	var err error
+
+	if msg, ok := v.(proto.Message); ok {
+		buf, err = protoJSONOpts.Marshal(msg)
+	} else {
+		buf, err = json.MarshalIndent(v, "", "    ")
+	}
+
 	if err != nil {
 		return err
 	}
+
 	ui.Output(string(buf))
 	return nil
 }

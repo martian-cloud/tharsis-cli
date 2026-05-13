@@ -6,8 +6,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceListTerraformVarsCommand struct {
@@ -48,7 +48,7 @@ func (c *workspaceListTerraformVarsCommand) Run(args []string) int {
 	}
 
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.TypeWorkspace.Normalize(c.arguments[0]),
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")

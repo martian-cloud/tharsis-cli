@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceListCommand struct {
@@ -150,7 +150,7 @@ func (c *workspaceListCommand) Flags() *flag.Set {
 		"Filter to only workspaces in this group path.",
 		flag.Deprecated("use -group-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return trn.TypeGroup.Build(s)
 		}),
 	)
 	f.MapVar(

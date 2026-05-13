@@ -14,9 +14,9 @@ import (
 	"github.com/zclconf/go-cty/cty/convert"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/external"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // stateOutputValue represents a state version output value
@@ -71,7 +71,7 @@ func (c *workspaceOutputsCommand) Run(args []string) int {
 	}
 
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.TypeWorkspace.Normalize(c.arguments[0]),
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")

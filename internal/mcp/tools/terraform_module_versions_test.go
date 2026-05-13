@@ -11,10 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -22,7 +21,7 @@ import (
 type terraformModuleVersionMocks struct {
 	terraformModules *mocks.TerraformModulesClient
 	acl              *acl.MockChecker
-	tfe              *tfe.MockRESTClient
+	tfe              *client.MockRESTClient
 }
 
 func TestListTerraformModuleVersions(t *testing.T) {
@@ -82,7 +81,7 @@ func TestListTerraformModuleVersions(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 			}
@@ -146,7 +145,7 @@ func TestGetTerraformModuleVersion(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 			}
@@ -178,7 +177,7 @@ func TestDeleteTerraformModuleVersion(t *testing.T) {
 			name:  "delete module version successfully",
 			input: &deleteTerraformModuleVersionInput{ID: "mv1"},
 			mockSetup: func(m *terraformModuleVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "mv1", trn.ResourceTypeTerraformModuleVersion).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "mv1", trn.TypeTerraformModuleVersion).Return(nil)
 				m.terraformModules.On("DeleteTerraformModuleVersion", mock.Anything, &pb.DeleteTerraformModuleVersionRequest{Id: "mv1"}).Return(nil, nil)
 			},
 		},
@@ -186,7 +185,7 @@ func TestDeleteTerraformModuleVersion(t *testing.T) {
 			name:  "module version not found",
 			input: &deleteTerraformModuleVersionInput{ID: "nonexistent"},
 			mockSetup: func(m *terraformModuleVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeTerraformModuleVersion).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.TypeTerraformModuleVersion).Return(nil)
 				m.terraformModules.On("DeleteTerraformModuleVersion", mock.Anything, &pb.DeleteTerraformModuleVersionRequest{Id: "nonexistent"}).
 					Return(nil, status.Error(codes.NotFound, "not found"))
 			},
@@ -196,7 +195,7 @@ func TestDeleteTerraformModuleVersion(t *testing.T) {
 			name:  "acl denial",
 			input: &deleteTerraformModuleVersionInput{ID: "mv1"},
 			mockSetup: func(m *terraformModuleVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "mv1", trn.ResourceTypeTerraformModuleVersion).
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "mv1", trn.TypeTerraformModuleVersion).
 					Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
@@ -215,7 +214,7 @@ func TestDeleteTerraformModuleVersion(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 				acl: testMocks.acl,
@@ -261,7 +260,7 @@ func TestUploadModuleVersion(t *testing.T) {
 				}
 			},
 			mockSetup: func(m *terraformModuleVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(nil)
 				m.terraformModules.On("CreateTerraformModuleVersion", mock.Anything, mock.MatchedBy(func(input *pb.CreateTerraformModuleVersionRequest) bool {
 					return input.ModuleId == "m1" && input.Version == "1.0.0" && input.ShaSum != ""
 				})).Return(&pb.TerraformModuleVersion{
@@ -270,7 +269,7 @@ func TestUploadModuleVersion(t *testing.T) {
 					SemanticVersion: "1.0.0",
 					Status:          "pending",
 				}, nil)
-				m.tfe.On("UploadModuleVersion", mock.Anything, mock.MatchedBy(func(input *tfe.UploadModuleVersionInput) bool {
+				m.tfe.On("UploadModuleVersion", mock.Anything, mock.MatchedBy(func(input *client.UploadModuleVersionInput) bool {
 					return input.ModuleVersionID == "mv1"
 				})).Return(nil)
 			},
@@ -288,7 +287,7 @@ func TestUploadModuleVersion(t *testing.T) {
 				}
 			},
 			mockSetup: func(m *terraformModuleVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -305,7 +304,7 @@ func TestUploadModuleVersion(t *testing.T) {
 				}
 			},
 			mockSetup: func(m *terraformModuleVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(nil)
 			},
 			expectError: true,
 		},
@@ -324,7 +323,7 @@ func TestUploadModuleVersion(t *testing.T) {
 				}
 			},
 			mockSetup: func(m *terraformModuleVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(nil)
 				m.terraformModules.On("CreateTerraformModuleVersion", mock.Anything, mock.MatchedBy(func(input *pb.CreateTerraformModuleVersionRequest) bool {
 					return input.ModuleId == "m1" && input.Version == "1.0.0" && input.ShaSum != ""
 				})).Return(nil, status.Error(codes.Internal, "internal error"))
@@ -346,7 +345,7 @@ func TestUploadModuleVersion(t *testing.T) {
 				}
 			},
 			mockSetup: func(m *terraformModuleVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(nil)
 				m.terraformModules.On("CreateTerraformModuleVersion", mock.Anything, mock.MatchedBy(func(input *pb.CreateTerraformModuleVersionRequest) bool {
 					return input.ModuleId == "m1" && input.Version == "1.0.0" && input.ShaSum != ""
 				})).Return(&pb.TerraformModuleVersion{
@@ -355,7 +354,7 @@ func TestUploadModuleVersion(t *testing.T) {
 					SemanticVersion: "1.0.0",
 					Status:          "pending",
 				}, nil)
-				m.tfe.On("UploadModuleVersion", mock.Anything, mock.MatchedBy(func(input *tfe.UploadModuleVersionInput) bool {
+				m.tfe.On("UploadModuleVersion", mock.Anything, mock.MatchedBy(func(input *client.UploadModuleVersionInput) bool {
 					return input.ModuleVersionID == "mv1"
 				})).Return(status.Error(codes.Internal, "upload failed"))
 				m.terraformModules.On("DeleteTerraformModuleVersion", mock.Anything, &pb.DeleteTerraformModuleVersionRequest{Id: "mv1"}).Return(nil, nil)
@@ -372,7 +371,7 @@ func TestUploadModuleVersion(t *testing.T) {
 			testMocks := &terraformModuleVersionMocks{
 				terraformModules: mocks.NewTerraformModulesClient(t),
 				acl:              acl.NewMockChecker(t),
-				tfe:              tfe.NewMockRESTClient(t),
+				tfe:              client.NewMockRESTClient(t),
 			}
 
 			if tc.mockSetup != nil {
@@ -380,7 +379,7 @@ func TestUploadModuleVersion(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 				acl:       testMocks.acl,

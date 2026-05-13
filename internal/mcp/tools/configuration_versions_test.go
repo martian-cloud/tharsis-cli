@@ -10,10 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -21,7 +20,7 @@ import (
 type configurationVersionMocks struct {
 	configurationVersions *mocks.ConfigurationVersionsClient
 	acl                   *acl.MockChecker
-	tfe                   *tfe.MockRESTClient
+	tfe                   *client.MockRESTClient
 }
 
 func TestGetConfigurationVersion(t *testing.T) {
@@ -68,7 +67,7 @@ func TestGetConfigurationVersion(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					ConfigurationVersionsClient: testMocks.configurationVersions,
 				},
 			}
@@ -104,7 +103,7 @@ func TestCreateConfigurationVersion(t *testing.T) {
 				Speculative:   false,
 			},
 			mockSetup: func(m *configurationVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, &pb.CreateConfigurationVersionRequest{
 					WorkspaceId: "ws1",
 					Speculative: false,
@@ -124,7 +123,7 @@ func TestCreateConfigurationVersion(t *testing.T) {
 				DirectoryPath: "/path/to/config",
 			},
 			mockSetup: func(m *configurationVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:workspace:group/my-workspace", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "trn:workspace:group/my-workspace", trn.TypeWorkspace).Return(nil)
 				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, &pb.CreateConfigurationVersionRequest{
 					WorkspaceId: "trn:workspace:group/my-workspace",
 				}).Return(&pb.ConfigurationVersion{
@@ -132,7 +131,7 @@ func TestCreateConfigurationVersion(t *testing.T) {
 					Status:      "pending",
 					WorkspaceId: "resolved-ws-id",
 				}, nil)
-				m.tfe.On("UploadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.UploadConfigurationVersionInput) bool {
+				m.tfe.On("UploadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *client.UploadConfigurationVersionInput) bool {
 					return input.WorkspaceID == "resolved-ws-id" && input.ConfigVersionID == "cv1"
 				})).Return(nil)
 			},
@@ -144,7 +143,7 @@ func TestCreateConfigurationVersion(t *testing.T) {
 				DirectoryPath: "/path/to/config",
 			},
 			mockSetup: func(m *configurationVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -155,7 +154,7 @@ func TestCreateConfigurationVersion(t *testing.T) {
 				DirectoryPath: "/path/to/config",
 			},
 			mockSetup: func(m *configurationVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, mock.Anything).Return(nil, status.Error(codes.Internal, "internal error"))
 			},
 			expectError: true,
@@ -167,7 +166,7 @@ func TestCreateConfigurationVersion(t *testing.T) {
 				DirectoryPath: "/path/to/config",
 			},
 			mockSetup: func(m *configurationVersionMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.ResourceTypeWorkspace).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.configurationVersions.On("CreateConfigurationVersion", mock.Anything, mock.Anything).Return(&pb.ConfigurationVersion{
 					Metadata:    &pb.ResourceMetadata{Id: "cv1", Trn: "trn:configuration_version:cv1"},
 					Status:      "pending",
@@ -184,7 +183,7 @@ func TestCreateConfigurationVersion(t *testing.T) {
 			testMocks := &configurationVersionMocks{
 				configurationVersions: mocks.NewConfigurationVersionsClient(t),
 				acl:                   acl.NewMockChecker(t),
-				tfe:                   tfe.NewMockRESTClient(t),
+				tfe:                   client.NewMockRESTClient(t),
 			}
 
 			if tc.mockSetup != nil {
@@ -192,7 +191,7 @@ func TestCreateConfigurationVersion(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					ConfigurationVersionsClient: testMocks.configurationVersions,
 				},
 				acl:       testMocks.acl,
@@ -231,7 +230,7 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 						Metadata:    &pb.ResourceMetadata{Id: "cv1"},
 						WorkspaceId: "ws1",
 					}, nil)
-				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.DownloadConfigurationVersionInput) bool {
+				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *client.DownloadConfigurationVersionInput) bool {
 					if input.ConfigVersionID != "cv1" {
 						return false
 					}
@@ -253,7 +252,7 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 						Metadata:    &pb.ResourceMetadata{Id: "resolved-cv-id"},
 						WorkspaceId: "ws1",
 					}, nil)
-				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *tfe.DownloadConfigurationVersionInput) bool {
+				m.tfe.On("DownloadConfigurationVersion", mock.Anything, mock.MatchedBy(func(input *client.DownloadConfigurationVersionInput) bool {
 					if input.ConfigVersionID != "resolved-cv-id" {
 						return false
 					}
@@ -294,7 +293,7 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			testMocks := &configurationVersionMocks{
 				configurationVersions: mocks.NewConfigurationVersionsClient(t),
-				tfe:                   tfe.NewMockRESTClient(t),
+				tfe:                   client.NewMockRESTClient(t),
 			}
 
 			if tc.mockSetup != nil {
@@ -302,7 +301,7 @@ func TestDownloadConfigurationVersion(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					ConfigurationVersionsClient: testMocks.configurationVersions,
 				},
 				tfeClient: testMocks.tfe,

@@ -7,6 +7,7 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/hashicorp/go-hclog"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client/token"
 )
 
 const (
@@ -30,21 +31,39 @@ func (p *Profile) SetToken(token string) {
 	p.token = &token
 }
 
-// NewTokenGetter creates a new token getter for the profile.
-// When the token originates from the credentials file, the returned getter
+// NewTokenResolver creates a new token resolver for the profile.
+// When the token originates from the credentials file, the returned resolver
 // re-reads the file on each call so long-lived processes (e.g. MCP server)
 // pick up tokens refreshed by a concurrent `sso login`.
-func (p *Profile) NewTokenGetter(ctx context.Context) (client.TokenGetter, error) {
-	resolver := &tokenResolver{
+func (p *Profile) NewTokenResolver(ctx context.Context) (client.TokenResolver, error) {
+	tc := &token.Config{
 		StaticToken: ptr.ToString(p.token),
 	}
 
-	return resolver.resolve(ctx, p.Endpoint, p.TLSSkipVerify, p.tokenFunc())
+	var staticTokenFunc func() (string, error)
+	if p.token != nil {
+		endpoint := p.Endpoint
+		staticTokenFunc = func() (string, error) {
+			s, err := ReadSettings()
+			if err != nil {
+				return "", fmt.Errorf("failed to re-read settings: %w", err)
+			}
+
+			profile, err := s.FindProfileByEndpoint(endpoint)
+			if err != nil {
+				return "", err
+			}
+
+			return ptr.ToString(profile.token), nil
+		}
+	}
+
+	return tc.Resolve(ctx, p.Endpoint, staticTokenFunc, token.WithTLSSkipVerify(p.TLSSkipVerify))
 }
 
 // NewClient returns a Tharsis client based on the specified profile.
-func (p *Profile) NewClient(ctx context.Context, withAuth bool, userAgent string, logger hclog.Logger) (*client.Client, error) {
-	clientConfig := &client.Config{
+func (p *Profile) NewClient(ctx context.Context, withAuth bool, userAgent string, logger hclog.Logger) (*client.GRPCClient, error) {
+	clientConfig := &client.GRPCClientConfig{
 		HTTPEndpoint:  p.Endpoint,
 		TLSSkipVerify: p.TLSSkipVerify,
 		UserAgent:     userAgent,
@@ -52,36 +71,13 @@ func (p *Profile) NewClient(ctx context.Context, withAuth bool, userAgent string
 	}
 
 	if withAuth {
-		tokenGetter, err := p.NewTokenGetter(ctx)
+		tokenResolver, err := p.NewTokenResolver(ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		clientConfig.TokenGetter = tokenGetter
+		clientConfig.TokenResolver = tokenResolver
 	}
 
-	return client.New(ctx, clientConfig)
-}
-
-// tokenFunc returns a function that re-reads the token from the credentials
-// file on each call. This ensures long-lived processes see tokens refreshed
-// by concurrent `sso login` invocations rather than using a stale value.
-func (p *Profile) tokenFunc() func() (string, error) {
-	if p.token == nil {
-		return nil
-	}
-
-	return func() (string, error) {
-		s, err := ReadSettings()
-		if err != nil {
-			return "", fmt.Errorf("failed to re-read settings: %w", err)
-		}
-
-		profile, err := s.FindProfileByEndpoint(p.Endpoint)
-		if err != nil {
-			return "", err
-		}
-
-		return ptr.ToString(profile.token), nil
-	}
+	return client.NewGRPCClient(ctx, clientConfig)
 }

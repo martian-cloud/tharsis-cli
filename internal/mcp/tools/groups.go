@@ -8,7 +8,7 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 )
 
 // group represents a Tharsis group in MCP responses.
@@ -145,7 +145,7 @@ func createGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createGroupInpu
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *createGroupInput) (*mcp.CallToolResult, *createGroupOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ParentID, trn.ResourceTypeGroup); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ParentID, trn.TypeGroup); err != nil {
 			return nil, nil, err
 		}
 
@@ -192,7 +192,7 @@ func updateGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*updateGroupInpu
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *updateGroupInput) (*mcp.CallToolResult, *updateGroupOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeGroup); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeGroup); err != nil {
 			return nil, nil, err
 		}
 
@@ -247,7 +247,7 @@ func deleteGroup(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteGroupInpu
 			return nil, nil, fmt.Errorf("cannot delete top-level group %q: top-level groups cannot be deleted via MCP for safety", grp.FullPath)
 		}
 
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeGroup); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeGroup); err != nil {
 			return nil, nil, err
 		}
 

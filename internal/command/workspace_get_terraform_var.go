@@ -5,8 +5,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceGetTerraformVarCommand struct {
@@ -49,7 +49,7 @@ func (c *workspaceGetTerraformVarCommand) Run(args []string) int {
 
 	// Get workspace to retrieve full path.
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.TypeWorkspace.Normalize(c.arguments[0]),
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
@@ -57,7 +57,7 @@ func (c *workspaceGetTerraformVarCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetNamespaceVariableByIDRequest{
-		Id: trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, pb.VariableCategory_terraform.String(), *c.key),
+		Id: trn.TypeVariable.Build(workspace.FullPath, pb.VariableCategory_terraform.String(), *c.key),
 	}
 
 	variable, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(c.Context, input)

@@ -10,12 +10,12 @@ import (
 
 	"github.com/apparentlymart/go-versions/versions"
 	tfaddr "github.com/hashicorp/terraform-registry-address"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/provider"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -179,8 +179,7 @@ func (c *terraformProviderMirrorSyncCommand) getOrCreateVersionMirror(registry *
 		return nil, err
 	}
 
-	versionMirrorTRN := trn.NewResourceTRN(
-		trn.ResourceTypeTerraformProviderVersionMirror,
+	versionMirrorTRN := trn.TypeTerraformProviderVersionMirror.Build(
 		group.FullPath,
 		registry.provider.Hostname,
 		registry.provider.Namespace,
@@ -235,12 +234,18 @@ func (c *terraformProviderMirrorSyncCommand) uploadMissingPlatforms(registry *re
 		return err
 	}
 
-	tokenGetter, err := curSettings.CurrentProfile.NewTokenGetter(c.Context)
+	tokenResolver, err := curSettings.CurrentProfile.NewTokenResolver(c.Context)
 	if err != nil {
 		return err
 	}
 
-	tfeClient, err := tfe.NewRESTClient(curSettings.CurrentProfile.Endpoint, tokenGetter, c.HTTPClient)
+	defer tokenResolver.Close()
+
+	tfeClient, err := client.NewRESTClient(&client.RESTClientConfig{
+		Endpoint:      curSettings.CurrentProfile.Endpoint,
+		TokenResolver: tokenResolver,
+		HTTPClient:    c.HTTPClient,
+	})
 	if err != nil {
 		return err
 	}
@@ -254,7 +259,7 @@ func (c *terraformProviderMirrorSyncCommand) uploadMissingPlatforms(registry *re
 	return nil
 }
 
-func (c *terraformProviderMirrorSyncCommand) uploadPlatform(tfeClient tfe.RESTClient, registry *registryConnection, versionMirror *pb.TerraformProviderVersionMirror, platform string) (err error) {
+func (c *terraformProviderMirrorSyncCommand) uploadPlatform(tfeClient client.RESTClient, registry *registryConnection, versionMirror *pb.TerraformProviderVersionMirror, platform string) (err error) {
 	step := c.sg.Add("Upload platform %s", platform)
 	start := time.Now()
 	defer func() {
@@ -279,7 +284,7 @@ func (c *terraformProviderMirrorSyncCommand) uploadPlatform(tfeClient tfe.RESTCl
 	}
 	defer reader.Close()
 
-	return tfeClient.UploadProviderPlatformPackageToMirror(c.Context, &tfe.UploadProviderPlatformPackageToMirrorInput{
+	return tfeClient.UploadProviderPlatformPackageToMirror(c.Context, &client.UploadProviderPlatformPackageToMirrorInput{
 		VersionMirrorID: versionMirror.Metadata.Id,
 		OS:              os,
 		Arch:            arch,
@@ -337,12 +342,13 @@ func (c *terraformProviderMirrorSyncCommand) resolveRegistryToken(hostname strin
 		}
 
 		if profileURL.Host == serviceURL.Host {
-			tokenGetter, err := profile.NewTokenGetter(c.Context)
+			tokenResolver, err := profile.NewTokenResolver(c.Context)
 			if err != nil {
 				continue
 			}
 
-			token, err := tokenGetter.Token(c.Context)
+			defer tokenResolver.Close()
+			token, err := tokenResolver.Token(c.Context)
 			if err != nil {
 				continue
 			}
@@ -464,7 +470,7 @@ func (c *terraformProviderMirrorSyncCommand) Flags() *flag.Set {
 		"Full path to the root group where this Terraform provider version will be mirrored.",
 		flag.Deprecated("use -group-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return trn.TypeGroup.Build(s)
 		}),
 	)
 	f.StringVar(

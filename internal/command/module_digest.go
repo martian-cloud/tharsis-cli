@@ -5,8 +5,8 @@ import (
 	"errors"
 	"os"
 
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/slug"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/slug"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
@@ -46,7 +46,7 @@ func (c *moduleDigestCommand) Run(args []string) int {
 		return code
 	}
 
-	s, err := slug.NewSlug(*c.directoryPath)
+	s, err := slug.New(*c.directoryPath)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create module package")
 		return 1

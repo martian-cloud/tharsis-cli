@@ -13,11 +13,11 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/mitchellh/cli"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/command"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/useragent"
 )
 
 const (
@@ -142,7 +142,7 @@ func realMain() int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	userAgent := useragent.BuildUserAgent(Version)
+	userAgent := client.BuildUserAgent("tharsis-cli", Version)
 
 	// Create HTTP client with retry logic
 	retryClient := retryablehttp.NewClient()
@@ -153,7 +153,7 @@ func realMain() int {
 	httpClient := retryClient.StandardClient()
 
 	// Add User-Agent header to all requests
-	httpClient.Transport = &useragent.Transport{
+	httpClient.Transport = &client.UserAgentTransport{
 		UserAgent: userAgent,
 		Base:      httpClient.Transport,
 	}

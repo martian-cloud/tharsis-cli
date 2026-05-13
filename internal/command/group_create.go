@@ -5,8 +5,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -64,9 +64,9 @@ func (c *groupCreateCommand) Run(args []string) int {
 				return 1
 			}
 
-			checkID = trn.NewResourceTRN(trn.ResourceTypeGroup, group.FullPath, name)
+			checkID = trn.TypeGroup.Build(group.FullPath, name)
 		} else {
-			checkID = trn.NewResourceTRN(trn.ResourceTypeGroup, name)
+			checkID = trn.TypeGroup.Build(name)
 		}
 
 		c.Logger.Debug("checking if group exists", "value", checkID)
@@ -86,7 +86,7 @@ func (c *groupCreateCommand) Run(args []string) int {
 	if c.parentGroupID == nil {
 		// Deprecated. Attempt to extract parent path from the argument.
 		if parent, child := extractParentPath(name); parent != "" {
-			c.parentGroupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, parent))
+			c.parentGroupID = new(trn.TypeGroup.Build(parent))
 			name = child
 		}
 	}
