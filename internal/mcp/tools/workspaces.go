@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 )
 
 // workspace represents a Tharsis workspace in MCP responses.
@@ -162,7 +162,7 @@ func createWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createWorks
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *createWorkspaceInput) (*mcp.CallToolResult, *createWorkspaceOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.GroupID, trn.ResourceTypeGroup); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.GroupID, trn.TypeGroup); err != nil {
 			return nil, nil, err
 		}
 
@@ -215,7 +215,7 @@ func updateWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*updateWorks
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *updateWorkspaceInput) (*mcp.CallToolResult, *updateWorkspaceOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeWorkspace); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeWorkspace); err != nil {
 			return nil, nil, err
 		}
 
@@ -264,7 +264,7 @@ func deleteWorkspace(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteWorks
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *deleteWorkspaceInput) (*mcp.CallToolResult, *deleteWorkspaceOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.ResourceTypeWorkspace); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.ID, trn.TypeWorkspace); err != nil {
 			return nil, nil, err
 		}
 

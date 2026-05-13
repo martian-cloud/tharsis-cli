@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // groupUpdateCommand is the top-level structure for the group update command.
@@ -48,7 +48,7 @@ func (c *groupUpdateCommand) Run(args []string) int {
 	}
 
 	input := &pb.UpdateGroupRequest{
-		Id:          trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0]),
+		Id:          trn.TypeGroup.Normalize(c.arguments[0]),
 		Description: c.description,
 		Version:     c.version,
 	}

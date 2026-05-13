@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // managedIdentityAccessRuleCreateCommand is the top-level structure for the managed identity access rule create command.
@@ -130,7 +130,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.Set {
 		"Resource path to the managed identity.",
 		flag.Deprecated("use -managed-identity-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
+			return trn.TypeManagedIdentity.Build(s)
 		}),
 	)
 	f.StringVar(
@@ -156,7 +156,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.Set {
 		"allowed-user",
 		"Allowed user ID.",
 		flag.TransformString(func(s string) string {
-			return trn.ToTRN(trn.ResourceTypeUser, s)
+			return trn.TypeUser.Normalize(s)
 		}),
 	)
 	f.StringSliceVar(
@@ -164,7 +164,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.Set {
 		"allowed-service-account",
 		"Allowed service account ID.",
 		flag.TransformString(func(s string) string {
-			return trn.ToTRN(trn.ResourceTypeServiceAccount, s)
+			return trn.TypeServiceAccount.Normalize(s)
 		}),
 	)
 	f.StringSliceVar(
@@ -172,7 +172,7 @@ func (c *managedIdentityAccessRuleCreateCommand) Flags() *flag.Set {
 		"allowed-team",
 		"Allowed team ID.",
 		flag.TransformString(func(s string) string {
-			return trn.ToTRN(trn.ResourceTypeTeam, s)
+			return trn.TypeTeam.Normalize(s)
 		}),
 	)
 	f.BoolVar(

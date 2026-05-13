@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -55,7 +55,7 @@ func setVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*setVariableInpu
 			return nil, nil, err
 		}
 
-		variableID := trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, input.Category, input.Key)
+		variableID := trn.TypeVariable.Build(namespacePath, input.Category, input.Key)
 		variable, err := tc.grpcClient.NamespaceVariablesClient.GetNamespaceVariableByID(ctx, &pb.GetNamespaceVariableByIDRequest{Id: variableID})
 		if err != nil && status.Code(err) != codes.NotFound {
 			return nil, nil, fmt.Errorf("failed to get variable: %w", err)
@@ -266,7 +266,7 @@ func deleteVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteVariab
 			return nil, nil, err
 		}
 
-		variableID := trn.NewResourceTRN(trn.ResourceTypeVariable, namespacePath, input.Category, input.Key)
+		variableID := trn.TypeVariable.Build(namespacePath, input.Category, input.Key)
 		_, err = tc.grpcClient.NamespaceVariablesClient.DeleteNamespaceVariable(ctx, &pb.DeleteNamespaceVariableRequest{Id: variableID})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to delete variable: %w", err)
@@ -281,10 +281,10 @@ func deleteVariable(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*deleteVariab
 	return tool, handler
 }
 
-func getNamespacePath(ctx context.Context, c *client.Client, namespaceID string) (string, trn.ResourceType, error) {
+func getNamespacePath(ctx context.Context, c *client.GRPCClient, namespaceID string) (string, trn.Type, error) {
 	workspace, err := c.WorkspacesClient.GetWorkspaceByID(ctx, &pb.GetWorkspaceByIDRequest{Id: namespaceID})
 	if err == nil {
-		return workspace.FullPath, trn.ResourceTypeWorkspace, nil
+		return workspace.FullPath, trn.TypeWorkspace, nil
 	}
 
 	if status.Code(err) == codes.NotFound {
@@ -292,7 +292,7 @@ func getNamespacePath(ctx context.Context, c *client.Client, namespaceID string)
 		if gErr != nil {
 			return "", "", fmt.Errorf("failed to get workspace or group: %w", gErr)
 		}
-		return group.FullPath, trn.ResourceTypeGroup, nil
+		return group.FullPath, trn.TypeGroup, nil
 	}
 
 	return "", "", fmt.Errorf("failed to get namespace: %w", err)

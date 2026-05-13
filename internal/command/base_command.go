@@ -134,7 +134,7 @@ type BaseCommand struct {
 	Logger              hclog.Logger
 	UI                  terminal.UI
 	HTTPClient          *http.Client
-	grpcClient          *client.Client
+	grpcClient          *client.GRPCClient
 	Version             string
 	BinaryName          string
 	CurrentProfileName  string
@@ -304,7 +304,7 @@ func (c *BaseCommand) initialize(opts ...BaseOptionsFunc) int {
 
 	// Prompt for confirmation in interactive mode when -force is true.
 	if o.confirmPrompt != "" && c.UI.Interactive() && o.isForceFlagSet() {
-		c.UI.Warnf(o.confirmPrompt)
+		c.UI.Warnf("%s", o.confirmPrompt)
 		confirmed, err := c.UI.Confirm("Continue?")
 		if err != nil {
 			c.UI.ErrorWithSummary(err, "failed to confirm")

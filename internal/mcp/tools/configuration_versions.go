@@ -8,9 +8,9 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/hashicorp/go-slug"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 )
 
 // configurationVersion represents a Tharsis configuration version in MCP responses.
@@ -94,7 +94,7 @@ func createConfigurationVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*
 	}
 
 	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input *createConfigurationVersionInput) (*mcp.CallToolResult, *createConfigurationVersionOutput, error) {
-		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.WorkspaceID, trn.ResourceTypeWorkspace); err != nil {
+		if err := tc.acl.Authorize(ctx, tc.grpcClient, input.WorkspaceID, trn.TypeWorkspace); err != nil {
 			return nil, nil, err
 		}
 
@@ -106,7 +106,7 @@ func createConfigurationVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*
 			return nil, nil, fmt.Errorf("failed to create configuration version in workspace %q: %w", input.WorkspaceID, err)
 		}
 
-		if err := tc.tfeClient.UploadConfigurationVersion(ctx, &tfe.UploadConfigurationVersionInput{
+		if err := tc.tfeClient.UploadConfigurationVersion(ctx, &client.UploadConfigurationVersionInput{
 			WorkspaceID:     cv.WorkspaceId,
 			ConfigVersionID: cv.Metadata.Id,
 			DirectoryPath:   input.DirectoryPath,
@@ -164,7 +164,7 @@ func downloadConfigurationVersion(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor
 		defer os.Remove(tarFile.Name())
 		defer tarFile.Close()
 
-		if err := tc.tfeClient.DownloadConfigurationVersion(ctx, &tfe.DownloadConfigurationVersionInput{
+		if err := tc.tfeClient.DownloadConfigurationVersion(ctx, &client.DownloadConfigurationVersionInput{
 			ConfigVersionID: cv.Metadata.Id,
 			Writer:          tarFile,
 		}); err != nil {

@@ -98,7 +98,7 @@ func TestGetJobLogs(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{JobsClient: mockJobs},
+				grpcClient: &client.GRPCClient{JobsClient: mockJobs},
 			}
 
 			_, handler := getJobLogs(toolCtx)
@@ -198,7 +198,7 @@ func TestGetLatestJob(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{JobsClient: mockJobs},
+				grpcClient: &client.GRPCClient{JobsClient: mockJobs},
 			}
 
 			_, handler := getLatestJob(toolCtx)

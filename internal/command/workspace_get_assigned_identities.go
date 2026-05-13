@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceGetAssignedManagedIdentitiesCommand struct {
@@ -45,7 +45,7 @@ func (c *workspaceGetAssignedManagedIdentitiesCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetManagedIdentitiesForWorkspaceRequest{
-		WorkspaceId: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		WorkspaceId: trn.TypeWorkspace.Normalize(c.arguments[0]),
 	}
 
 	result, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentitiesForWorkspace(c.Context, input)

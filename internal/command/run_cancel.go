@@ -44,11 +44,16 @@ func (c *runCancelCommand) Run(args []string) int {
 		return code
 	}
 
-	runID := c.arguments[0]
+	run, err := c.grpcClient.RunsClient.GetRunByID(c.Context, &pb.GetRunByIDRequest{Id: c.arguments[0]})
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to get run")
+		return 1
+	}
 
 	// Subscribe to run events.
 	stream, err := c.grpcClient.RunsClient.SubscribeToRunEvents(c.Context, &pb.SubscribeToRunEventsRequest{
-		RunId: &runID,
+		RunId:       &run.Metadata.Id,
+		WorkspaceId: &run.WorkspaceId,
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to subscribe to run events")
@@ -56,7 +61,7 @@ func (c *runCancelCommand) Run(args []string) int {
 	}
 
 	input := &pb.CancelRunRequest{
-		Id:    runID,
+		Id:    run.Metadata.Id,
 		Force: c.force,
 	}
 

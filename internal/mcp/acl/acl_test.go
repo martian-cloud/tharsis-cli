@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -167,8 +167,8 @@ func TestACLChecker_authorize(t *testing.T) {
 		name        string
 		patterns    string
 		identifier  string
-		resType     trn.ResourceType
-		setupMock   func(*client.Client)
+		resType     trn.Type
+		setupMock   func(*client.GRPCClient)
 		expectError bool
 		errorMsg    string
 	}{
@@ -176,8 +176,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "exact match",
 			patterns:   "prod",
 			identifier: "trn:group:prod",
-			resType:    trn.ResourceTypeGroup,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeGroup,
+			setupMock: func(c *client.GRPCClient) {
 				mockGrp := c.GroupsClient.(*mocks.GroupsClient)
 				mockGrp.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:prod"}).
 					Return(&pb.Group{FullPath: "prod"}, nil)
@@ -187,8 +187,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "exact match does not match prefix",
 			patterns:   "prod",
 			identifier: "trn:group:production",
-			resType:    trn.ResourceTypeGroup,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeGroup,
+			setupMock: func(c *client.GRPCClient) {
 				mockGrp := c.GroupsClient.(*mocks.GroupsClient)
 				mockGrp.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:production"}).
 					Return(&pb.Group{FullPath: "production"}, nil)
@@ -200,8 +200,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "wildcard match",
 			patterns:   "prod/*",
 			identifier: "trn:group:prod/app1",
-			resType:    trn.ResourceTypeGroup,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeGroup,
+			setupMock: func(c *client.GRPCClient) {
 				mockGrp := c.GroupsClient.(*mocks.GroupsClient)
 				mockGrp.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:prod/app1"}).
 					Return(&pb.Group{FullPath: "prod/app1"}, nil)
@@ -211,8 +211,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "suffix wildcard match",
 			patterns:   "prod/team-*",
 			identifier: "trn:group:prod/team-alpha",
-			resType:    trn.ResourceTypeGroup,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeGroup,
+			setupMock: func(c *client.GRPCClient) {
 				mockGrp := c.GroupsClient.(*mocks.GroupsClient)
 				mockGrp.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:prod/team-alpha"}).
 					Return(&pb.Group{FullPath: "prod/team-alpha"}, nil)
@@ -222,8 +222,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "suffix wildcard no match",
 			patterns:   "prod/team-*",
 			identifier: "trn:group:prod/other-alpha",
-			resType:    trn.ResourceTypeGroup,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeGroup,
+			setupMock: func(c *client.GRPCClient) {
 				mockGrp := c.GroupsClient.(*mocks.GroupsClient)
 				mockGrp.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:prod/other-alpha"}).
 					Return(&pb.Group{FullPath: "prod/other-alpha"}, nil)
@@ -235,8 +235,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "no match",
 			patterns:   "prod/*",
 			identifier: "trn:group:staging/app1",
-			resType:    trn.ResourceTypeGroup,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeGroup,
+			setupMock: func(c *client.GRPCClient) {
 				mockGrp := c.GroupsClient.(*mocks.GroupsClient)
 				mockGrp.On("GetGroupByID", mock.Anything, &pb.GetGroupByIDRequest{Id: "trn:group:staging/app1"}).
 					Return(&pb.Group{FullPath: "staging/app1"}, nil)
@@ -248,8 +248,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "workspace match",
 			patterns:   "prod/*",
 			identifier: "ws-123",
-			resType:    trn.ResourceTypeWorkspace,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeWorkspace,
+			setupMock: func(c *client.GRPCClient) {
 				mockWS := c.WorkspacesClient.(*mocks.WorkspacesClient)
 				mockWS.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws-123"}).
 					Return(&pb.Workspace{FullPath: "prod/app1"}, nil)
@@ -259,14 +259,14 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "empty checker allows all",
 			patterns:   "",
 			identifier: "trn:group:any/path",
-			resType:    trn.ResourceTypeGroup,
+			resType:    trn.TypeGroup,
 		},
 		{
 			name:       "run resolves to workspace path",
 			patterns:   "prod/*",
 			identifier: "run-123",
-			resType:    trn.ResourceTypeRun,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeRun,
+			setupMock: func(c *client.GRPCClient) {
 				mockRun := c.RunsClient.(*mocks.RunsClient)
 				mockRun.On("GetRunByID", mock.Anything, &pb.GetRunByIDRequest{Id: "run-123"}).
 					Return(&pb.Run{
@@ -278,8 +278,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "configuration version resolves to workspace path",
 			patterns:   "staging/*",
 			identifier: "cv-789",
-			resType:    trn.ResourceTypeConfigurationVersion,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeConfigurationVersion,
+			setupMock: func(c *client.GRPCClient) {
 				mockCV := c.ConfigurationVersionsClient.(*mocks.ConfigurationVersionsClient)
 				mockCV.On("GetConfigurationVersionByID", mock.Anything, &pb.GetConfigurationVersionByIDRequest{Id: "cv-789"}).
 					Return(&pb.ConfigurationVersion{
@@ -291,8 +291,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "terraform module resolves to group path",
 			patterns:   "prod/*",
 			identifier: "module-123",
-			resType:    trn.ResourceTypeTerraformModule,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeTerraformModule,
+			setupMock: func(c *client.GRPCClient) {
 				mockModule := c.TerraformModulesClient.(*mocks.TerraformModulesClient)
 				mockModule.On("GetTerraformModuleByID", mock.Anything, &pb.GetTerraformModuleByIDRequest{Id: "module-123"}).
 					Return(&pb.TerraformModule{
@@ -304,8 +304,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "terraform module version resolves group path from TRN",
 			patterns:   "prod/*",
 			identifier: "version-123",
-			resType:    trn.ResourceTypeTerraformModuleVersion,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeTerraformModuleVersion,
+			setupMock: func(c *client.GRPCClient) {
 				mockModule := c.TerraformModulesClient.(*mocks.TerraformModulesClient)
 				mockModule.On("GetTerraformModuleVersionByID", mock.Anything, &pb.GetTerraformModuleVersionByIDRequest{Id: "version-123"}).
 					Return(&pb.TerraformModuleVersion{
@@ -318,8 +318,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "case insensitive matching",
 			patterns:   "PROD/*",
 			identifier: "ws-case",
-			resType:    trn.ResourceTypeWorkspace,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeWorkspace,
+			setupMock: func(c *client.GRPCClient) {
 				mockWS := c.WorkspacesClient.(*mocks.WorkspacesClient)
 				mockWS.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws-case"}).
 					Return(&pb.Workspace{FullPath: "Prod/Workspace"}, nil)
@@ -329,8 +329,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "multiple patterns - second matches",
 			patterns:   "prod/*,staging/*",
 			identifier: "ws-staging",
-			resType:    trn.ResourceTypeWorkspace,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeWorkspace,
+			setupMock: func(c *client.GRPCClient) {
 				mockWS := c.WorkspacesClient.(*mocks.WorkspacesClient)
 				mockWS.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws-staging"}).
 					Return(&pb.Workspace{FullPath: "staging/workspace"}, nil)
@@ -340,8 +340,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "wildcard matches deeply nested path",
 			patterns:   "prod/*",
 			identifier: "ws-deep",
-			resType:    trn.ResourceTypeWorkspace,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeWorkspace,
+			setupMock: func(c *client.GRPCClient) {
 				mockWS := c.WorkspacesClient.(*mocks.WorkspacesClient)
 				mockWS.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws-deep"}).
 					Return(&pb.Workspace{FullPath: "prod/team/subteam/workspace"}, nil)
@@ -351,8 +351,8 @@ func TestACLChecker_authorize(t *testing.T) {
 			name:       "API error propagates",
 			patterns:   "prod/*",
 			identifier: "ws-error",
-			resType:    trn.ResourceTypeWorkspace,
-			setupMock: func(c *client.Client) {
+			resType:    trn.TypeWorkspace,
+			setupMock: func(c *client.GRPCClient) {
 				mockWS := c.WorkspacesClient.(*mocks.WorkspacesClient)
 				mockWS.On("GetWorkspaceByID", mock.Anything, &pb.GetWorkspaceByIDRequest{Id: "ws-error"}).
 					Return(nil, status.Error(codes.Internal, "internal error"))
@@ -364,7 +364,7 @@ func TestACLChecker_authorize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &client.Client{
+			mockClient := &client.GRPCClient{
 				GroupsClient:                mocks.NewGroupsClient(t),
 				WorkspacesClient:            mocks.NewWorkspacesClient(t),
 				RunsClient:                  mocks.NewRunsClient(t),
@@ -393,7 +393,7 @@ func TestACLChecker_authorize(t *testing.T) {
 }
 
 func TestACLChecker_caching(t *testing.T) {
-	mockClient := &client.Client{
+	mockClient := &client.GRPCClient{
 		WorkspacesClient: mocks.NewWorkspacesClient(t),
 	}
 	mockWS := mockClient.WorkspacesClient.(*mocks.WorkspacesClient)
@@ -406,10 +406,10 @@ func TestACLChecker_caching(t *testing.T) {
 	require.NoError(t, err)
 
 	// Call twice with same identifier
-	err = checker.Authorize(t.Context(), mockClient, "ws-123", trn.ResourceTypeWorkspace)
+	err = checker.Authorize(t.Context(), mockClient, "ws-123", trn.TypeWorkspace)
 	assert.NoError(t, err)
 
-	err = checker.Authorize(t.Context(), mockClient, "ws-123", trn.ResourceTypeWorkspace)
+	err = checker.Authorize(t.Context(), mockClient, "ws-123", trn.TypeWorkspace)
 	assert.NoError(t, err)
 
 	mockWS.AssertNumberOfCalls(t, "GetWorkspaceByID", 1)

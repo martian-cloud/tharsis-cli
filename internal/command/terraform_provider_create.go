@@ -6,8 +6,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type terraformProviderCreateCommand struct {
@@ -70,7 +70,7 @@ func (c *terraformProviderCreateCommand) Run(args []string) int {
 		// Handle deprecated syntax by extracting name and group path.
 		parent, child := extractParentPath(providerName)
 		providerName = child
-		groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, parent)
+		groupID = trn.TypeGroup.Build(parent)
 	}
 
 	input := &pb.CreateTerraformProviderRequest{

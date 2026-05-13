@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // workspaceUpdateCommand is the top-level structure for the workspace update command.
@@ -53,7 +53,7 @@ func (c *workspaceUpdateCommand) Run(args []string) int {
 	}
 
 	input := &pb.UpdateWorkspaceRequest{
-		Id:                 trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id:                 trn.TypeWorkspace.Normalize(c.arguments[0]),
 		Description:        c.description,
 		TerraformVersion:   c.terraformVersion,
 		MaxJobDuration:     c.maxJobDuration,

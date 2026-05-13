@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type moduleGetVersionCommand struct {
@@ -49,7 +49,7 @@ func (c *moduleGetVersionCommand) Run(args []string) int {
 
 	// Handle deprecated -version flag and module path arg.
 	if c.version != nil {
-		moduleVersionID = trn.NewResourceTRN(trn.ResourceTypeTerraformModuleVersion, moduleVersionID, *c.version)
+		moduleVersionID = trn.TypeTerraformModuleVersion.Build(moduleVersionID, *c.version)
 	}
 
 	input := &pb.GetTerraformModuleVersionByIDRequest{

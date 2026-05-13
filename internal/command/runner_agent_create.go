@@ -5,8 +5,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // runnerAgentCreateCommand is the top-level structure for the runner agent create command.
@@ -127,7 +127,7 @@ func (c *runnerAgentCreateCommand) Flags() *flag.Set {
 		"Full path of group where runner will be created.",
 		flag.Deprecated("use -group-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeGroup, s)
+			return trn.TypeGroup.Build(s)
 		}),
 	)
 	f.BoolVar(
