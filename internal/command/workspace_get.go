@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // workspaceGetCommand is the top-level structure for the workspace get command.
@@ -46,7 +46,7 @@ func (c *workspaceGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetWorkspaceByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.TypeWorkspace.Normalize(c.arguments[0]),
 	}
 
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, input)

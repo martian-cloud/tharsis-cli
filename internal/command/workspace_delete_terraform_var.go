@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceDeleteTerraformVarCommand struct {
@@ -47,7 +47,7 @@ func (c *workspaceDeleteTerraformVarCommand) Run(args []string) int {
 
 	// Get workspace to retrieve full path.
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.TypeWorkspace.Normalize(c.arguments[0]),
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
@@ -55,7 +55,7 @@ func (c *workspaceDeleteTerraformVarCommand) Run(args []string) int {
 	}
 
 	deleteInput := &pb.DeleteNamespaceVariableRequest{
-		Id:      trn.NewResourceTRN(trn.ResourceTypeVariable, workspace.FullPath, pb.VariableCategory_terraform.String(), *c.key),
+		Id:      trn.TypeVariable.Build(workspace.FullPath, pb.VariableCategory_terraform.String(), *c.key),
 		Version: c.version,
 	}
 

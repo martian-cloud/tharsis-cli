@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type moduleListVersionsCommand struct {
@@ -65,7 +65,7 @@ func (c *moduleListVersionsCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetTerraformModuleVersionsRequest{
-		ModuleId: trn.ToTRN(trn.ResourceTypeTerraformModule, c.arguments[0]),
+		ModuleId: trn.TypeTerraformModule.Normalize(c.arguments[0]),
 		Sort:     sortByEnum,
 		PaginationOptions: &pb.PaginationOptions{
 			First: c.limit,

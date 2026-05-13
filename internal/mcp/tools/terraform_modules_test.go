@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/acl"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -70,7 +70,7 @@ func TestListTerraformModules(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 			}
@@ -134,7 +134,7 @@ func TestGetTerraformModule(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 			}
@@ -171,7 +171,7 @@ func TestCreateTerraformModule(t *testing.T) {
 				RepositoryURL: "https://github.com/org/repo",
 			},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.TypeGroup).Return(nil)
 				m.terraformModules.On("CreateTerraformModule", mock.Anything, &pb.CreateTerraformModuleRequest{
 					GroupId:       "g1",
 					Name:          "new-module",
@@ -193,7 +193,7 @@ func TestCreateTerraformModule(t *testing.T) {
 				System:  "aws",
 			},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.ResourceTypeGroup).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.TypeGroup).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -206,7 +206,7 @@ func TestCreateTerraformModule(t *testing.T) {
 				RepositoryURL: "https://github.com/org/repo",
 			},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.ResourceTypeGroup).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "g1", trn.TypeGroup).Return(nil)
 				m.terraformModules.On("CreateTerraformModule", mock.Anything, &pb.CreateTerraformModuleRequest{
 					GroupId:       "g1",
 					Name:          "new-module",
@@ -230,7 +230,7 @@ func TestCreateTerraformModule(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 				acl: testMocks.acl,
@@ -267,7 +267,7 @@ func TestUpdateTerraformModule(t *testing.T) {
 				RepositoryURL: ptr.String("https://github.com/org/new-repo"),
 			},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(nil)
 				m.terraformModules.On("UpdateTerraformModule", mock.Anything, &pb.UpdateTerraformModuleRequest{
 					Id:            "m1",
 					RepositoryUrl: ptr.String("https://github.com/org/new-repo"),
@@ -286,7 +286,7 @@ func TestUpdateTerraformModule(t *testing.T) {
 				RepositoryURL: ptr.String("https://github.com/org/repo"),
 			},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -297,7 +297,7 @@ func TestUpdateTerraformModule(t *testing.T) {
 				RepositoryURL: ptr.String("https://github.com/org/repo"),
 			},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeTerraformModule).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.TypeTerraformModule).Return(nil)
 				m.terraformModules.On("UpdateTerraformModule", mock.Anything, &pb.UpdateTerraformModuleRequest{
 					Id:            "nonexistent",
 					RepositoryUrl: ptr.String("https://github.com/org/repo"),
@@ -319,7 +319,7 @@ func TestUpdateTerraformModule(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 				acl: testMocks.acl,
@@ -352,7 +352,7 @@ func TestDeleteTerraformModule(t *testing.T) {
 			name:  "delete module successfully",
 			input: &deleteTerraformModuleInput{ID: "m1"},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(nil)
 				m.terraformModules.On("DeleteTerraformModule", mock.Anything, &pb.DeleteTerraformModuleRequest{Id: "m1"}).Return(nil, nil)
 			},
 		},
@@ -360,7 +360,7 @@ func TestDeleteTerraformModule(t *testing.T) {
 			name:  "acl denial",
 			input: &deleteTerraformModuleInput{ID: "m1"},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.ResourceTypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "m1", trn.TypeTerraformModule).Return(status.Error(codes.PermissionDenied, "access denied"))
 			},
 			expectError: true,
 		},
@@ -368,7 +368,7 @@ func TestDeleteTerraformModule(t *testing.T) {
 			name:  "module not found",
 			input: &deleteTerraformModuleInput{ID: "nonexistent"},
 			mockSetup: func(m *terraformModuleMocks) {
-				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.ResourceTypeTerraformModule).Return(nil)
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.TypeTerraformModule).Return(nil)
 				m.terraformModules.On("DeleteTerraformModule", mock.Anything, &pb.DeleteTerraformModuleRequest{Id: "nonexistent"}).Return(nil, status.Error(codes.NotFound, "not found"))
 			},
 			expectError: true,
@@ -387,7 +387,7 @@ func TestDeleteTerraformModule(t *testing.T) {
 			}
 
 			toolCtx := &ToolContext{
-				grpcClient: &client.Client{
+				grpcClient: &client.GRPCClient{
 					TerraformModulesClient: testMocks.terraformModules,
 				},
 				acl: testMocks.acl,

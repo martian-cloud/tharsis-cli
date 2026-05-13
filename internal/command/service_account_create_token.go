@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type serviceAccountCreateTokenCommand struct {
@@ -46,7 +46,7 @@ func (c *serviceAccountCreateTokenCommand) Run(args []string) int {
 	}
 
 	input := &pb.CreateOIDCTokenRequest{
-		ServiceAccountId: trn.ToTRN(trn.ResourceTypeServiceAccount, c.arguments[0]),
+		ServiceAccountId: trn.TypeServiceAccount.Normalize(c.arguments[0]),
 		Token:            *c.token,
 	}
 

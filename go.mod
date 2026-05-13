@@ -1,6 +1,6 @@
 module gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli
 
-go 1.25.8
+go 1.26.2
 
 require (
 	github.com/alecthomas/chroma/v2 v2.23.1
@@ -29,11 +29,10 @@ require (
 	github.com/olekukonko/tablewriter v1.1.4
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/posener/complete v1.2.3
-	github.com/qiangxue/go-env v1.0.1
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zclconf/go-cty v1.18.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.87.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.88.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/term v0.42.0
 	golang.org/x/text v0.36.0
@@ -110,6 +109,7 @@ require (
 	github.com/olekukonko/ll v0.1.8 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/qiangxue/go-env v1.0.1 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect

@@ -5,8 +5,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -62,7 +62,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 	if c.parentGroupID == nil {
 		// Handle deprecated syntax where full path of the workspace is passed into the argument.
 		parent, child := extractParentPath(name)
-		c.parentGroupID = ptr.String(trn.NewResourceTRN(trn.ResourceTypeGroup, parent))
+		c.parentGroupID = ptr.String(trn.TypeGroup.Build(parent))
 		name = child
 	}
 
@@ -75,7 +75,7 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 			return 1
 		}
 
-		checkID := trn.NewResourceTRN(trn.ResourceTypeWorkspace, group.FullPath, name)
+		checkID := trn.TypeWorkspace.Build(group.FullPath, name)
 		c.Logger.Debug("checking if workspace exists", "value", checkID)
 
 		workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{Id: checkID})
@@ -189,7 +189,7 @@ func (c *workspaceCreateCommand) Flags() *flag.Set {
 		"managed-identity",
 		"The ID of a managed identity to assign.",
 		flag.TransformString(func(s string) string {
-			return trn.ToTRN(trn.ResourceTypeManagedIdentity, s)
+			return trn.TypeManagedIdentity.Normalize(s)
 		}),
 	)
 	f.BoolVar(

@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 // managedIdentityGetCommand is the top-level structure for the managed identity get command.
@@ -46,7 +46,7 @@ func (c *managedIdentityGetCommand) Run(args []string) int {
 	}
 
 	input := &pb.GetManagedIdentityByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeManagedIdentity, c.arguments[0]),
+		Id: trn.TypeManagedIdentity.Normalize(c.arguments[0]),
 	}
 
 	identity, err := c.grpcClient.ManagedIdentitiesClient.GetManagedIdentityByID(c.Context, input)

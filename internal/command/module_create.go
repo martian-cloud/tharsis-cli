@@ -6,8 +6,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -81,7 +81,7 @@ func (c *moduleCreateCommand) Run(args []string) int {
 		system = parts[len(parts)-1]
 		name = parts[len(parts)-2]
 		groupPath := strings.Join(parts[:len(parts)-2], "/")
-		groupID = trn.NewResourceTRN(trn.ResourceTypeGroup, groupPath)
+		groupID = trn.TypeGroup.Build(groupPath)
 	}
 
 	if *c.ifNotExists {
@@ -93,7 +93,7 @@ func (c *moduleCreateCommand) Run(args []string) int {
 			return 1
 		}
 
-		checkID := trn.NewResourceTRN(trn.ResourceTypeTerraformModule, group.FullPath, name, system)
+		checkID := trn.TypeTerraformModule.Build(group.FullPath, name, system)
 		c.Logger.Debug("checking if module exists", "value", checkID)
 
 		module, err := c.grpcClient.TerraformModulesClient.GetTerraformModuleByID(c.Context, &pb.GetTerraformModuleByIDRequest{Id: checkID})
