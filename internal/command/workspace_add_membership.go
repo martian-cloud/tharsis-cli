@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceAddMembershipCommand struct {
@@ -53,7 +53,7 @@ func (c *workspaceAddMembershipCommand) Run(args []string) int {
 	}
 
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.TypeWorkspace.Normalize(c.arguments[0]),
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
@@ -119,7 +119,7 @@ func (c *workspaceAddMembershipCommand) Flags() *flag.Set {
 		"Role name for new membership.",
 		flag.Deprecated("use -role-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeRole, s)
+			return trn.TypeRole.Build(s)
 		}),
 	)
 	f.StringVar(
@@ -128,7 +128,7 @@ func (c *workspaceAddMembershipCommand) Flags() *flag.Set {
 		"Username for the new membership.",
 		flag.Deprecated("use -user-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeUser, s)
+			return trn.TypeUser.Build(s)
 		}),
 	)
 	f.StringVar(
@@ -147,7 +147,7 @@ func (c *workspaceAddMembershipCommand) Flags() *flag.Set {
 		"Team name for the new membership.",
 		flag.Deprecated("use -team-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeTeam, s)
+			return trn.TypeTeam.Build(s)
 		}),
 	)
 	f.BoolVar(

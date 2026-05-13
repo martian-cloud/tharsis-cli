@@ -5,8 +5,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type workspaceGetMembershipCommand struct {
@@ -53,7 +53,7 @@ func (c *workspaceGetMembershipCommand) Run(args []string) int {
 	}
 
 	workspace, err := c.grpcClient.WorkspacesClient.GetWorkspaceByID(c.Context, &pb.GetWorkspaceByIDRequest{
-		Id: trn.ToTRN(trn.ResourceTypeWorkspace, c.arguments[0]),
+		Id: trn.TypeWorkspace.Normalize(c.arguments[0]),
 	})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get workspace")
@@ -173,7 +173,7 @@ func (c *workspaceGetMembershipCommand) Flags() *flag.Set {
 		"Username to find the workspace membership for.",
 		flag.Deprecated("use -user-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeUser, s)
+			return trn.TypeUser.Build(s)
 		}),
 	)
 	f.StringVar(
@@ -182,7 +182,7 @@ func (c *workspaceGetMembershipCommand) Flags() *flag.Set {
 		"Team name to find the workspace membership for.",
 		flag.Deprecated("use -team-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeTeam, s)
+			return trn.TypeTeam.Build(s)
 		}),
 	)
 

@@ -5,8 +5,8 @@ import (
 
 	"github.com/aws/smithy-go/ptr"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type groupGetMembershipCommand struct {
@@ -52,7 +52,7 @@ func (c *groupGetMembershipCommand) Run(args []string) int {
 		return code
 	}
 
-	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: trn.ToTRN(trn.ResourceTypeGroup, c.arguments[0])})
+	group, err := c.grpcClient.GroupsClient.GetGroupByID(c.Context, &pb.GetGroupByIDRequest{Id: trn.TypeGroup.Normalize(c.arguments[0])})
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to get group")
 		return 1
@@ -171,7 +171,7 @@ func (c *groupGetMembershipCommand) Flags() *flag.Set {
 		"Username to find the group membership for.",
 		flag.Deprecated("use -user-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeUser, s)
+			return trn.TypeUser.Build(s)
 		}),
 	)
 	f.StringVar(
@@ -180,7 +180,7 @@ func (c *groupGetMembershipCommand) Flags() *flag.Set {
 		"Team name to find the group membership for.",
 		flag.Deprecated("use -team-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeTeam, s)
+			return trn.TypeTeam.Build(s)
 		}),
 	)
 

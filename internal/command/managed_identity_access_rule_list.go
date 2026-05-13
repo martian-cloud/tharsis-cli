@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/trn"
 )
 
 type managedIdentityAccessRuleListCommand struct {
@@ -96,7 +96,7 @@ func (c *managedIdentityAccessRuleListCommand) Flags() *flag.Set {
 		"Resource path of the managed identity to get access rules for.",
 		flag.Deprecated("use -managed-identity-id"),
 		flag.TransformString(func(s string) string {
-			return trn.NewResourceTRN(trn.ResourceTypeManagedIdentity, s)
+			return trn.TypeManagedIdentity.Build(s)
 		}),
 	)
 	f.BoolVar(

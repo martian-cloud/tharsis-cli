@@ -15,7 +15,6 @@ import (
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/tfe"
 )
 
 func TestCreateRun(t *testing.T) {
@@ -47,7 +46,7 @@ func TestCreateRun(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			grpcClient := &client.Client{
+			grpcClient := &client.GRPCClient{
 				WorkspacesClient:            mocks.NewWorkspacesClient(t),
 				ConfigurationVersionsClient: mocks.NewConfigurationVersionsClient(t),
 				RunsClient:                  mocks.NewRunsClient(t),
@@ -56,7 +55,7 @@ func TestCreateRun(t *testing.T) {
 
 			mgr := &Manager{
 				grpcClient: grpcClient,
-				tfeClient:  tfe.NewMockRESTClient(t),
+				tfeClient:  client.NewMockRESTClient(t),
 				logger:     hclog.NewNullLogger(),
 				ui:         terminal.NewNoopUI(),
 			}
@@ -78,14 +77,14 @@ func TestApplyRun(t *testing.T) {
 	type testCase struct {
 		name       string
 		runID      string
-		setupMocks func(*client.Client)
+		setupMocks func(*client.GRPCClient)
 	}
 
 	testCases := []testCase{
 		{
 			name:  "apply run fails",
 			runID: "run1",
-			setupMocks: func(c *client.Client) {
+			setupMocks: func(c *client.GRPCClient) {
 				mockRuns := c.RunsClient.(*mocks.RunsClient)
 				mockRuns.On("ApplyRun", mock.Anything, &pb.ApplyRunRequest{RunId: "run1"}).
 					Return(nil, assert.AnError)
@@ -94,7 +93,7 @@ func TestApplyRun(t *testing.T) {
 		{
 			name:  "get job fails",
 			runID: "run1",
-			setupMocks: func(c *client.Client) {
+			setupMocks: func(c *client.GRPCClient) {
 				mockRuns := c.RunsClient.(*mocks.RunsClient)
 				mockJobs := c.JobsClient.(*mocks.JobsClient)
 				mockRuns.On("ApplyRun", mock.Anything, &pb.ApplyRunRequest{RunId: "run1"}).
@@ -107,7 +106,7 @@ func TestApplyRun(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			grpcClient := &client.Client{
+			grpcClient := &client.GRPCClient{
 				RunsClient: mocks.NewRunsClient(t),
 				JobsClient: mocks.NewJobsClient(t),
 			}
