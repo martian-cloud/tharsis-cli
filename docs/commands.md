@@ -536,13 +536,19 @@ The username for the membership.\
 **Create a new group.**
   
 Creates a new group under a parent group with an
-optional description.
+optional description. Use -parents to automatically
+create any missing intermediate groups specified
+by -parent-group-id.
   
 ```bash
 tharsis group create \
   -parent-group-id "trn:group:<group_path>" \
   -description "Operations group" \
   <name>
+
+tharsis group create -parents \
+  -parent-group-id "trn:group:xyz/team-a/dev" \
+  api
 ```
   
 #### Options
@@ -553,7 +559,7 @@ Description for the new group.
 
 #### if-not-exists
 
-Create a group if it does not already exist.\
+Do not error if the group already exists; return the existing group instead.\
 **Default:** `false`
 
 #### json
@@ -563,6 +569,11 @@ Show final output as JSON.
 #### parent-group-id
 
 Parent group ID.
+
+#### parents
+
+Create missing intermediate groups specified by -parent-group-id.\
+**Default:** `false`
 
 
 ---
