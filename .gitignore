@@ -19,6 +19,7 @@
 
 # Custom Ignore
 ## Enter your project specific ignores here
+_dev/
 
 
 # Martian Cloud Common Ignore
