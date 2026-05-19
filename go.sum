@@ -349,8 +349,8 @@ github.com/zclconf/go-cty v1.18.0 h1:pJ8+HNI4gFoyRNqVE37wWbJWVw43BZczFo7KUoRczaA
 github.com/zclconf/go-cty v1.18.0/go.mod h1:qpnV6EDNgC1sns/AleL1fvatHw72j+S+nS+MJ+T2CSg=
 github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940 h1:4r45xpDWB6ZMSMNJFMOjqrGHynW3DIBuR2H9j0ug+Mo=
 github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940/go.mod h1:CmBdvvj3nqzfzJ6nTCIwDTPZ56aVGvDrmztiO5g3qrM=
-gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.88.0 h1:DIP5QaytAazkz58G5BcQYQmUPQkZd6AiUXuqMHz1wQM=
-gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.88.0/go.mod h1:TX7xEVF9EjdfmkuUPZ5nR9liy8za6rj9qqtNMPOhIgk=
+gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.89.0 h1:Mep8+LS/GKmvlcuLHuCHyXhCXDc4lyqRJqWD3bzOxNA=
+gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.89.0/go.mod h1:D+SdP0VJoTJpdXwPDBhH9+S7XUUOikLKkovG2Y9P9+A=
 go.etcd.io/bbolt v1.4.3 h1:dEadXpI6G79deX5prL3QRNP6JB8UxVkqo4UPnHaNXJo=
 go.etcd.io/bbolt v1.4.3/go.mod h1:tKQlpPaYCVFctUIgFKFnAlvbmB3tpy1vkTnDWohtc0E=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
