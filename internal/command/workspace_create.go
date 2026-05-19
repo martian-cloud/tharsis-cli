@@ -85,6 +85,10 @@ func (c *workspaceCreateCommand) Run(args []string) int {
 		}
 
 		if workspace != nil {
+			if len(c.managedIdentityIDs) > 0 {
+				c.UI.Warnf("workspace already exists; -managed-identity flag was ignored")
+			}
+
 			c.Logger.Debug("workspace already exists, returning existing workspace")
 			return c.Output(workspace, c.toJSON)
 		}

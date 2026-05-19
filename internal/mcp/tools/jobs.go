@@ -37,7 +37,7 @@ func toJob(j *pb.Job) *job {
 		WorkspaceID:    j.WorkspaceId,
 		RunID:          j.RunId,
 		Type:           j.Type,
-		Status:         j.Status,
+		Status:         j.Status.String(),
 		MaxJobDuration: j.MaxJobDuration,
 	}
 }
