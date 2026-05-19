@@ -136,7 +136,7 @@ func TestGetLatestJob(t *testing.T) {
 					WorkspaceId:    "ws1",
 					RunId:          "run1",
 					Type:           "plan",
-					Status:         "finished",
+					Status:         pb.JobStatus_finished,
 					MaxJobDuration: 60,
 				}, nil)
 			},
@@ -152,7 +152,7 @@ func TestGetLatestJob(t *testing.T) {
 					WorkspaceId:    "ws1",
 					RunId:          "run1",
 					Type:           "apply",
-					Status:         "running",
+					Status:         pb.JobStatus_running,
 					MaxJobDuration: 120,
 				}, nil)
 			},

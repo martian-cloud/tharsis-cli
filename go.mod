@@ -32,7 +32,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zclconf/go-cty v1.18.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.88.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.89.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/term v0.42.0
 	golang.org/x/text v0.36.0
