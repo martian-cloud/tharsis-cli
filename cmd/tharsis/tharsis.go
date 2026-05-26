@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
+	"net/http"
 	"os"
 	"time"
 
@@ -150,6 +152,16 @@ func realMain() int {
 	retryClient.Logger = log
 	retryClient.RetryWaitMin = 10 * time.Second
 	retryClient.RetryWaitMax = 60 * time.Second
+
+	// Configure TLS skip verify from the active profile.
+	if s, err := settings.ReadSettings(); err == nil {
+		if err := s.SetCurrentProfile(*profileName); err == nil && s.CurrentProfile.TLSSkipVerify {
+			retryClient.HTTPClient.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+			}
+		}
+	}
+
 	httpClient := retryClient.StandardClient()
 
 	// Add User-Agent header to all requests
