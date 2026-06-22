@@ -19,9 +19,52 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 )
 
+// runStatus represents the overall status of a run.
+type runStatus string
+
+// runStatus constants.
 const (
-	runStatusPlannedPrefix = "planned"
-	runStatusApplied       = "applied"
+	runApplied            runStatus = "applied"
+	runApplyQueued        runStatus = "apply_queued"
+	runApplying           runStatus = "applying"
+	runCanceled           runStatus = "canceled"
+	runDiscarded          runStatus = "discarded"
+	runErrored            runStatus = "errored"
+	runPending            runStatus = "pending"
+	runPlanQueued         runStatus = "plan_queued"
+	runPlanned            runStatus = "planned"
+	runPlannedAndFinished runStatus = "planned_and_finished"
+	runPlanning           runStatus = "planning"
+	runQueuing            runStatus = "queuing"
+	runQueuingApply       runStatus = "queuing_apply"
+)
+
+// planStatus represents the status of a plan resource.
+type planStatus string
+
+// planStatus constants.
+const (
+	planCreated  planStatus = "created"
+	planCanceled planStatus = "canceled"
+	planQueued   planStatus = "queued"
+	planErrored  planStatus = "errored"
+	planFinished planStatus = "finished"
+	planPending  planStatus = "pending"
+	planRunning  planStatus = "running"
+)
+
+// applyStatus represents the status of an apply resource.
+type applyStatus string
+
+// applyStatus constants.
+const (
+	applyCanceled applyStatus = "canceled"
+	applyCreated  applyStatus = "created"
+	applyErrored  applyStatus = "errored"
+	applyFinished applyStatus = "finished"
+	applyPending  applyStatus = "pending"
+	applyQueued   applyStatus = "queued"
+	applyRunning  applyStatus = "running"
 )
 
 // Manager provides high-level run management operations
@@ -154,6 +197,18 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 
 	m.logger.Debug("created run", "run_id", createdRun.Metadata.Id)
 
+	// Wait until the plan job has been created before requesting it, to avoid a race
+	// where the job does not yet exist. The plan status is the authoritative signal.
+	if err = m.waitForRunJob(ctx, createdRun.WorkspaceId, createdRun.Metadata.Id, func(ctx context.Context) (string, error) {
+		plan, pErr := m.grpcClient.RunsClient.GetPlanByID(ctx, &pb.GetPlanByIDRequest{Id: createdRun.PlanId})
+		if pErr != nil {
+			return "", pErr
+		}
+		return plan.Status, nil
+	}, planJobReady); err != nil {
+		return nil, fmt.Errorf("failed waiting for plan job: %w", err)
+	}
+
 	// Get the job for the plan
 	job, err := m.grpcClient.JobsClient.GetLatestJobForPlan(ctx, &pb.GetLatestJobForPlanRequest{
 		PlanId: createdRun.PlanId,
@@ -175,8 +230,8 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		return nil, fmt.Errorf("failed to get final run: %w", err)
 	}
 
-	if !strings.HasPrefix(finalRun.Status, runStatusPlannedPrefix) {
-		return nil, fmt.Errorf("plan ended with status: %s", finalRun.Status)
+	if finalRun.Status == string(runCanceled) || finalRun.Status == string(runDiscarded) || finalRun.Status == string(runErrored) {
+		return nil, fmt.Errorf("run ended with status: %s", finalRun.Status)
 	}
 
 	return finalRun, nil
@@ -190,6 +245,18 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply run: %w", err)
+	}
+
+	// Wait until the apply job has been created before requesting it, to avoid a race
+	// where the job does not yet exist. The apply status is the authoritative signal.
+	if err = m.waitForRunJob(ctx, appliedRun.WorkspaceId, runID, func(ctx context.Context) (string, error) {
+		apply, aErr := m.grpcClient.RunsClient.GetApplyByID(ctx, &pb.GetApplyByIDRequest{Id: appliedRun.ApplyId})
+		if aErr != nil {
+			return "", aErr
+		}
+		return apply.Status, nil
+	}, applyJobReady); err != nil {
+		return nil, fmt.Errorf("failed waiting for apply job: %w", err)
 	}
 
 	// Get the job for the apply
@@ -213,11 +280,102 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 		return nil, fmt.Errorf("failed to get final run: %w", err)
 	}
 
-	if finalRun.Status != runStatusApplied {
+	if finalRun.Status != string(runApplied) {
 		return nil, fmt.Errorf("apply ended with status: %s", finalRun.Status)
 	}
 
 	return finalRun, nil
+}
+
+// waitForRunJob blocks until ready reports the plan/apply job has been created. It
+// checks the current status first, then subscribes to run events as a wake-up signal,
+// re-checking the authoritative plan/apply status (getStatus) on each event. It returns
+// an error if the plan/apply reaches a final state before a job becomes available, or
+// if the run event stream cannot be established or closes first.
+func (m *Manager) waitForRunJob(
+	ctx context.Context,
+	workspaceID, runID string,
+	getStatus func(context.Context) (string, error),
+	ready func(status string) (bool, error),
+) error {
+	// Check current state first; the subscription does not replay current state, so a
+	// transition that already happened could otherwise be missed.
+	status, err := getStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if done, rErr := ready(status); rErr != nil || done {
+		return rErr
+	}
+
+	// Subscribe to run events for wake-ups. The server keeps the subscription open
+	// until the RPC is canceled, so use a child context that is canceled on return to
+	// tear the stream down once the job is available.
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	stream, err := m.grpcClient.RunsClient.SubscribeToRunEvents(subCtx, &pb.SubscribeToRunEventsRequest{
+		WorkspaceId: &workspaceID,
+		RunId:       &runID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to run events: %w", err)
+	}
+
+	for {
+		// Block until the next run event, then re-check the authoritative status.
+		_, recvErr := stream.Recv()
+
+		status, err := getStatus(ctx)
+		if err != nil {
+			return err
+		}
+		done, err := ready(status)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+
+		// The stream closed before the job became available; the status above is the
+		// most current we can get, so report the stream failure.
+		if recvErr != nil {
+			return fmt.Errorf("run event stream closed before a job was available: %w", recvErr)
+		}
+	}
+}
+
+// planJobReady reports whether the plan's job has been created, based on the plan
+// status. A job exists once the plan reaches queued and through its terminal states.
+// A plan that reaches a final state without a job (canceled) is an error.
+func planJobReady(status string) (bool, error) {
+	switch planStatus(status) {
+	case planQueued, planRunning, planFinished, planErrored:
+		// A job exists.
+		return true, nil
+	case planCanceled:
+		return false, fmt.Errorf("plan reached final state before a job was available; status: %s", status)
+	default:
+		// created, pending: job not created yet.
+		return false, nil
+	}
+}
+
+// applyJobReady reports whether the apply's job has been created, based on the apply
+// status. A job exists once the apply reaches queued and through its terminal states.
+// An apply that reaches a final state without a job (canceled) is an error.
+func applyJobReady(status string) (bool, error) {
+	switch applyStatus(status) {
+	case applyQueued, applyRunning, applyFinished, applyErrored:
+		// A job exists.
+		return true, nil
+	case applyCanceled:
+		return false, fmt.Errorf("apply reached final state before a job was available; status: %s", status)
+	default:
+		// created, pending: job not created yet.
+		return false, nil
+	}
 }
 
 func (m *Manager) streamJobLogs(ctx context.Context, jobID string) error {
