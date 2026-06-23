@@ -1,0 +1,23 @@
+const moduleName = modules.map();
+
+declare module "fs" {}
+declare module "@custom/plugin" {}
+declare module "../../compiler/types" {}
+
+type TestType<T> = {
+  [Key keyof T]: Required<Pick<T, Key>>
+}
+
+const TestComponent = ({ a, b }) => (
+  <Component width={100} prop={{ a, ...b }} attr="text">
+    <span>This is a component</span>
+    <SomethingElse />
+  </Component>
+)
+
+type FirstChar<K extends string> = K extends `${infer X}${infer _}`
+  ? X
+  : never
+type SChar = FirstChar<"stuff">
+
+export { TestComponent }

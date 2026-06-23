@@ -1,0 +1,65 @@
+name: Nightly E2E Tests
+
+on:
+  schedule:
+    - cron:  '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  # resolve-versions allows us to show resolved Go versions in job titles
+  # for added clarity and quick orientation in a long list of past jobs
+  resolve-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      -
+        name: Resolve old stable version
+        id: oldstable
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: oldstable
+      -
+        name: Resolve stable version
+        id: stable
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: stable
+    outputs:
+      oldstable: ${{ steps.oldstable.outputs.go-version }}
+      stable: ${{ steps.stable.outputs.go-version }}
+
+  e2e-tests:
+    name: e2e-tests (${{ matrix.os }}, go ${{ matrix.go_version }})
+    needs:
+      - resolve-versions
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        go_version:
+          - ${{ needs.resolve-versions.outputs.oldstable }}
+          - ${{ needs.resolve-versions.outputs.stable }}
+    steps:
+    - name: Free up space on macOS runner
+      if: ${{ matrix.os == 'macos-latest' }}
+      run: |
+        df -hI /dev/disk3s1s1
+        sudo rm -rf /Applications/Xcode*
+        df -hI /dev/disk3s1s1
+
+    - name: Check out code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - name: Set up Go
+      uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+      with:
+        go-version: ${{ matrix.go_version }}
+
+    - name: E2E tests
+      timeout-minutes: 60
+      env:
+        E2E_TESTING: 1
+      run: |
+        go test -timeout=40m -v ./...

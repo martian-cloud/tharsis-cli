@@ -1,0 +1,7 @@
+./change.go
+./config.go
+./custom.go
+./prompt.go
+./replacement.go
+./templatecache.go
+./utils.go

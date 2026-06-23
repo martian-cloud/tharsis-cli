@@ -1,0 +1,47 @@
+name: test
+on: [push]
+
+jobs:
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - ubuntu
+          - macOS
+
+    name: "${{ matrix.platform }}"
+
+    runs-on: ${{ matrix.platform }}-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Install gofumpt
+        run: go install mvdan.cc/gofumpt@latest
+      - name: Format check
+        run: gofumpt -l .
+
+      - name: Go test
+        run: make test

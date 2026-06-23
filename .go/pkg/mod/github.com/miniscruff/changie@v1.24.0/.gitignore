@@ -1,0 +1,22 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+coverage.html
+
+# mkdocs files
+.cache/
+site/
+venv/
+docs/cli/
+docs/config/
+
+# goreleaser builds
+dist/
+
+# NPM publishing
+npm/dist/
+changie-*.tgz

@@ -1,0 +1,96 @@
+import { Avatar, Box, Stack, Typography } from '@mui/material';
+import Link from '@mui/material/Link';
+import ListItemButton from '@mui/material/ListItemButton';
+import { useTheme } from '@mui/material/styles';
+import graphql from 'babel-plugin-relay/macro';
+import { useFragment } from "react-relay/hooks";
+import { Link as LinkRouter } from 'react-router-dom';
+import Timestamp from '../common/Timestamp';
+import LabelList from './labels/LabelList';
+import { WorkspaceSearchListItemFragment_workspace$key } from './__generated__/WorkspaceSearchListItemFragment_workspace.graphql';
+
+interface Props {
+    workspaceKey: WorkspaceSearchListItemFragment_workspace$key
+}
+
+function WorkspaceSearchListItem(props: Props) {
+    const theme = useTheme();
+
+    const data = useFragment<WorkspaceSearchListItemFragment_workspace$key>(graphql`
+        fragment WorkspaceSearchListItemFragment_workspace on Workspace {
+            metadata {
+                updatedAt
+            }
+            id
+            name
+            description
+            fullPath
+            labels {
+                key
+                value
+            }
+        }
+    `, props.workspaceKey);
+
+    return (
+        <ListItemButton
+            component={LinkRouter}
+            to={`/groups/${data.fullPath}`}
+            sx={{
+                borderBottom: `1px solid ${theme.palette.divider}`,
+                borderLeft: `1px solid ${theme.palette.divider}`,
+                borderRight: `1px solid ${theme.palette.divider}`,
+                '&:last-child': {
+                    borderBottomLeftRadius: 4,
+                    borderBottomRightRadius: 4
+                }
+            }}
+        >
+            <Box flex={1} display="flex" alignItems="center">
+                <Avatar sx={{ width: 32, height: 32, marginRight: 2, bgcolor: 'avatar.default' }} variant="rounded">{data.name[0].toUpperCase()}</Avatar>
+                <Box sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    [theme.breakpoints.down('md')]: {
+                        '& > *:nth-of-type(2)': {
+                            marginTop: 0.5
+                        }
+                    },
+                    [theme.breakpoints.up('md')]: {
+                        flexGrow: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                    }
+                }}>
+                    <Box>
+                        <Link
+                            component="div"
+                            underline="hover"
+                            variant="body1"
+                            color="textPrimary"
+                            sx={{ fontWeight: "500" }}
+                        >
+                            {data.fullPath}
+                        </Link>
+                        <Typography variant="body2" color="textSecondary">{data.description}</Typography>
+                        {data.labels && data.labels.length > 0 && (
+                            <Box sx={{ mt: 0.5 }}>
+                                <LabelList
+                                    labels={[...data.labels]}
+                                    size="xs"
+                                    maxVisible={3}
+                                />
+                            </Box>
+                        )}
+                    </Box>
+                    <Stack direction="row" spacing={1}>
+                        <Timestamp variant="body2" color="textSecondary" timestamp={data.metadata.updatedAt} />
+                    </Stack>
+                </Box>
+            </Box>
+        </ListItemButton>
+    );
+}
+
+export default WorkspaceSearchListItem

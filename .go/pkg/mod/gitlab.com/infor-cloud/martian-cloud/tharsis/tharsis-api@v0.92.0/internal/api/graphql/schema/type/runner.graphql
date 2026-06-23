@@ -1,0 +1,127 @@
+enum RunnerSort {
+  UPDATED_AT_ASC
+  UPDATED_AT_DESC
+  GROUP_LEVEL_ASC
+  GROUP_LEVEL_DESC
+}
+
+# The case of the values must match the model.
+enum RunnerType {
+  group
+  shared
+}
+
+type RunnerConnection {
+  totalCount: Int!
+  pageInfo: PageInfo!
+  edges: [RunnerEdge]
+}
+
+type RunnerEdge {
+  cursor: String!
+  node: Runner
+}
+
+type AssignServiceAccountToRunnerPayload {
+  clientMutationId: String
+  runner: Runner
+  serviceAccount: ServiceAccount
+  problems: [Problem!]!
+}
+
+type CreateRunnerPayload {
+  clientMutationId: String
+  runner: Runner
+  problems: [Problem!]!
+}
+
+type UpdateRunnerPayload {
+  clientMutationId: String
+  runner: Runner
+  problems: [Problem!]!
+}
+
+type DeleteRunnerPayload {
+  clientMutationId: String
+  runner: Runner
+  problems: [Problem!]!
+}
+
+type Runner implements Node {
+  id: ID!
+  metadata: ResourceMetadata!
+  groupPath: String!
+  resourcePath: String!
+  name: String!
+  description: String!
+  group: Group!
+  createdBy: String!
+  type: RunnerType!
+  disabled: Boolean!
+  sessions(
+    after: String
+    before: String
+    first: Int
+    last: Int
+    sort: RunnerSessionSort
+  ): RunnerSessionConnection!
+  jobs(
+    after: String
+    before: String
+    first: Int
+    last: Int
+    sort: JobSort
+  ): JobConnection!
+  assignedServiceAccounts(
+    after: String
+    before: String
+    first: Int
+    last: Int
+  ): ServiceAccountConnection!
+  runUntaggedJobs: Boolean!
+  tags: [String!]!
+}
+
+input AssignServiceAccountToRunnerInput {
+  clientMutationId: String
+  runnerPath: String
+    @deprecated(
+      reason: "Use runnerId field instead, which accepts a TRN (Tharsis Resource Name)"
+    )
+  serviceAccountPath: String
+    @deprecated(
+      reason: "Use serviceAccountId field instead, which accepts a TRN (Tharsis Resource Name)"
+    )
+  runnerId: String
+  serviceAccountId: String
+}
+
+input CreateRunnerInput {
+  clientMutationId: String
+  name: String!
+  description: String!
+  groupId: String
+  groupPath: String
+    @deprecated(
+      reason: "Use groupId field instead, which accepts a TRN (Tharsis Resource Name)"
+    )
+  disabled: Boolean
+  runUntaggedJobs: Boolean!
+  tags: [String!]!
+}
+
+input UpdateRunnerInput {
+  clientMutationId: String
+  id: ID!
+  metadata: ResourceMetadataInput
+  description: String!
+  disabled: Boolean
+  runUntaggedJobs: Boolean
+  tags: [String!]
+}
+
+input DeleteRunnerInput {
+  clientMutationId: String
+  id: ID!
+  metadata: ResourceMetadataInput
+}

@@ -1,0 +1,5 @@
+./man_docs.go
+./md_docs.go
+./rest_docs.go
+./util.go
+./yaml_docs.go

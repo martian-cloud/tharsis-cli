@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package martiancloud.tharsis.api.terraform_provider_platform_mirror;
+
+option go_package = "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen";
+
+import "metadata.proto";
+import "pagination.proto";
+
+// TerraformProviderPlatformMirrorSortableField defines enums for sorting platform mirrors.
+enum TerraformProviderPlatformMirrorSortableField {
+  CREATED_AT_ASC  = 0;
+  CREATED_AT_DESC = 1;
+}
+
+// GetTerraformProviderPlatformMirrorByIDRequest is the input for retrieving a platform mirror by ID.
+message GetTerraformProviderPlatformMirrorByIDRequest {
+  string id = 1;
+}
+
+// GetTerraformProviderPlatformMirrorsRequest is the input for retrieving a paginated list of platform mirrors.
+message GetTerraformProviderPlatformMirrorsRequest {
+  optional pagination.PaginationOptions                 pagination_options = 1;
+  optional TerraformProviderPlatformMirrorSortableField sort               = 2;
+  string                                                version_mirror_id  = 3;
+  optional string                                       os                 = 4;
+  optional string                                       architecture       = 5;
+}
+
+// DeleteTerraformProviderPlatformMirrorRequest is the input for deleting a platform mirror.
+message DeleteTerraformProviderPlatformMirrorRequest {
+  string id = 1;
+}
+
+// GetProviderPlatformPackageDownloadURLRequest is the input for getting a provider platform package download URL.
+message GetProviderPlatformPackageDownloadURLRequest {
+  string group_path         = 1;
+  string type               = 2;
+  string registry_namespace = 3;
+  string registry_hostname  = 4;
+  string semantic_version   = 5;
+  string os                 = 6;
+  string arch               = 7;
+}
+
+// TerraformProviderPlatformMirror represents a mirrored provider platform.
+message TerraformProviderPlatformMirror {
+  metadata.ResourceMetadata metadata          = 1;
+  string                    os                = 2;
+  string                    architecture      = 3;
+  string                    version_mirror_id = 4;
+}
+
+// GetTerraformProviderPlatformMirrorsResponse is the response for GetTerraformProviderPlatformMirrors.
+message GetTerraformProviderPlatformMirrorsResponse {
+  pagination.PageInfo                      page_info        = 1;
+  repeated TerraformProviderPlatformMirror platform_mirrors = 2;
+}
+
+// GetProviderPlatformPackageDownloadURLResponse is the response containing the download URL and hashes.
+message GetProviderPlatformPackageDownloadURLResponse {
+  string          url    = 1;
+  repeated string hashes = 2;
+}
