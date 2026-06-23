@@ -1,0 +1,3 @@
+kind: ✨ Added
+body: 'Changelog automation and release tagging via changie: changelog fragments enforced per MR, automated version tagging from CHANGELOG.md, and a manual job to cut releases.'
+time: 2026-06-22T14:03:28.605231-04:00

@@ -18,6 +18,10 @@ Instructions on downloading the latest pre-built releases or building a binary f
 
 - Tharsis CLI documentation is available at https://gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-docs/-/blob/main/docs/cli/tharsis/intro.md.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute. Note that every merge request that introduces a user-facing change must include a changelog fragment created with [changie](https://changie.dev/) (`changie new`); this is enforced in CI.
+
 ## Security
 
 If you've discovered a security vulnerability in Tharsis CLI, please let us know by creating a **confidential** issue in this project.
