@@ -6,6 +6,7 @@ description: "An introduction to the CLI commands"
 ## Available Commands
 Currently, the CLI supports the following commands:
   
+- [admin](#admin-command) — Activate or deactivate admin mode.
 - [apply](#apply-command) — Apply a Terraform run.
 - [caller-identity](#caller-identity-command) — Get the caller's identity.
 - [configure](#configure-command) — Create or update a profile.
@@ -90,6 +91,57 @@ Profile to use from the configuration file.\
 Show the version information.
 
 
+---
+## admin command
+**Activate or deactivate admin mode.**
+  
+**Subcommands:**
+  
+- [`activate`](#admin-activate-subcommand) - Activate admin mode.
+- [`deactivate`](#admin-deactivate-subcommand) - Deactivate admin mode.
+  
+Admin mode grants temporary elevated privileges to the currently
+authenticated user. Use activate to enable admin mode (defaults
+to 30 minutes, max 6 hours) and deactivate to disable it.
+  
+---
+### admin activate subcommand
+**Activate admin mode.**
+  
+Activates admin mode for the currently
+authenticated user. Admin mode grants
+elevated privileges for a limited duration.
+
+If no duration is specified, the API defaults
+to 30 minutes. Maximum duration is 6 hours.
+  
+```bash
+tharsis admin activate
+tharsis admin activate -duration 2h
+```
+  
+#### Options
+  
+#### duration
+
+Duration for admin mode (e.g. 30m, 2h). Defaults to 30m, max 6h.
+
+#### json
+
+Show final output as JSON.
+
+
+---
+### admin deactivate subcommand
+**Deactivate admin mode.**
+  
+Deactivates admin mode for the currently
+authenticated user.
+  
+```bash
+tharsis admin deactivate
+```
+  
 ---
 ## apply command
 **Apply a Terraform run.**
