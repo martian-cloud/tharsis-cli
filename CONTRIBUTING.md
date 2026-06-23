@@ -4,7 +4,7 @@ There are many ways you can contribute to Martian Cloud projects.  This document
 
 ## Prerequisites
 
-* **Go >= 1.20** ( [https://golang.org/dl/](https://golang.org/dl/) or [https://golang.org/doc/install](https://golang.org/doc/install) )
+* **Go >= 1.26** ( [https://golang.org/dl/](https://golang.org/dl/) or [https://golang.org/doc/install](https://golang.org/doc/install) )
 
 ## Ways to Contribute
 
@@ -58,6 +58,67 @@ Please respect the formatting of the project codebase:
     make vet
 
 - we generally try to follow the guidelines in this guide: [Uber's Go styling](https://github.com/uber-go/guide/blob/master/style.md)
+
+## Changelog entries
+
+This project uses [changie](https://changie.dev/) to manage changelog entries. Every MR that introduces a user-facing change must include a changelog fragment, and CI (`changelog-check`) enforces this.
+
+Install changie:
+
+```
+# macOS / Linux (Homebrew)
+brew install changie
+
+# Windows
+winget install miniscruff.changie
+
+# Go
+go install github.com/miniscruff/changie@latest
+```
+
+See the [changie installation docs](https://changie.dev/guide/installation/) for all options.
+
+Add an entry from the repository root:
+
+```
+changie new
+```
+
+Pick a kind (Added, Changed, Fixed, Deprecated, Removed, Security) and write a short description. This creates a fragment file in `.changes/unreleased/` — commit it with your MR.
+
+If a change genuinely does not need a changelog entry (e.g. a CI tweak or a docs-only fix), add the `skip-changelog` label to the MR to bypass the check.
+
+### Creating a release (maintainers)
+
+Releases are cut from the accumulated fragments — no manual tagging or hand-edited changelog. There are two ways to do it; the CI job is the preferred path.
+
+#### Via the CI `release-prep` job (preferred)
+
+This cuts a release with no MR — the unreleased fragments were already reviewed when their own MRs merged.
+
+1. Go to **Build → Pipelines** and either open the latest pipeline on `main`, or click **Run pipeline** with the branch set to `main`.
+2. (Optional) To pin the version instead of letting changie auto-compute it from the fragments' bump levels, add a `RELEASE_VERSION` variable (e.g. `v1.2.3`) when running the pipeline.
+3. In the pipeline, click the manual **`release-prep`** job (it only appears on `main`).
+
+The job batches the unreleased fragments into `CHANGELOG.md`, commits the bump, and pushes it directly to `main`. That push triggers `auto-tag-release`, which creates the matching `vX.Y.Z` tag, which in turn runs the build/upload/release pipeline — publishing the binaries and creating the GitLab release with the changelog notes as its description.
+
+> **One-time setup:** this job requires a `RELEASE_TOKEN` CI/CD variable — a Maintainer-role project access token with the `api` and `write_repository` scopes, configured as **masked** and **protected** — whose bot user is added to `main`'s **"Allowed to push and merge"** list (Settings → Repository → Protected branches). The token also backs `auto-tag-release`. Project access tokens expire, so rotate it before it lapses or releases will start failing.
+
+#### Locally (alternative)
+
+Use this if you need to prepare or hand-tweak the changelog before releasing:
+
+1. From the repository root, batch the unreleased fragments into the changelog:
+
+   ```
+   make release-prep VERSION=vX.Y.Z
+   ```
+
+   Omit `VERSION` to let changie auto-compute the next version from the fragments' bump levels.
+
+2. Review the resulting `CHANGELOG.md` change, commit it, and open an MR with the `skip-changelog` label.
+
+3. Once the MR is merged to `main`, CI (`auto-tag-release`) reads the new top version from `CHANGELOG.md` and creates the matching `vX.Y.Z` git tag. That tag triggers the existing build/upload/release pipeline, which publishes the binaries and creates the GitLab release using the changelog notes as its description.
 
 ## Writing Documentation
 
