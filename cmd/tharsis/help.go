@@ -107,6 +107,14 @@ func buildCommandList(bold *color.Color, commands map[string]cli.CommandFactory)
 // This should be used for all parent commands that appear on the main page
 // i.e., commands that are generally placeholders for subcommands.
 var helpText = map[string][2]string{
+	"admin": {
+		"Activate or deactivate admin mode.",
+		`
+Admin mode grants temporary elevated privileges to the currently
+authenticated user. Use activate to enable admin mode (defaults
+to 30 minutes, max 6 hours) and deactivate to disable it.
+`,
+	},
 	"sso": {
 		"Log in to the OAuth2 provider and return an authentication token.",
 		`

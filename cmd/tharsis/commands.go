@@ -10,6 +10,9 @@ import (
 func commands(baseCommand *command.BaseCommand, globalFlags *flag.Set) (map[string]cli.CommandFactory, error) {
 	// The map of all commands except documentation.
 	commandMap := map[string]command.Factory{
+		"admin":                                    command.NewHelpCommandFactory(getHelpText("admin")),
+		"admin activate":                           command.NewAdminModeActivateCommandFactory(baseCommand),
+		"admin deactivate":                         command.NewAdminModeDeactivateCommandFactory(baseCommand),
 		"apply":                                    command.NewApplyCommandFactory(baseCommand),
 		"caller-identity":                          command.NewCallerIdentityCommandFactory(baseCommand),
 		"configure":                                command.NewConfigureCommandFactory(baseCommand),

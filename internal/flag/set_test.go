@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -982,4 +983,76 @@ func TestMutuallyExclusive(t *testing.T) {
 		require.NotNil(t, followFlag)
 		assert.Equal(t, []string{"json"}, followFlag.ExclusiveWith())
 	})
+}
+
+func TestDurationVar(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		opts      []any
+		expectNil bool
+		expectVal time.Duration
+		expectErr string
+	}{
+		{
+			name:      "optional not set",
+			args:      []string{},
+			expectNil: true,
+		},
+		{
+			name:      "30 minutes",
+			args:      []string{"-duration", "30m"},
+			expectVal: 30 * time.Minute,
+		},
+		{
+			name:      "2 hours",
+			args:      []string{"-duration", "2h"},
+			expectVal: 2 * time.Hour,
+		},
+		{
+			name:      "1 hour 30 minutes",
+			args:      []string{"-duration", "1h30m"},
+			expectVal: 90 * time.Minute,
+		},
+		{
+			name:      "with default not set",
+			args:      []string{},
+			opts:      []any{Default(5 * time.Minute)},
+			expectVal: 5 * time.Minute,
+		},
+		{
+			name:      "with default overridden",
+			args:      []string{"-duration", "10m"},
+			opts:      []any{Default(5 * time.Minute)},
+			expectVal: 10 * time.Minute,
+		},
+		{
+			name:      "invalid format",
+			args:      []string{"-duration", "abc"},
+			expectErr: "invalid duration",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := NewSet("test")
+			fs.SetOutput(io.Discard)
+			var val *time.Duration
+			fs.DurationVar(&val, "duration", "duration flag", tc.opts...)
+
+			err := fs.Parse(tc.args)
+			if tc.expectErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectErr)
+				return
+			}
+			require.NoError(t, err)
+			if tc.expectNil {
+				assert.Nil(t, val)
+			} else {
+				require.NotNil(t, val)
+				assert.Equal(t, tc.expectVal, *val)
+			}
+		})
+	}
 }

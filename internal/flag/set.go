@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Option configures a flag at registration time.
@@ -333,6 +334,34 @@ func (fs *Set) BoolVar(p **bool, name string, usage string, args ...any) {
 	setEnvDefault(f, p)
 }
 
+// DurationVar defines a time.Duration flag. Optional by default (nil if not set).
+// Accepts any string parseable by [time.ParseDuration] (e.g. "30m", "2h", "1h30m").
+func (fs *Set) DurationVar(p **time.Duration, name string, usage string, args ...any) {
+	f := fs.register(name, usage, args)
+
+	setter := func(s string) error {
+		if err := f.validate(s); err != nil {
+			return err
+		}
+
+		v, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+
+		*p = &v
+		f.value = s
+
+		return nil
+	}
+
+	fs.stdfs.Func(name, f.Usage, setter)
+	fs.registerAliases(f, setter)
+
+	setDefault(fs, f, p)
+	setEnvDefault(f, p)
+}
+
 // ---------------------------------------------------------------------------
 // Repeatable flag registration
 // ---------------------------------------------------------------------------
@@ -623,6 +652,8 @@ func setEnvDefault[T any](f *Flag, p **T) {
 		result, err = strconv.ParseInt(v, 0, 64)
 	case bool:
 		result, err = strconv.ParseBool(v)
+	case time.Duration:
+		result, err = time.ParseDuration(v)
 	}
 
 	if err != nil {
