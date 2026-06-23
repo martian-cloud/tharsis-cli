@@ -34,6 +34,7 @@ include:
       version: $CI_COMMIT_TAG
 
 stages:
+  - release-prep
   - test
   - build
   - upload
@@ -103,6 +104,150 @@ default:
         - "**/go.sum"
         - go.mod
         - go.sum
+
+#################################
+##          CHANGELOG          ##
+#################################
+
+# Enforce that every MR adds a changie fragment. Exempted by the `skip-changelog`
+# label (e.g. release MRs, pure refactors) or by a Draft MR title.
+changelog-check:
+  image: alpine:3.22.1
+  stage: test
+  needs: []
+  variables:
+    GIT_DEPTH: 0
+  before_script:
+    - apk add --no-cache git
+  script:
+    - |
+      set -eu
+      # Diff against the MR's base SHA, which GitLab guarantees is available in
+      # MR pipelines — unlike origin/<target>, whose remote-tracking ref is not
+      # guaranteed to be fetched (GIT_DEPTH: 0 removes the depth limit but does
+      # not fetch the target branch). Compute the diff up front so a git failure
+      # surfaces as a real error instead of being mistaken for "no fragment".
+      # core.quotepath=false keeps non-ASCII fragment filenames unquoted (changie
+      # names files after the kind label, which includes an emoji) so the match works.
+      changed=$(git -c core.quotepath=false diff --name-only "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD)
+      if printf '%s\n' "$changed" | grep -q "^\.changes/unreleased/"; then
+        echo "✅ Changelog fragment found"
+      else
+        echo "❌ No changelog fragment found. Run 'changie new' and commit the fragment."
+        echo "If this change does not need a changelog entry, add the 'skip-changelog' label to the MR."
+        exit 1
+      fi
+  rules:
+    - if: $CI_MERGE_REQUEST_LABELS =~ /skip-changelog/
+      when: never
+    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft:/
+      when: never
+    - if: $CI_MERGE_REQUEST_IID
+
+# When a release commit (a CHANGELOG.md version bump) lands on the default branch,
+# create the matching git tag. That tag triggers the existing tag pipeline
+# (Build / Upload / Release Tharsis CLI) which builds the binaries and cuts the
+# GitLab release. Runs after the test stage so a release is never tagged on red.
+auto-tag-release:
+  image: alpine:3.22.1
+  stage: build
+  before_script:
+    - apk add --no-cache git curl
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - |
+      set -euo pipefail
+      # Top version from changelog (versionFormat: "## v{{.Version}} - ...") — keep the 'v'
+      VERSION=$(grep -m1 '^## v' CHANGELOG.md | sed -E 's/^## (v[^ ]+).*/\1/')
+      [ -n "$VERSION" ] || { echo "No version header in CHANGELOG.md"; exit 1; }
+
+      # Idempotency: no-op if the tag already exists (exact ref match)
+      if git ls-remote --tags origin "refs/tags/${VERSION}" | grep -q "refs/tags/${VERSION}$"; then
+        echo "Tag ${VERSION} already exists — nothing to do."
+        exit 0
+      fi
+
+      # Notes = lines between the top "## v" and the next "## v"
+      NOTES=$(awk '/^## v/{c++} c==1{print} c==2{exit}' CHANGELOG.md | tail -n +2)
+
+      echo "Creating tag ${VERSION} at ${CI_COMMIT_SHA}"
+      curl --fail-with-body --request POST \
+        --header "PRIVATE-TOKEN: ${RELEASE_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags" \
+        --data-urlencode "tag_name=${VERSION}" \
+        --data-urlencode "ref=${CI_COMMIT_SHA}" \
+        --data-urlencode "message=${NOTES}"
+
+# Manual release cutter. Batches the accumulated changie fragments into
+# CHANGELOG.md and pushes the bump straight to the default branch — no MR,
+# since the fragments were already reviewed when their own MRs merged. That
+# push triggers a fresh default-branch pipeline whose auto-tag-release job
+# tags the new version and kicks off build / upload / release.
+#
+# Optionally set a RELEASE_VERSION pipeline variable (e.g. v1.2.3) when running;
+# otherwise the version is auto-computed from the fragments' bump levels.
+release-prep:
+  image: golang:${GO_VERSION}-alpine
+  stage: release-prep
+  needs: []
+  variables:
+    GIT_DEPTH: 0
+  before_script:
+    - apk add --no-cache git make
+    - go install github.com/miniscruff/changie@v1.24.0
+    - export PATH="$PATH:$GOPATH/bin"
+  rules:
+    # allow_failure: true makes this an *optional* manual job. With when: manual
+    # inside rules, allow_failure defaults to false (a blocking manual job), which
+    # would stop every default-branch pipeline at this stage until someone runs it.
+    # Optional means it never blocks or fails the pipeline — maintainers run it on demand.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+  interruptible: false
+  script:
+    - |
+      set -euo pipefail
+
+      git config --global --add safe.directory "$CI_PROJECT_DIR"
+
+      # Nothing to release if there are no unreleased fragments (ignore .gitkeep).
+      # Not an error — exit 0 so a no-op run is a clean, green no-op.
+      if [ -z "$(ls -A .changes/unreleased 2>/dev/null | grep -v '^\.gitkeep$' || true)" ]; then
+        echo "No unreleased changelog fragments found — nothing to release."
+        exit 0
+      fi
+
+      # Batch fragments into CHANGELOG.md. RELEASE_VERSION optional; empty => auto.
+      make release-prep VERSION="${RELEASE_VERSION:-}"
+
+      # Guard against a no-op (e.g. changie produced no diff).
+      if [ -z "$(git status --porcelain)" ]; then
+        echo "release-prep produced no changes — nothing to commit."
+        exit 1
+      fi
+
+      VERSION=$(grep -m1 '^## v' CHANGELOG.md | sed -E 's/^## (v[^ ]+).*/\1/')
+      echo "Prepared release ${VERSION}"
+
+      git config user.name "release-bot"
+      git config user.email "release-bot@noreply.${CI_SERVER_HOST}"
+      git add -A
+      git commit -m "chore(release): ${VERSION}"
+
+      # Push the bump straight to the default branch, authenticating with an
+      # Authorization header rather than embedding the token in the remote URL.
+      # Git echoes the remote URL in its error output (e.g. on a non-fast-forward
+      # rejection), which would leak the token into the job log; it does not echo
+      # extra headers. GitLab Git-over-HTTPS uses Basic auth (any non-empty
+      # username + the token as the password), so we send a Basic header.
+      # RELEASE_TOKEN must be a masked + protected CI/CD variable.
+      # No [skip ci]: the push must trigger a pipeline so auto-tag-release runs.
+      # Not a force push — if main has moved, the push is rejected (re-run after rebasing).
+      auth=$(printf '%s' "oauth2:${RELEASE_TOKEN}" | base64 | tr -d '\n')
+      git -c http.extraHeader="Authorization: Basic ${auth}" \
+        push "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "HEAD:${CI_DEFAULT_BRANCH}"
 
 #################################
 ##            BUILD            ##
@@ -219,9 +364,23 @@ Release Tharsis CLI:
         ASSETS="$ASSETS --assets-link {\"name\":\"${BINARY_NAME}\",\"url\":\"${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${BINARY_NAME}\"}"
       done
 
+      # Use this version's changelog notes as the release description. Prereleases
+      # (e.g. v1.2.3-alpha.1) have no changelog section, so fall back to a generic line.
+      NOTES=""
+      if [ -f CHANGELOG.md ]; then
+        NOTES=$(awk -v tag="$CI_COMMIT_TAG" '
+          index($0, "## " tag " ") == 1 {f=1; next}
+          f && /^## v/ {exit}
+          f {print}
+        ' CHANGELOG.md)
+      fi
+      if [ -z "$NOTES" ]; then
+        NOTES="Tharsis CLI Release $CI_COMMIT_TAG"
+      fi
+
       release-cli create \
         --name "Release $CI_COMMIT_TAG" \
-        --description "Tharsis CLI Release $CI_COMMIT_TAG" \
+        --description "$NOTES" \
         --tag-name $CI_COMMIT_TAG \
         --ref $CI_COMMIT_TAG $ASSETS
 
