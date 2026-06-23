@@ -1,0 +1,25 @@
+type ConfigurationVersion implements Node {
+  id: ID!
+  metadata: ResourceMetadata!
+  status: String!
+  speculative: Boolean!
+  workspaceId: String!
+  createdBy: String!
+  vcsEvent: VCSEvent
+}
+
+type ConfigurationVersionMutationPayload {
+  clientMutationId: String
+  configurationVersion: ConfigurationVersion
+  problems: [Problem!]!
+}
+
+input CreateConfigurationVersionInput {
+  clientMutationId: String
+  workspaceId: String
+  workspacePath: String
+    @deprecated(
+      reason: "Use workspaceId field instead, which accepts a TRN (Tharsis Resource Name)"
+    )
+  speculative: Boolean
+}

@@ -1,0 +1,585 @@
+// Package apiserver is used to initialize the api
+package apiserver
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+
+	_ "gitlab.com/infor-cloud/martian-cloud/tharsis/graphql-query-complexity" // Placeholder to ensure private packages are being downloaded
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/agent"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/api"
+
+	"github.com/m-mizutani/gollem"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/api/grpc"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/api/response"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/apiserver/config"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/asynctask"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/auth"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/db"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/email"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/events"
+	tharsishttp "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/http"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/limits"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/logstream"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/maintenance"
+	mcptools "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/mcp/tools"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/models"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/namespace"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/plugin"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/registry"
+	rnr "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/runner"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/activityevent"
+	agentsvc "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/agent"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/announcement"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/cli"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/federatedregistry"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/gpgkey"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/group"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/job"
+	maint "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/maintenance"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/managedidentity"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/moduleregistry"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/namespacemembership"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/providermirror"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/providerregistry"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/resourcelimit"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/role"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/run"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/run/state"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/run/state/eventhandlers"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/runner"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/scim"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/serviceaccount"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/team"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/user"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/variable"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/vcs"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/version"
+	workspacesvc "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/services/workspace"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/tracing"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/universalsearch"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/internal/workspace"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/errors"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/logger"
+	mcpserver "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/mcp"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/provider"
+	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
+)
+
+// APIServer represents an instance of a server
+type APIServer struct {
+	logger        logger.Logger
+	taskManager   asynctask.Manager
+	dbClient      *db.Client
+	srv           *http.Server
+	grpcServer    *grpc.Server
+	traceShutdown func(context.Context) error
+	tlsConfig     *tls.Config
+	shutdownOnce  sync.Once
+}
+
+// New creates a new APIServer instance
+func New(ctx context.Context, cfg *config.Config, logger logger.Logger, apiVersion string, buildTimestamp string) (*APIServer, error) {
+	openIDConfigFetcher := auth.NewOpenIDConfigFetcher(logger)
+
+	tlsConfig, err := loadTLSConfig(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load TLS config: %w", err)
+	}
+
+	// Initialize a trace provider.
+	traceProviderShutdown, err := tracing.NewProvider(ctx,
+		&tracing.NewProviderInput{
+			Enabled: cfg.OtelTraceEnabled,
+			Type:    cfg.OtelTraceType,
+			Host:    cfg.OtelTraceCollectorHost,
+			Port:    cfg.OtelTraceCollectorPort,
+			Version: apiVersion,
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize trace provider: %w", err)
+	}
+	if !cfg.OtelTraceEnabled {
+		logger.Info("Tracing is disabled.")
+	}
+
+	dbClient, err := db.NewClient(
+		ctx,
+		cfg.DBHost,
+		cfg.DBPort,
+		cfg.DBName,
+		cfg.DBSSLMode,
+		cfg.DBUsername,
+		cfg.DBPassword,
+		cfg.DBMaxConnections,
+		cfg.DBAutoMigrateEnabled,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DB client %v", err)
+	}
+
+	pluginCatalog, err := plugin.NewCatalog(ctx, logger, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create plugin catalog %v", err)
+	}
+
+	httpClient := tharsishttp.NewHTTPClient()
+
+	eventManager := events.NewEventManager(dbClient, logger)
+	eventManager.Start(ctx)
+
+	maintenanceMonitor := maintenance.NewMonitor(logger, dbClient, eventManager)
+	maintenanceMonitor.Start(ctx)
+
+	taskManager := asynctask.NewManager(time.Duration(cfg.AsyncTaskTimeout) * time.Second)
+	emailClient := email.NewClient(pluginCatalog.EmailProvider, taskManager, dbClient, logger, cfg.TharsisUIURL, cfg.EmailFooter)
+
+	signingKeyManager, err := auth.NewSigningKeyManager(
+		ctx,
+		logger,
+		pluginCatalog.JWSProvider,
+		dbClient,
+		eventManager,
+		cfg,
+		emailClient,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize identity provider: %w", err)
+	}
+
+	userAuth := auth.NewUserAuth(ctx, cfg.OauthProviders, logger, dbClient, maintenanceMonitor, openIDConfigFetcher)
+	federatedRegistryAuth := auth.NewFederatedRegistryAuth(ctx, cfg.FederatedRegistryTrustPolicies, logger, openIDConfigFetcher, dbClient)
+
+	inheritedSettingsResolver := namespace.NewInheritedSettingResolver(dbClient)
+
+	authenticator := auth.NewAuthenticator(userAuth, federatedRegistryAuth, signingKeyManager, dbClient, maintenanceMonitor, cfg.JWTIssuerURL)
+	userSessionManager, err := auth.NewUserSessionManager(
+		dbClient,
+		signingKeyManager,
+		authenticator,
+		logger,
+		cfg.UserSessionAccessTokenExpirationMinutes,
+		cfg.UserSessionRefreshTokenExpirationMinutes,
+		cfg.UserSessionMaxSessionsPerUser,
+		cfg.TharsisAPIURL,
+		cfg.TharsisUIURL,
+		len(cfg.OauthProviders) == 0,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize user session manager: %w", err)
+	}
+
+	respWriter := response.NewWriter(logger)
+
+	artifactStore := workspacesvc.NewArtifactStore(pluginCatalog.ObjectStore)
+	providerRegistryStore := providerregistry.NewRegistryStore(pluginCatalog.ObjectStore)
+	moduleRegistryStore := moduleregistry.NewRegistryStore(pluginCatalog.ObjectStore)
+	cliStore := cli.NewCLIStore(pluginCatalog.ObjectStore)
+	mirrorStore := providermirror.NewProviderMirrorStore(pluginCatalog.ObjectStore)
+
+	logStreamStore := logstream.NewLogStore(pluginCatalog.ObjectStore, dbClient)
+	logStreamManager := logstream.New(logStreamStore, dbClient, eventManager, logger)
+
+	managedIdentityDelegates, err := managedidentity.NewManagedIdentityDelegateMap(ctx, signingKeyManager)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize managed identity delegate map %v", err)
+	}
+
+	limits := limits.NewLimitChecker(dbClient)
+	notificationManager := namespace.NewNotificationManager(dbClient, inheritedSettingsResolver)
+	federatedRegistryClient := registry.NewFederatedRegistryClient(logger, signingKeyManager, apiVersion)
+
+	runStateManager := state.NewRunStateManager(dbClient, logger)
+	eventhandlers.NewErroredRunEmailHandler(logger, dbClient, runStateManager, emailClient, notificationManager, taskManager).RegisterHandlers()
+	eventhandlers.NewAssessmentRunHandler(logger, dbClient, runStateManager).RegisterHandlers()
+
+	// Services.
+	var (
+		activityService            = activityevent.NewService(dbClient, logger)
+		announcementService        = announcement.NewService(logger, dbClient)
+		userService                = user.NewService(logger, dbClient, inheritedSettingsResolver)
+		namespaceMembershipService = namespacemembership.NewService(logger, dbClient, activityService, emailClient, notificationManager, taskManager)
+		groupService               = group.NewService(logger, dbClient, limits, namespaceMembershipService, activityService, inheritedSettingsResolver)
+		cliService                 = cli.NewService(logger, httpClient, taskManager, cliStore, cfg.TerraformCLIVersionConstraint)
+		workspaceService           = workspacesvc.NewService(logger, dbClient, limits, artifactStore, eventManager, cliService, activityService, inheritedSettingsResolver)
+		jobService                 = job.NewService(logger, dbClient, signingKeyManager, logStreamManager, eventManager, runStateManager)
+		managedIdentityService     = managedidentity.NewService(logger, dbClient, limits, managedIdentityDelegates, workspaceService, jobService, activityService)
+		saService                  = serviceaccount.NewService(logger, dbClient, limits, signingKeyManager, openIDConfigFetcher, activityService, cfg.ServiceAccountClientSecretMaxExpirationDays)
+		variableService            = variable.NewService(logger, dbClient, limits, activityService, pluginCatalog.SecretManager, cfg.DisableSensitiveVariableFeature)
+		teamService                = team.NewService(logger, dbClient, activityService)
+		providerRegistryService    = providerregistry.NewService(logger, dbClient, limits, providerRegistryStore, activityService)
+		moduleRegistryService      = moduleregistry.NewService(logger, dbClient, limits, moduleRegistryStore, activityService, taskManager)
+		gpgKeyService              = gpgkey.NewService(logger, dbClient, limits, activityService)
+		scimService                = scim.NewService(logger, dbClient, signingKeyManager, cfg.OauthProviders)
+		federatedRegistryService   = federatedregistry.NewService(logger, dbClient, limits, activityService, signingKeyManager)
+		moduleResolver             = registry.NewModuleResolver(dbClient, httpClient, federatedRegistryClient, logger, cfg.TharsisAPIURL, signingKeyManager)
+		providerRegistryClient     = provider.NewRegistryClient(httpClient)
+		runService                 = run.NewService(logger, dbClient, artifactStore, eventManager, jobService, cliService, activityService, moduleResolver, runStateManager, limits, pluginCatalog.SecretManager, inheritedSettingsResolver)
+		runnerService              = runner.NewService(logger, dbClient, limits, activityService, logStreamManager, eventManager)
+		roleService                = role.NewService(logger, dbClient, activityService)
+		resourceLimitService       = resourcelimit.NewService(logger, dbClient)
+		providerMirrorService      = providermirror.NewService(logger, dbClient, providerRegistryClient, limits, activityService, mirrorStore)
+		maintenanceModeService     = maint.NewService(logger, dbClient)
+	)
+
+	versionService, err := version.NewService(dbClient, apiVersion, buildTimestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize version service %v", err)
+	}
+
+	vcsService, err := vcs.NewService(
+		ctx,
+		logger,
+		dbClient,
+		limits,
+		signingKeyManager,
+		httpClient,
+		activityService,
+		runService,
+		workspaceService,
+		taskManager,
+		cfg.TharsisAPIURL,
+		cfg.VCSRepositorySizeLimit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize vcs service %v", err)
+	}
+
+	serviceCatalog := &services.Catalog{
+		ActivityEventService:             activityService,
+		AnnouncementService:              announcementService,
+		CLIService:                       cliService,
+		FederatedRegistryService:         federatedRegistryService,
+		GPGKeyService:                    gpgKeyService,
+		GroupService:                     groupService,
+		JobService:                       jobService,
+		MaintenanceModeService:           maintenanceModeService,
+		ManagedIdentityService:           managedIdentityService,
+		NamespaceMembershipService:       namespaceMembershipService,
+		ResourceLimitService:             resourceLimitService,
+		RoleService:                      roleService,
+		RunnerService:                    runnerService,
+		RunService:                       runService,
+		SCIMService:                      scimService,
+		ServiceAccountService:            saService,
+		TeamService:                      teamService,
+		TerraformModuleRegistryService:   moduleRegistryService,
+		TerraformProviderMirrorService:   providerMirrorService,
+		TerraformProviderRegistryService: providerRegistryService,
+		UserService:                      userService,
+		VCSService:                       vcsService,
+		VariableService:                  variableService,
+		VersionService:                   versionService,
+		WorkspaceService:                 workspaceService,
+	}
+	// Initialize universal search service
+	universalSearchManager := universalsearch.NewManager(serviceCatalog, logger)
+	// Start workspace assessment scheduler
+	workspace.NewAssessmentScheduler(
+		dbClient,
+		logger,
+		runService,
+		inheritedSettingsResolver,
+		maintenanceMonitor,
+		time.Duration(cfg.WorkspaceAssessmentIntervalHours)*time.Hour,
+		cfg.WorkspaceAssessmentRunLimit,
+	).Start(ctx)
+
+	// Start service account secret expiration scheduler
+	serviceaccount.NewSecretExpirationScheduler(
+		dbClient,
+		logger,
+		emailClient,
+		maintenanceMonitor,
+		notificationManager,
+	).Start(ctx)
+
+	agentStore := agent.NewAgentStore(pluginCatalog.ObjectStore)
+
+	systemAgent := agent.NewSystemAgent(
+		logger,
+		dbClient,
+		agentStore,
+		pluginCatalog.LLMClient,
+	)
+
+	toolContext := mcptools.NewToolContext(serviceCatalog, httpClient)
+	agentService := agentsvc.NewService(logger, dbClient, systemAgent, agentStore, eventManager, func(ctx context.Context) (gollem.ToolSet, error) {
+		toolsetGroup := mcptools.BuildToolsetGroup(true, toolContext)
+		srv, err := mcpserver.NewServer(&mcpserver.ServerConfig{
+			Name:            "tharsis-agent",
+			Title:           "Tharsis Agent MCP Server",
+			Version:         apiVersion,
+			EnabledToolsets: strings.Join(mcptools.AllToolsets(), ","),
+			ReadOnly:        true,
+		}, toolsetGroup)
+		if err != nil {
+			return nil, err
+		}
+		return agent.NewInMemoryToolSet(ctx, srv)
+	}, taskManager, limits, cfg.AIEnabled)
+
+	serviceCatalog.AgentService = agentService
+	serviceCatalog.Init()
+
+	// Create the admin user if an email is provided.
+	if cfg.AdminUserEmail != "" {
+		if err = configureDefaultAdminUser(ctx, cfg.AdminUserEmail, cfg.AdminUserPassword, dbClient, logger); err != nil {
+			return nil, fmt.Errorf("failed to configure default admin user: %w", err)
+		}
+	}
+
+	router, err := api.BuildRouter(ctx, cfg, logger, respWriter, pluginCatalog, authenticator, openIDConfigFetcher, serviceCatalog, universalSearchManager, userSessionManager, signingKeyManager, apiVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	runnerClient := rnr.NewInternalClient(runnerService, jobService)
+
+	for _, r := range cfg.InternalRunners {
+		// Create DB entry for runner
+		runnerModel, err := dbClient.Runners.CreateRunner(ctx, &models.Runner{
+			Type:            models.SharedRunnerType,
+			Name:            r.Name,
+			CreatedBy:       "system",
+			RunUntaggedJobs: true,
+		})
+		if err != nil {
+			if errors.ErrorCode(err) != errors.EConflict {
+				return nil, err
+			}
+		}
+
+		if runnerModel == nil {
+			runnerModel, err = dbClient.Runners.GetRunnerByTRN(ctx, trn.TypeRunner.Build(r.Name))
+			if err != nil {
+				return nil, fmt.Errorf("failed to get internal runner %q: %v", r.Name, err)
+			}
+		}
+
+		logger.Infof("starting internal runner %q with job dispatcher type %q", r.Name, r.JobDispatcherType)
+
+		runner, err := rnr.NewRunner(ctx, runnerModel.Metadata.ID, logger, apiVersion, runnerClient,
+			&rnr.JobDispatcherSettings{
+				DispatcherType:       r.JobDispatcherType,
+				ServiceDiscoveryHost: cfg.ServiceDiscoveryHost,
+				PluginData:           r.JobDispatcherData,
+				TokenGetterFunc:      rnr.NewInternalTokenProvider(r.Name, runnerModel.Metadata.ID, signingKeyManager).GetToken,
+			})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create runner %v", err)
+		}
+
+		startupDelay := time.Duration(r.StartupDelay) * time.Second
+		go func() {
+			if startupDelay > 0 {
+				logger.Infof("Internal runner %q will be started in %s", r.Name, startupDelay)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(startupDelay):
+				}
+			}
+			runner.Start(auth.WithCaller(ctx, &auth.SystemCaller{}))
+		}()
+	}
+
+	// Create a listener for gRPC.
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", cfg.GRPCServerPort))
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on port %v for gRPC server: %v", cfg.GRPCServerPort, err)
+	}
+
+	var grpcListener net.Listener
+	if cfg.TLSEnabled {
+		grpcListener = tls.NewListener(listener, tlsConfig)
+	} else {
+		grpcListener = listener
+	}
+
+	grpcServer := grpc.NewServer(&grpc.ServerOptions{
+		Listener:        grpcListener,
+		Logger:          logger,
+		Authenticator:   authenticator,
+		APIServerConfig: cfg,
+		ServiceCatalog:  serviceCatalog,
+		OAuthProviders:  cfg.OauthProviders,
+		RateLimitStore:  pluginCatalog.HTTPRateLimitStore,
+	})
+
+	rootHandler := buildRootHandler(router, grpcServer)
+	if !cfg.TLSEnabled {
+		// The default go server only supports http2 when TLS is enabled; therefore, when TLS
+		// is disabled we'll use the h2c package to handle http2 connections
+		rootHandler = h2c.NewHandler(rootHandler, &http2.Server{})
+	}
+
+	return &APIServer{
+		logger:      logger,
+		dbClient:    dbClient,
+		taskManager: taskManager,
+		grpcServer:  grpcServer,
+		srv: &http.Server{
+			Addr:              fmt.Sprintf(":%v", cfg.ServerPort),
+			Handler:           rootHandler,
+			ReadHeaderTimeout: time.Minute,
+			TLSConfig:         tlsConfig,
+		},
+		traceShutdown: traceProviderShutdown,
+		tlsConfig:     tlsConfig,
+	}, nil
+}
+
+// Start will start the server
+func (api *APIServer) Start() {
+	go func() {
+		// Serve Prometheus endpoint on its own port since it
+		// won't be publicly exposed
+		promServer := &http.Server{
+			Addr:              ":9090",
+			Handler:           promhttp.Handler(),
+			ReadHeaderTimeout: 3 * time.Second,
+			TLSConfig:         api.tlsConfig,
+		}
+
+		api.logger.Infof("Prometheus server listening on %s", promServer.Addr)
+
+		var err error
+		if api.tlsConfig != nil {
+			err = promServer.ListenAndServeTLS("", "")
+		} else {
+			err = promServer.ListenAndServe()
+		}
+
+		if err != nil {
+			api.logger.Error("Prometheus server failed to start: %v", err)
+			return
+		}
+	}()
+
+	// Start gRPC server on its own port.
+	go func() {
+		if err := api.grpcServer.Start(); err != nil {
+			api.logger.Errorf("gRPC server failed to start: %v", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Start main server
+	var err error
+	if api.tlsConfig != nil {
+		api.logger.Infof("HTTPS server listening on %s", api.srv.Addr)
+		err = api.srv.ListenAndServeTLS("", "")
+	} else {
+		api.logger.Infof("HTTP server listening on %s", api.srv.Addr)
+		err = api.srv.ListenAndServe()
+	}
+
+	if err != nil && err != http.ErrServerClosed {
+		api.logger.Errorf("HTTP server failed to start: %v", err)
+	}
+}
+
+// Shutdown will shutdown the API server
+func (api *APIServer) Shutdown(ctx context.Context) {
+	api.shutdownOnce.Do(func() {
+		api.logger.Info("Starting HTTP server shutdown")
+
+		// Shutdown HTTP server
+		if err := api.srv.Shutdown(ctx); err != nil {
+			api.logger.Errorf("failed to shutdown HTTP server gracefully: %v", err)
+		}
+
+		api.logger.Info("HTTP server shutdown successfully")
+
+		// Shutdown gRPC server.
+		api.grpcServer.Shutdown()
+
+		// Shutdown trace provider.
+		if err := api.traceShutdown(ctx); err != nil {
+			api.logger.Errorf("Shutdown trace provider failed: %w", err)
+		} else {
+			api.logger.Info("Shutdown trace provider successfully.")
+		}
+
+		api.logger.Info("Starting Async Task Manager shutdown")
+		api.taskManager.Shutdown()
+		api.logger.Info("Async Task Manager shutdown successfully")
+
+		api.logger.Info("Completed graceful shutdown")
+	})
+}
+
+func buildRootHandler(httpHandler http.Handler, grpcHandler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if grpc.IsGRPCRequest(r) {
+			grpcHandler.ServeHTTP(w, r)
+		} else {
+			httpHandler.ServeHTTP(w, r)
+		}
+	})
+}
+
+func configureDefaultAdminUser(ctx context.Context, email string, password string, dbClient *db.Client, logger logger.Logger) error {
+	if email == "" {
+		return nil
+	}
+
+	user, err := dbClient.Users.GetUserByEmail(ctx, email)
+	if err != nil {
+		return err
+	}
+
+	if user == nil {
+		user = &models.User{
+			Username: auth.ParseUsername(email),
+			Email:    email,
+			Admin:    true,
+			Active:   true,
+		}
+		if password != "" {
+			if err = user.SetPassword(password); err != nil {
+				return err
+			}
+		}
+
+		if _, err = dbClient.Users.CreateUser(ctx, user); err != nil {
+			return fmt.Errorf("failed to create admin user: %v", err)
+		}
+
+		logger.Infof("User with email %s created.", email)
+		return nil
+	}
+
+	needsUpdate := !user.Admin || (password != "" && !user.VerifyPassword(password))
+	if !needsUpdate {
+		return nil
+	}
+
+	user.Admin = true
+	if password != "" {
+		if err = user.SetPassword(password); err != nil {
+			return err
+		}
+	}
+
+	if _, err = dbClient.Users.UpdateUser(ctx, user); err != nil {
+		return fmt.Errorf("failed to set user to admin: %v", err)
+	}
+
+	logger.Infof("User with email %s has been granted admin privileges.", email)
+	return nil
+}

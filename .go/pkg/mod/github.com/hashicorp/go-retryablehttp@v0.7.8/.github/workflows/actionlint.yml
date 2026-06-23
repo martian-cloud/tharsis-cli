@@ -1,0 +1,19 @@
+name: actionlint
+
+on:
+  push:
+    paths:
+      - .github/**
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - name: "Check GitHub workflow files"
+        uses: docker://docker.mirror.hashicorp.services/rhysd/actionlint:latest
+        with:
+          args: -color

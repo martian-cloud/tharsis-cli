@@ -1,0 +1,90 @@
+type Config {
+  serverPort: String!
+  tharsisApiUrl: String!
+  tharsisUiUrl: String!
+  tharsisSupportUrl: String!
+  tlsEnabled: Boolean!
+  jwtIssuerUrl: String!
+  cliLoginOIDCClientID: String
+  cliLoginOIDCScopes: String
+  oidcInternalIdentityProviderClientID: String!
+  maxGraphQlComplexity: Int!
+  moduleRegistryMaxUploadSize: Int!
+  asyncTaskTimeout: Int!
+  vcsRepositorySizeLimit: Int!
+  httpRateLimit: Int!
+  serviceDiscoveryHost: String!
+  terraformCliVersionConstraint: String!
+  workspaceAssessmentIntervalHours: Int!
+  workspaceAssessmentRunLimit: Int!
+  userSessionAccessTokenExpirationMinutes: Int!
+  userSessionRefreshTokenExpirationMinutes: Int!
+  userSessionMaxSessionsPerUser: Int!
+  corsAllowedOrigins: String!
+  asymmetricSigningKeyRotationPeriodDays: Int!
+  asymmetricSigningKeyDecommissionPeriodDays: Int!
+  disableSensitiveVariableFeature: Boolean!
+  serviceAccountClientSecretMaxExpirationDays: Int!
+  emailFooter: String
+  objectStorePluginType: String!
+  rateLimitStorePluginType: String!
+  jwsProviderPluginType: String!
+  secretManagerPluginType: String!
+  emailClientPluginType: String!
+  aiEnabled: Boolean!
+  oauthProviders: [IdpConfig!]!
+  federatedRegistryTrustPolicies: [FederatedRegistryTrustPolicy!]!
+  internalRunners: [RunnerConfig!]!
+
+  # Sensitive fields - always returned but masked for non-admin users
+  otelTraceEnabled: Boolean!
+  otelTraceType: String
+  otelTraceCollectorHost: String
+  otelTraceCollectorPort: Int!
+  dbHost: String!
+  dbName: String!
+  dbSslMode: String!
+  dbPort: Int!
+  dbMaxConnections: Int!
+  dbAutoMigrateEnabled: Boolean!
+  tlsCertFile: String!
+  tlsKeyFile: String!
+  adminUserEmail: String!
+  objectStorePluginData: [KeyValueEntry!]!
+  rateLimitStorePluginData: [KeyValueEntry!]!
+  jwsProviderPluginData: [KeyValueEntry!]!
+  secretManagerPluginData: [KeyValueEntry!]!
+  emailClientPluginData: [KeyValueEntry!]!
+  mcpServerConfig: MCPServerConfig!
+}
+
+type MCPServerConfig {
+  enabledToolsets: [String!]!
+  enabledTools: [String!]!
+  readOnly: Boolean!
+}
+
+type IdpConfig {
+  issuerUrl: String!
+  clientId: String!
+  usernameClaim: String!
+  scope: String!
+}
+
+type RunnerConfig {
+  name: String!
+  jobDispatcherType: String!
+  jobDispatcherData: [KeyValueEntry!]!
+}
+
+type FederatedRegistryTrustPolicy {
+  issuerUrl: String!
+  subject: String
+  audience: String
+  groupGlobPatterns: [String!]!
+}
+
+type KeyValueEntry {
+  key: String!
+  value: String!
+}

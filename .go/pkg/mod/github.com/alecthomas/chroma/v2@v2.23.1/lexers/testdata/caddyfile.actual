@@ -1,0 +1,142 @@
+{
+	debug
+	admin off
+	on_demand_tls {
+		ask https://example.com
+	}
+	log default {
+		output file /var/log/caddy/access.log
+		format json
+	}
+	auto_https disable_redirects
+	renew_interval 20m
+
+	# this is a comment
+	servers 192.168.1.2:8080 {
+		name public
+		trusted_proxies static private_ranges
+		log_credentials
+	}
+}
+
+# top level comment
+
+(blocking) {
+	@blocked {
+		path *.txt *.md *.mdown /site/*
+	}
+	redir @blocked /
+}
+
+http://example.com {
+	respond "http"
+}
+
+example.com, fake.org, {$ENV_SITE} {
+	root * /srv
+
+	respond /get-env {$ENV_VAR}
+	respond /get-env {$ENV_VAR:default}
+
+	tls internal
+	tls /path/to/cert.pem /path/to/key.pem
+
+	route {
+		# Add trailing slash for directory requests
+		@canonicalPath {
+			file {
+				try_files {path}/index.php
+			}
+			not path */
+		}
+		redir @canonicalPath {path}/ 308
+
+		# If the requested file does not exist, try index files
+		@indexFiles {
+			file {
+				try_files {path} {path}/index.php index.php
+				split_path .php
+			}
+		}
+		rewrite @indexFiles {http.matchers.file.relative}
+
+		# Proxy PHP files to the FastCGI responder
+		@phpFiles {
+			path *.php
+		}
+		reverse_proxy @phpFiles unix//var/run/php7.4-fpm.sock {
+			transport fastcgi {
+				split .php
+			}
+		}
+	}
+
+	@encode_exts {
+		path / *.html *.js *.css *.svg
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-XSS-Protection "1; mode=block"
+		X-Robots-Tag none
+		Content-Security-Policy "frame-ancestors 'self'"
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+	}
+
+	@singleLine not path /matcher
+	respond @singleLine "Awesome."
+
+	import blocking
+	import blocking foo
+	import glob/*
+
+	file_server
+
+	@named host example.com
+	handle @named {
+		handle /foo* {
+			handle /foo* {
+				respond "{path} foo"
+			}
+		}
+		respond "foo"
+	}
+
+	handle_path /foo* {
+		respond "foo"
+	}
+
+	reverse_proxy /api/* unix//var/run/api.sock {
+		@good status 200
+		handle_response @good {
+			rewrite * /foo{uri}
+			file_server
+		}
+	}
+
+	respond <<HTML
+		<!DOCTYPE html>
+		<html>
+			<head>
+				<title>Test</title>
+			</head>
+			<body>
+				<h1>Hello, world!</h1>
+			</body>
+		</html>
+		HTML 200
+
+	@file `file()`
+	@first `file({'try_files': [{path}, {path} + '/', 'index.html']})`
+	@smallest `file({'try_policy': 'smallest_size', 'try_files': ['a.txt', 'b.txt']})`
+
+	@without-both {
+		not {
+			path /api/*
+			method POST
+		}
+	}
+
+	path_regexp [<name>] <regexp>
+}

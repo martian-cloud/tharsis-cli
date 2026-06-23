@@ -1,0 +1,15 @@
+[
+  {"type":"KeywordDeclaration","value":"output"},
+  {"type":"TextWhitespace","value":" "},
+  {"type":"NameVariable","value":"storageEndpoint"},
+  {"type":"TextWhitespace","value":" "},
+  {"type":"NameVariable","value":"object"},
+  {"type":"TextWhitespace","value":" "},
+  {"type":"Punctuation","value":"="},
+  {"type":"TextWhitespace","value":" "},
+  {"type":"NameVariable","value":"stg"},
+  {"type":"Punctuation","value":"."},
+  {"type":"NameVariable","value":"properties"},
+  {"type":"Punctuation","value":"."},
+  {"type":"NameVariable","value":"primaryEndpoints"}
+]

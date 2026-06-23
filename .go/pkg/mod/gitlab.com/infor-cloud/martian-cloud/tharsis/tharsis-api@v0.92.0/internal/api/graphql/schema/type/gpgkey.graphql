@@ -1,0 +1,57 @@
+enum GPGKeySort {
+  UPDATED_AT_ASC
+  UPDATED_AT_DESC
+  GROUP_LEVEL_ASC
+  GROUP_LEVEL_DESC
+}
+
+type GPGKeyConnection {
+  totalCount: Int!
+  pageInfo: PageInfo!
+  edges: [GPGKeyEdge]
+}
+
+type GPGKeyEdge {
+  cursor: String!
+  node: GPGKey
+}
+
+type CreateGPGKeyPayload {
+  clientMutationId: String
+  gpgKey: GPGKey
+  problems: [Problem!]!
+}
+
+type DeleteGPGKeyPayload {
+  clientMutationId: String
+  gpgKey: GPGKey
+  problems: [Problem!]!
+}
+
+type GPGKey implements Node {
+  id: ID!
+  metadata: ResourceMetadata!
+  gpgKeyId: String!
+  fingerprint: String!
+  asciiArmor: String!
+  group: Group!
+  createdBy: String!
+  groupPath: String!
+  resourcePath: String!
+}
+
+input CreateGPGKeyInput {
+  clientMutationId: String
+  asciiArmor: String!
+  groupId: String
+  groupPath: String
+    @deprecated(
+      reason: "Use groupId field instead, which accepts a TRN (Tharsis Resource Name)"
+    )
+}
+
+input DeleteGPGKeyInput {
+  clientMutationId: String
+  id: ID!
+  metadata: ResourceMetadataInput
+}

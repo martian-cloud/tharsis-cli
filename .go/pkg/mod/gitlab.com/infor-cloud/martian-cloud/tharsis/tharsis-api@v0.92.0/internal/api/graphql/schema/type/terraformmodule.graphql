@@ -1,0 +1,112 @@
+enum TerraformModuleSort {
+  NAME_ASC
+  NAME_DESC
+  UPDATED_AT_ASC
+  UPDATED_AT_DESC
+  GROUP_LEVEL_ASC
+  GROUP_LEVEL_DESC
+}
+
+type TerraformModuleConnection {
+  totalCount: Int!
+  pageInfo: PageInfo!
+  edges: [TerraformModuleEdge]
+}
+
+type TerraformModuleEdge {
+  cursor: String!
+  node: TerraformModule
+}
+
+type CreateTerraformModulePayload {
+  clientMutationId: String
+  module: TerraformModule
+  problems: [Problem!]!
+}
+
+type UpdateTerraformModulePayload {
+  clientMutationId: String
+  module: TerraformModule
+  problems: [Problem!]!
+}
+
+type DeleteTerraformModulePayload {
+  clientMutationId: String
+  module: TerraformModule
+  problems: [Problem!]!
+}
+
+type TerraformModuleLabel {
+  key: String!
+  value: String!
+}
+
+input TerraformModuleLabelInput {
+  key: String!
+  value: String!
+}
+
+input TerraformModuleLabelsFilter {
+  labels: [TerraformModuleLabelInput!]!
+}
+
+type TerraformModule implements Node {
+  id: ID!
+  metadata: ResourceMetadata!
+  createdBy: String!
+  source: String!
+  name: String!
+  system: String!
+  group: Group!
+  private: Boolean!
+  repositoryUrl: String!
+  registryNamespace: String!
+  groupPath: String!
+  resourcePath: String!
+  labels: [TerraformModuleLabel!]!
+  latestVersion: TerraformModuleVersion
+  versions(
+    after: String
+    before: String
+    first: Int
+    last: Int
+    search: String
+    sort: TerraformModuleVersionSort
+  ): TerraformModuleVersionConnection!
+  attestations(
+    after: String
+    before: String
+    first: Int
+    last: Int
+    digest: String
+    sort: TerraformModuleAttestationSort
+  ): TerraformModuleAttestationConnection!
+}
+
+input CreateTerraformModuleInput {
+  clientMutationId: String
+  groupPath: String
+    @deprecated(
+      reason: "Use groupId field instead, which accepts a TRN (Tharsis Resource Name)"
+    )
+  groupId: String
+  name: String!
+  system: String!
+  private: Boolean
+  repositoryUrl: String
+  labels: [TerraformModuleLabelInput!]
+}
+
+input UpdateTerraformModuleInput {
+  clientMutationId: String
+  id: ID!
+  metadata: ResourceMetadataInput
+  private: Boolean
+  repositoryUrl: String
+  labels: [TerraformModuleLabelInput!]
+}
+
+input DeleteTerraformModuleInput {
+  clientMutationId: String
+  id: String!
+}

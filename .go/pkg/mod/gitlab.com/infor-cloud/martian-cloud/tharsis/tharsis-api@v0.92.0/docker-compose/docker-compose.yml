@@ -1,0 +1,61 @@
+services:
+  # Tharsis database.
+  postgres:
+    image: postgres:16-alpine
+    container_name: tharsis-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=tharsis
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - PGDATA=/var/lib/postgresql/data
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tharsis
+
+  tharsis:
+    image: registry.gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/tharsis:latest
+    container_name: tharsis
+    restart: unless-stopped
+    user: 0:0
+    environment:
+      - THARSIS_ADMIN_USER_EMAIL=martian@tharsis.local
+      - THARSIS_ADMIN_USER_PASSWORD=martian
+      - THARSIS_USER_SESSION_ACCESS_TOKEN_EXPIRATION_MINUTES=60
+      - THARSIS_DB_USERNAME=postgres
+      - THARSIS_DB_NAME=tharsis
+      - THARSIS_DB_PASSWORD=postgres
+      - THARSIS_DB_HOST=postgres
+      - THARSIS_DB_PORT=5432
+      - THARSIS_DB_SSL_MODE=disable
+      - THARSIS_OBJECT_STORE_PLUGIN_TYPE=filesystem
+      - THARSIS_OBJECT_STORE_PLUGIN_DATA_DIRECTORY=/var/lib/tharsis
+      - THARSIS_API_URL=http://localhost:6560
+      - THARSIS_INTERNAL_RUNNERS_0_NAME=default-shared-runner
+      - THARSIS_INTERNAL_RUNNERS_0_JOB_DISPATCHER_TYPE=docker
+      - THARSIS_INTERNAL_RUNNERS_0_JOB_DISPATCHER_DATA_ENDPOINT=http://localhost:6560
+      - THARSIS_INTERNAL_RUNNERS_0_JOB_DISPATCHER_DATA_HOST=unix:///var/run/docker.sock
+      - THARSIS_INTERNAL_RUNNERS_0_JOB_DISPATCHER_DATA_EXTRA_HOSTS=localhost:host-gateway
+      - THARSIS_INTERNAL_RUNNERS_0_JOB_DISPATCHER_DATA_IMAGE=registry.gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/job-executor:latest
+      - THARSIS_INTERNAL_RUNNERS_0_JOB_DISPATCHER_DATA_LOCAL_IMAGE=false # Set to true if using local image.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Required for job-executor.
+      - tharsis_objects:/var/lib/tharsis
+    networks:
+      - tharsis
+    ports:
+      - "127.0.0.1:6560:8000"
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_started
+
+networks:
+  tharsis:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  tharsis_objects:

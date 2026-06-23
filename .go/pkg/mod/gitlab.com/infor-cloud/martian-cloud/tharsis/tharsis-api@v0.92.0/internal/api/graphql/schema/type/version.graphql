@@ -1,0 +1,6 @@
+type Version {
+  version: String!
+  dbMigrationVersion: String!
+  dbMigrationDirty: Boolean!
+  buildTimestamp: Time!
+}

@@ -1,0 +1,69 @@
+version: "2"
+linters:
+  enable:
+    - bodyclose
+    - dogsled
+    - dupl
+    - exhaustive
+    - goconst
+    - goprintffuncname
+    - gosec
+    - intrange
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - staticcheck
+    - unconvert
+    - unparam
+    - usetesting
+    - whitespace
+    - wsl_v5
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: false
+    goconst:
+      min-len: 5
+      min-occurrences: 5
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: false
+      require-specific: false
+      allow-unused: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gosec
+        path: (.+)_test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/org/project)
+        - blank
+        - dot
+        - alias
+        - localmodule
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

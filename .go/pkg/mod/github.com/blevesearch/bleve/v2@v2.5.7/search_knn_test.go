@@ -1,0 +1,2418 @@
+//  Copyright (c) 2023 Couchbase, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//go:build vectors
+// +build vectors
+
+package bleve
+
+import (
+	"archive/zip"
+	"bytes"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"math"
+	"math/rand"
+	"reflect"
+	"sort"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/blevesearch/bleve/v2/analysis/lang/en"
+	"github.com/blevesearch/bleve/v2/index/scorch"
+	"github.com/blevesearch/bleve/v2/mapping"
+	"github.com/blevesearch/bleve/v2/search"
+	"github.com/blevesearch/bleve/v2/search/query"
+	index "github.com/blevesearch/bleve_index_api"
+)
+
+const testInputCompressedFile = "test/knn/knn_dataset_queries.zip"
+const testDatasetFileName = "knn_dataset.json"
+const testQueryFileName = "knn_queries.json"
+
+const testDatasetDims = 384
+
+var knnOperators []knnOperator = []knnOperator{knnOperatorAnd, knnOperatorOr}
+
+func TestSimilaritySearchPartitionedIndex(t *testing.T) {
+	dataset, searchRequests, err := readDatasetAndQueries(testInputCompressedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	documents := makeDatasetIntoDocuments(dataset)
+	contentFieldMapping := NewTextFieldMapping()
+	contentFieldMapping.Analyzer = en.AnalyzerName
+
+	vecFieldMappingL2 := mapping.NewVectorFieldMapping()
+	vecFieldMappingL2.Dims = testDatasetDims
+	vecFieldMappingL2.Similarity = index.EuclideanDistance
+
+	indexMappingL2Norm := NewIndexMapping()
+	indexMappingL2Norm.DefaultMapping.AddFieldMappingsAt("content", contentFieldMapping)
+	indexMappingL2Norm.DefaultMapping.AddFieldMappingsAt("vector", vecFieldMappingL2)
+
+	vecFieldMappingDot := mapping.NewVectorFieldMapping()
+	vecFieldMappingDot.Dims = testDatasetDims
+	vecFieldMappingDot.Similarity = index.InnerProduct
+
+	indexMappingDotProduct := NewIndexMapping()
+	indexMappingDotProduct.DefaultMapping.AddFieldMappingsAt("content", contentFieldMapping)
+	indexMappingDotProduct.DefaultMapping.AddFieldMappingsAt("vector", vecFieldMappingDot)
+
+	vecFieldMappingCosine := mapping.NewVectorFieldMapping()
+	vecFieldMappingCosine.Dims = testDatasetDims
+	vecFieldMappingCosine.Similarity = index.CosineSimilarity
+
+	indexMappingCosine := NewIndexMapping()
+	indexMappingCosine.DefaultMapping.AddFieldMappingsAt("content", contentFieldMapping)
+	indexMappingCosine.DefaultMapping.AddFieldMappingsAt("vector", vecFieldMappingCosine)
+
+	type testCase struct {
+		testType           string
+		queryIndex         int
+		numIndexPartitions int
+		mapping            mapping.IndexMapping
+	}
+
+	testCases := []testCase{
+		// l2 norm similarity
+		{
+			testType:           "multi_partition:match_none:oneKNNreq:k=3",
+			queryIndex:         0,
+			numIndexPartitions: 4,
+			mapping:            indexMappingL2Norm,
+		},
+		{
+			testType:           "multi_partition:match_none:oneKNNreq:k=2",
+			queryIndex:         0,
+			numIndexPartitions: 10,
+			mapping:            indexMappingL2Norm,
+		},
+		{
+			testType:           "multi_partition:match:oneKNNreq:k=2",
+			queryIndex:         1,
+			numIndexPartitions: 5,
+			mapping:            indexMappingL2Norm,
+		},
+		{
+			testType:           "multi_partition:disjunction:twoKNNreq:k=2,2",
+			queryIndex:         2,
+			numIndexPartitions: 4,
+			mapping:            indexMappingL2Norm,
+		},
+		// dot product similarity
+		{
+			testType:           "multi_partition:match_none:oneKNNreq:k=3",
+			queryIndex:         0,
+			numIndexPartitions: 4,
+			mapping:            indexMappingDotProduct,
+		},
+		{
+			testType:           "multi_partition:match_none:oneKNNreq:k=2",
+			queryIndex:         0,
+			numIndexPartitions: 10,
+			mapping:            indexMappingDotProduct,
+		},
+		{
+			testType:           "multi_partition:match:oneKNNreq:k=2",
+			queryIndex:         1,
+			numIndexPartitions: 5,
+			mapping:            indexMappingDotProduct,
+		},
+		{
+			testType:           "multi_partition:disjunction:twoKNNreq:k=2,2",
+			queryIndex:         2,
+			numIndexPartitions: 4,
+			mapping:            indexMappingDotProduct,
+		},
+		// cosine similarity
+		{
+			testType:           "multi_partition:match_none:oneKNNreq:k=3",
+			queryIndex:         0,
+			numIndexPartitions: 7,
+			mapping:            indexMappingCosine,
+		},
+		{
+			testType:           "multi_partition:match_none:oneKNNreq:k=2",
+			queryIndex:         0,
+			numIndexPartitions: 5,
+			mapping:            indexMappingCosine,
+		},
+		{
+			testType:           "multi_partition:match:oneKNNreq:k=2",
+			queryIndex:         1,
+			numIndexPartitions: 3,
+			mapping:            indexMappingCosine,
+		},
+		{
+			testType:           "multi_partition:disjunction:twoKNNreq:k=2,2",
+			queryIndex:         2,
+			numIndexPartitions: 9,
+			mapping:            indexMappingCosine,
+		},
+	}
+
+	index := NewIndexAlias()
+	var reqSort = search.SortOrder{&search.SortScore{Desc: true}, &search.SortDocID{Desc: true}, &search.SortField{Desc: false, Field: "content"}}
+	for testCaseNum, testCase := range testCases {
+		originalRequest := searchRequests[testCase.queryIndex]
+		for _, operator := range knnOperators {
+
+			index.indexes = make([]Index, 0)
+			query := copySearchRequest(originalRequest, nil)
+			query.AddKNNOperator(operator)
+			query.Sort = reqSort.Copy()
+			query.Explain = true
+
+			nameToIndex := createPartitionedIndex(documents, index, 1, testCase.mapping, t, false)
+			controlResult, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(controlResult.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected control result hits to have valid `Index`", testCaseNum)
+			}
+			cleanUp(t, nameToIndex)
+
+			index.indexes = make([]Index, 0)
+			query = copySearchRequest(originalRequest, nil)
+			query.AddKNNOperator(operator)
+			query.Sort = reqSort.Copy()
+			query.Explain = true
+
+			nameToIndex = createPartitionedIndex(documents, index, testCase.numIndexPartitions, testCase.mapping, t, false)
+			experimentalResult, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(experimentalResult.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected experimental Result hits to have valid `Index`", testCaseNum)
+			}
+			verifyResult(t, controlResult, experimentalResult, testCaseNum, true)
+			cleanUp(t, nameToIndex)
+
+			index.indexes = make([]Index, 0)
+			query = copySearchRequest(originalRequest, nil)
+			query.AddKNNOperator(operator)
+			query.Sort = reqSort.Copy()
+			query.Explain = true
+
+			nameToIndex = createPartitionedIndex(documents, index, testCase.numIndexPartitions, testCase.mapping, t, true)
+			multiLevelIndexResult, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(multiLevelIndexResult.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected experimental Result hits to have valid `Index`", testCaseNum)
+			}
+			verifyResult(t, multiLevelIndexResult, experimentalResult, testCaseNum, false)
+			cleanUp(t, nameToIndex)
+
+		}
+	}
+
+	var facets = map[string]*FacetRequest{
+		"content": {
+			Field: "content",
+			Size:  10,
+		},
+	}
+
+	index = NewIndexAlias()
+	for testCaseNum, testCase := range testCases {
+		index.indexes = make([]Index, 0)
+		nameToIndex := createPartitionedIndex(documents, index, testCase.numIndexPartitions, testCase.mapping, t, false)
+		originalRequest := searchRequests[testCase.queryIndex]
+		for _, operator := range knnOperators {
+			from, size := originalRequest.From, originalRequest.Size
+			query := copySearchRequest(originalRequest, nil)
+			query.AddKNNOperator(operator)
+			query.Explain = true
+			query.From = from
+			query.Size = size
+
+			// Three types of queries to run wrt sort and facet fields that require fields.
+			// 1. Sort And Facet are there
+			// 2. Sort is there, Facet is not there
+			// 3. Sort is not there, Facet is there
+			// The case where both sort and facet are not there is already covered in the previous tests.
+
+			// 1. Sort And Facet are there
+			query.Facets = facets
+			query.Sort = reqSort.Copy()
+
+			res1, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(res1.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected experimental Result hits to have valid `Index`", testCaseNum)
+			}
+
+			facetRes1 := res1.Facets
+			facetRes1Str, err := json.Marshal(facetRes1)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+
+			// 2. Sort is there, Facet is not there
+			query.Facets = nil
+			query.Sort = reqSort.Copy()
+
+			res2, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(res2.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected experimental Result hits to have valid `Index`", testCaseNum)
+			}
+
+			// 3. Sort is not there, Facet is there
+			query.Facets = facets
+			query.Sort = nil
+			res3, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(res3.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected experimental Result hits to have valid `Index`", testCaseNum)
+			}
+
+			facetRes3 := res3.Facets
+			facetRes3Str, err := json.Marshal(facetRes3)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+
+			// Verify the facet results
+			if string(facetRes1Str) != string(facetRes3Str) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected facet results to be equal", testCaseNum)
+			}
+
+			// Verify the results
+			verifyResult(t, res1, res2, testCaseNum, false)
+			verifyResult(t, res2, res3, testCaseNum, true)
+
+			// Test early exit fail case -> matchNone + facetRequest
+			query.Query = NewMatchNoneQuery()
+			query.Sort = reqSort.Copy()
+			// control case
+			query.Facets = nil
+			res4Ctrl, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(res4Ctrl.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected control Result hits to have valid `Index`", testCaseNum)
+			}
+
+			// experimental case
+			query.Facets = facets
+			res4Exp, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(res4Exp.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected experimental Result hits to have valid `Index`", testCaseNum)
+			}
+
+			if !(operator == knnOperatorAnd && res4Ctrl.Total == 0 && res4Exp.Total == 0) {
+				// catch case where no hits are returned
+				// due to matchNone query with a KNN request with operator AND
+				// where no hits are part of the intersection in multi knn request
+				verifyResult(t, res4Ctrl, res4Exp, testCaseNum, false)
+			}
+		}
+		cleanUp(t, nameToIndex)
+	}
+
+	// Test Pagination with multi partitioned index
+	index = NewIndexAlias()
+	index.indexes = make([]Index, 0)
+	nameToIndex := createPartitionedIndex(documents, index, 8, indexMappingL2Norm, t, true)
+
+	// Test From + Size pagination for Hybrid Search (2-Phase)
+	query := copySearchRequest(searchRequests[4], nil)
+	query.Sort = reqSort.Copy()
+	query.Facets = facets
+	query.Explain = true
+
+	testFromSizePagination(t, query, index, nameToIndex)
+
+	// Test From + Size pagination for Early Exit Hybrid Search (1-Phase)
+	query = copySearchRequest(searchRequests[4], nil)
+	query.Query = NewMatchNoneQuery()
+	query.Sort = reqSort.Copy()
+	query.Facets = nil
+	query.Explain = true
+
+	testFromSizePagination(t, query, index, nameToIndex)
+
+	cleanUp(t, nameToIndex)
+}
+
+func testFromSizePagination(t *testing.T, query *SearchRequest, index Index, nameToIndex map[string]Index) {
+	query.From = 0
+	query.Size = 30
+
+	resCtrl, err := index.Search(query)
+	if err != nil {
+		cleanUp(t, nameToIndex)
+		t.Fatal(err)
+	}
+
+	ctrlHitIds := make([]string, len(resCtrl.Hits))
+	for i, doc := range resCtrl.Hits {
+		ctrlHitIds[i] = doc.ID
+	}
+	// experimental case
+
+	fromValues := []int{0, 5, 10, 15, 20, 25}
+	size := 5
+	for fromIdx := 0; fromIdx < len(fromValues); fromIdx++ {
+		from := fromValues[fromIdx]
+		query.From = from
+		query.Size = size
+		resExp, err := index.Search(query)
+		if err != nil {
+			cleanUp(t, nameToIndex)
+			t.Fatal(err)
+		}
+		if from >= len(ctrlHitIds) {
+			if len(resExp.Hits) != 0 {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("expected 0 hits, got %d", len(resExp.Hits))
+			}
+			continue
+		}
+		numHitsExp := len(resExp.Hits)
+		numHitsCtrl := min(len(ctrlHitIds)-from, size)
+		if numHitsExp != numHitsCtrl {
+			cleanUp(t, nameToIndex)
+			t.Fatalf("expected %d hits, got %d", numHitsCtrl, numHitsExp)
+		}
+		for i := 0; i < numHitsExp; i++ {
+			doc := resExp.Hits[i]
+			startOffset := from + i
+			if doc.ID != ctrlHitIds[startOffset] {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("expected %s at index %d, got %s", ctrlHitIds[startOffset], i, doc.ID)
+			}
+		}
+	}
+}
+
+func TestVectorBase64Index(t *testing.T) {
+	dataset, searchRequests, err := readDatasetAndQueries(testInputCompressedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	documents := makeDatasetIntoDocuments(dataset)
+
+	_, searchRequestsCopy, err := readDatasetAndQueries(testInputCompressedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, doc := range documents {
+		vec, ok := doc["vector"].([]float32)
+		if !ok {
+			t.Fatal("Typecasting vector to float array failed")
+		}
+
+		buf := new(bytes.Buffer)
+		for _, v := range vec {
+			err := binary.Write(buf, binary.LittleEndian, v)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		doc["vectorEncoded"] = base64.StdEncoding.EncodeToString(buf.Bytes())
+	}
+
+	for _, sr := range searchRequestsCopy {
+		for _, kr := range sr.KNN {
+			kr.Field = "vectorEncoded"
+		}
+	}
+
+	contentFM := NewTextFieldMapping()
+	contentFM.Analyzer = en.AnalyzerName
+
+	vecFML2 := mapping.NewVectorFieldMapping()
+	vecFML2.Dims = testDatasetDims
+	vecFML2.Similarity = index.EuclideanDistance
+
+	vecBFML2 := mapping.NewVectorBase64FieldMapping()
+	vecBFML2.Dims = testDatasetDims
+	vecBFML2.Similarity = index.EuclideanDistance
+
+	vecFMDot := mapping.NewVectorFieldMapping()
+	vecFMDot.Dims = testDatasetDims
+	vecFMDot.Similarity = index.InnerProduct
+
+	vecBFMDot := mapping.NewVectorBase64FieldMapping()
+	vecBFMDot.Dims = testDatasetDims
+	vecBFMDot.Similarity = index.InnerProduct
+
+	indexMappingL2 := NewIndexMapping()
+	indexMappingL2.DefaultMapping.AddFieldMappingsAt("content", contentFM)
+	indexMappingL2.DefaultMapping.AddFieldMappingsAt("vector", vecFML2)
+	indexMappingL2.DefaultMapping.AddFieldMappingsAt("vectorEncoded", vecBFML2)
+
+	indexMappingDot := NewIndexMapping()
+	indexMappingDot.DefaultMapping.AddFieldMappingsAt("content", contentFM)
+	indexMappingDot.DefaultMapping.AddFieldMappingsAt("vector", vecFMDot)
+	indexMappingDot.DefaultMapping.AddFieldMappingsAt("vectorEncoded", vecBFMDot)
+
+	tmpIndexPathL2 := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPathL2)
+
+	tmpIndexPathDot := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPathDot)
+
+	indexL2, err := New(tmpIndexPathL2, indexMappingL2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := indexL2.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	indexDot, err := New(tmpIndexPathDot, indexMappingDot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := indexDot.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	batchL2 := indexL2.NewBatch()
+	batchDot := indexDot.NewBatch()
+
+	for _, doc := range documents {
+		err = batchL2.Index(doc["id"].(string), doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = batchDot.Index(doc["id"].(string), doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err = indexL2.Batch(batchL2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = indexDot.Batch(batchDot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := range searchRequests {
+		for _, operator := range knnOperators {
+			controlQuery := searchRequests[i]
+			testQuery := searchRequestsCopy[i]
+
+			controlQuery.AddKNNOperator(operator)
+			testQuery.AddKNNOperator(operator)
+
+			controlResultL2, err := indexL2.Search(controlQuery)
+			if err != nil {
+				t.Fatal(err)
+			}
+			testResultL2, err := indexL2.Search(testQuery)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if controlResultL2 != nil && testResultL2 != nil {
+				if len(controlResultL2.Hits) == len(testResultL2.Hits) {
+					for j := range controlResultL2.Hits {
+						if controlResultL2.Hits[j].ID != testResultL2.Hits[j].ID {
+							t.Fatalf("testcase %d failed: expected hit id %s, got hit id %s", i, controlResultL2.Hits[j].ID, testResultL2.Hits[j].ID)
+						}
+					}
+				}
+			} else if (controlResultL2 == nil && testResultL2 != nil) ||
+				(controlResultL2 != nil && testResultL2 == nil) {
+				t.Fatalf("testcase %d failed: expected result %s, got result %s", i, controlResultL2, testResultL2)
+			}
+
+			controlResultDot, err := indexDot.Search(controlQuery)
+			if err != nil {
+				t.Fatal(err)
+			}
+			testResultDot, err := indexDot.Search(testQuery)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if controlResultDot != nil && testResultDot != nil {
+				if len(controlResultDot.Hits) == len(testResultDot.Hits) {
+					for j := range controlResultDot.Hits {
+						if controlResultDot.Hits[j].ID != testResultDot.Hits[j].ID {
+							t.Fatalf("testcase %d failed: expected hit id %s, got hit id %s", i, controlResultDot.Hits[j].ID, testResultDot.Hits[j].ID)
+						}
+					}
+				}
+			} else if (controlResultDot == nil && testResultDot != nil) ||
+				(controlResultDot != nil && testResultDot == nil) {
+				t.Fatalf("testcase %d failed: expected result %s, got result %s", i, controlResultDot, testResultDot)
+			}
+		}
+	}
+}
+
+type testDocument struct {
+	ID      string    `json:"id"`
+	Content string    `json:"content"`
+	Vector  []float32 `json:"vector"`
+}
+
+func readDatasetAndQueries(fileName string) ([]testDocument, []*SearchRequest, error) {
+	// Open the zip archive for reading
+	r, err := zip.OpenReader(fileName)
+	if err != nil {
+		return nil, nil, err
+	}
+	var dataset []testDocument
+	var queries []*SearchRequest
+
+	defer r.Close()
+	for _, f := range r.File {
+		jsonFile, err := f.Open()
+		if err != nil {
+			return nil, nil, err
+		}
+		defer jsonFile.Close()
+		if f.Name == testDatasetFileName {
+			err = json.NewDecoder(jsonFile).Decode(&dataset)
+			if err != nil {
+				return nil, nil, err
+			}
+		} else if f.Name == testQueryFileName {
+			err = json.NewDecoder(jsonFile).Decode(&queries)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	return dataset, queries, nil
+}
+
+func makeDatasetIntoDocuments(dataset []testDocument) []map[string]interface{} {
+	documents := make([]map[string]interface{}, len(dataset))
+	for i := 0; i < len(dataset); i++ {
+		document := make(map[string]interface{})
+		document["id"] = dataset[i].ID
+		document["content"] = dataset[i].Content
+		document["vector"] = dataset[i].Vector
+		documents[i] = document
+	}
+	return documents
+}
+
+func cleanUp(t *testing.T, nameToIndex map[string]Index) {
+	for path, childIndex := range nameToIndex {
+		err := childIndex.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cleanupTmpIndexPath(t, path)
+	}
+}
+
+func createChildIndex(docs []map[string]interface{}, mapping mapping.IndexMapping, t *testing.T, nameToIndex map[string]Index) Index {
+	tmpIndexPath := createTmpIndexPath(t)
+	index, err := New(tmpIndexPath, mapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nameToIndex[index.Name()] = index
+	batch := index.NewBatch()
+	for _, doc := range docs {
+		err := batch.Index(doc["id"].(string), doc)
+		if err != nil {
+			cleanUp(t, nameToIndex)
+			t.Fatal(err)
+		}
+	}
+	err = index.Batch(batch)
+	if err != nil {
+		cleanUp(t, nameToIndex)
+		t.Fatal(err)
+	}
+	return index
+}
+
+func createPartitionedIndex(documents []map[string]interface{}, index *indexAliasImpl, numPartitions int,
+	mapping mapping.IndexMapping, t *testing.T, multiLevel bool) map[string]Index {
+
+	partitionSize := len(documents) / numPartitions
+	extraDocs := len(documents) % numPartitions
+	numDocsPerPartition := make([]int, numPartitions)
+	for i := 0; i < numPartitions; i++ {
+		numDocsPerPartition[i] = partitionSize
+		if extraDocs > 0 {
+			numDocsPerPartition[i]++
+			extraDocs--
+		}
+	}
+	docsPerPartition := make([][]map[string]interface{}, numPartitions)
+	prevCutoff := 0
+	for i := 0; i < numPartitions; i++ {
+		docsPerPartition[i] = make([]map[string]interface{}, numDocsPerPartition[i])
+		for j := 0; j < numDocsPerPartition[i]; j++ {
+			docsPerPartition[i][j] = documents[prevCutoff+j]
+		}
+		prevCutoff += numDocsPerPartition[i]
+	}
+
+	rv := make(map[string]Index)
+	if !multiLevel {
+		// all indexes are at the same level
+		for i := 0; i < numPartitions; i++ {
+			index.Add(createChildIndex(docsPerPartition[i], mapping, t, rv))
+		}
+	} else {
+		// alias tree
+		indexes := make([]Index, numPartitions)
+		for i := 0; i < numPartitions; i++ {
+			indexes[i] = createChildIndex(docsPerPartition[i], mapping, t, rv)
+		}
+		numAlias := int(math.Ceil(float64(numPartitions) / 2.0))
+		aliases := make([]IndexAlias, numAlias)
+		for i := 0; i < numAlias; i++ {
+			aliases[i] = NewIndexAlias()
+			aliases[i].SetName(fmt.Sprintf("alias%d", i))
+			for j := 0; j < 2; j++ {
+				if i*2+j < numPartitions {
+					aliases[i].Add(indexes[i*2+j])
+				}
+			}
+		}
+		for i := 0; i < numAlias; i++ {
+			index.Add(aliases[i])
+		}
+	}
+	return rv
+}
+
+func createMultipleSegmentsIndex(documents []map[string]interface{}, index Index, numSegments int) error {
+	// create multiple batches to simulate more than one segment
+	numBatches := numSegments
+
+	batches := make([]*Batch, numBatches)
+	numDocsPerBatch := len(documents) / numBatches
+	extraDocs := len(documents) % numBatches
+
+	docsPerBatch := make([]int, numBatches)
+	for i := 0; i < numBatches; i++ {
+		docsPerBatch[i] = numDocsPerBatch
+		if extraDocs > 0 {
+			docsPerBatch[i]++
+			extraDocs--
+		}
+	}
+	prevCutoff := 0
+	for i := 0; i < numBatches; i++ {
+		batches[i] = index.NewBatch()
+		for j := prevCutoff; j < prevCutoff+docsPerBatch[i]; j++ {
+			doc := documents[j]
+			err := batches[i].Index(doc["id"].(string), doc)
+			if err != nil {
+				return err
+			}
+		}
+		prevCutoff += docsPerBatch[i]
+	}
+	errMutex := sync.Mutex{}
+	var errors []error
+	wg := sync.WaitGroup{}
+	wg.Add(len(batches))
+	for i, batch := range batches {
+		go func(ix int, batchx *Batch) {
+			defer wg.Done()
+			err := index.Batch(batchx)
+			if err != nil {
+				errMutex.Lock()
+				errors = append(errors, err)
+				errMutex.Unlock()
+			}
+		}(i, batch)
+	}
+	wg.Wait()
+	if len(errors) > 0 {
+		return errors[0]
+	}
+	return nil
+}
+
+func truncateScore(score float64) float64 {
+	epsilon := 1e-4
+	truncated := float64(int(score*1e6)) / 1e6
+	if math.Abs(truncated-1.0) <= epsilon {
+		return 1.0
+	}
+	return truncated
+}
+
+// Function to compare two Explanation structs recursively
+func compareExplanation(a, b *search.Explanation) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+
+	if truncateScore(a.Value) != truncateScore(b.Value) || len(a.Children) != len(b.Children) {
+		return false
+	}
+
+	// Sort the children slices before comparison
+	sortChildren(a.Children)
+	sortChildren(b.Children)
+
+	for i := range a.Children {
+		if !compareExplanation(a.Children[i], b.Children[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// Function to sort the children slices
+func sortChildren(children []*search.Explanation) {
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].Value < children[j].Value
+	})
+}
+
+// All hits from a hybrid search/knn search should not have
+// index names or score breakdown.
+func finalHitsOmitKNNMetadata(hits []*search.DocumentMatch) bool {
+	for _, hit := range hits {
+		if hit.IndexNames != nil || hit.ScoreBreakdown != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func finalHitsHaveValidIndex(hits []*search.DocumentMatch, indexes map[string]Index) bool {
+	for _, hit := range hits {
+		if hit.Index == "" {
+			return false
+		}
+		var idx Index
+		var ok bool
+		if idx, ok = indexes[hit.Index]; !ok {
+			return false
+		}
+		if idx == nil {
+			return false
+		}
+		var doc index.Document
+		doc, err = idx.Document(hit.ID)
+		if err != nil {
+			return false
+		}
+		if doc == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func verifyResult(t *testing.T, controlResult *SearchResult, experimentalResult *SearchResult, testCaseNum int, verifyOnlyDocIDs bool) {
+	if controlResult.Hits.Len() == 0 || experimentalResult.Hits.Len() == 0 {
+		t.Fatalf("test case #%d failed: 0 hits returned", testCaseNum)
+	}
+	if len(controlResult.Hits) != len(experimentalResult.Hits) {
+		t.Fatalf("test case #%d failed: expected %d results, got %d", testCaseNum, len(controlResult.Hits), len(experimentalResult.Hits))
+	}
+	if controlResult.Total != experimentalResult.Total {
+		t.Fatalf("test case #%d failed: expected total hits to be %d, got %d", testCaseNum, controlResult.Total, experimentalResult.Total)
+	}
+	// KNN Metadata -> Score Breakdown and IndexNames MUST be omitted from the final hits
+	if !finalHitsOmitKNNMetadata(controlResult.Hits) || !finalHitsOmitKNNMetadata(experimentalResult.Hits) {
+		t.Fatalf("test case #%d failed: expected no KNN metadata in hits", testCaseNum)
+	}
+	if controlResult.Took == 0 || experimentalResult.Took == 0 {
+		t.Fatalf("test case #%d failed: expected non-zero took time", testCaseNum)
+	}
+	if controlResult.Request == nil || experimentalResult.Request == nil {
+		t.Fatalf("test case #%d failed: expected non-nil request", testCaseNum)
+	}
+	if verifyOnlyDocIDs {
+		// in multi partitioned index, we cannot be sure of the score or the ordering of the hits as the tf-idf scores are localized to each partition
+		// so we only check the ids
+		controlMap := make(map[string]struct{})
+		experimentalMap := make(map[string]struct{})
+		for _, hit := range controlResult.Hits {
+			controlMap[hit.ID] = struct{}{}
+		}
+		for _, hit := range experimentalResult.Hits {
+			experimentalMap[hit.ID] = struct{}{}
+		}
+		if len(controlMap) != len(experimentalMap) {
+			t.Fatalf("test case #%d failed: expected %d results, got %d", testCaseNum, len(controlMap), len(experimentalMap))
+		}
+		for id := range controlMap {
+			if _, ok := experimentalMap[id]; !ok {
+				t.Fatalf("test case #%d failed: expected id %s to be in experimental result", testCaseNum, id)
+			}
+		}
+		return
+	}
+	for i := 0; i < len(controlResult.Hits); i++ {
+		if controlResult.Hits[i].ID != experimentalResult.Hits[i].ID {
+			t.Fatalf("test case #%d failed: expected hit %d to have id %s, got %s", testCaseNum, i, controlResult.Hits[i].ID, experimentalResult.Hits[i].ID)
+		}
+		// Truncate to 6 decimal places
+		actualScore := truncateScore(experimentalResult.Hits[i].Score)
+		expectScore := truncateScore(controlResult.Hits[i].Score)
+		if expectScore != actualScore {
+			t.Fatalf("test case #%d failed: expected hit %d to have score %f, got %f", testCaseNum, i, expectScore, actualScore)
+		}
+		if !compareExplanation(controlResult.Hits[i].Expl, experimentalResult.Hits[i].Expl) {
+			t.Fatalf("test case #%d failed: expected hit %d to have explanation %v, got %v", testCaseNum, i, controlResult.Hits[i].Expl, experimentalResult.Hits[i].Expl)
+		}
+	}
+	if truncateScore(controlResult.MaxScore) != truncateScore(experimentalResult.MaxScore) {
+		t.Fatalf("test case #%d: expected maxScore to be %f, got %f", testCaseNum, controlResult.MaxScore, experimentalResult.MaxScore)
+	}
+}
+
+func TestSimilaritySearchMultipleSegments(t *testing.T) {
+	// using scorch options to prevent merges during the course of this test
+	// so that the knnCollector can be accurately tested
+	scorch.DefaultMemoryPressurePauseThreshold = 0
+	scorch.DefaultMinSegmentsForInMemoryMerge = math.MaxInt
+	dataset, searchRequests, err := readDatasetAndQueries(testInputCompressedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	documents := makeDatasetIntoDocuments(dataset)
+
+	contentFieldMapping := NewTextFieldMapping()
+	contentFieldMapping.Analyzer = en.AnalyzerName
+
+	vecFieldMappingL2 := mapping.NewVectorFieldMapping()
+	vecFieldMappingL2.Dims = testDatasetDims
+	vecFieldMappingL2.Similarity = index.EuclideanDistance
+
+	vecFieldMappingDot := mapping.NewVectorFieldMapping()
+	vecFieldMappingDot.Dims = testDatasetDims
+	vecFieldMappingDot.Similarity = index.InnerProduct
+
+	vecFieldMappingCosine := mapping.NewVectorFieldMapping()
+	vecFieldMappingCosine.Dims = testDatasetDims
+	vecFieldMappingCosine.Similarity = index.CosineSimilarity
+
+	indexMappingL2Norm := NewIndexMapping()
+	indexMappingL2Norm.DefaultMapping.AddFieldMappingsAt("content", contentFieldMapping)
+	indexMappingL2Norm.DefaultMapping.AddFieldMappingsAt("vector", vecFieldMappingL2)
+
+	indexMappingDotProduct := NewIndexMapping()
+	indexMappingDotProduct.DefaultMapping.AddFieldMappingsAt("content", contentFieldMapping)
+	indexMappingDotProduct.DefaultMapping.AddFieldMappingsAt("vector", vecFieldMappingDot)
+
+	indexMappingCosine := NewIndexMapping()
+	indexMappingCosine.DefaultMapping.AddFieldMappingsAt("content", contentFieldMapping)
+	indexMappingCosine.DefaultMapping.AddFieldMappingsAt("vector", vecFieldMappingCosine)
+
+	var reqSort = search.SortOrder{&search.SortScore{Desc: true}, &search.SortDocID{Desc: true}, &search.SortField{Desc: false, Field: "content"}}
+
+	testCases := []struct {
+		numSegments int
+		queryIndex  int
+		mapping     mapping.IndexMapping
+		scoreValue  string
+	}{
+		// L2 norm similarity
+		{
+			numSegments: 6,
+			queryIndex:  0,
+			mapping:     indexMappingL2Norm,
+		},
+		{
+			numSegments: 7,
+			queryIndex:  1,
+			mapping:     indexMappingL2Norm,
+		},
+		{
+			numSegments: 8,
+			queryIndex:  2,
+			mapping:     indexMappingL2Norm,
+		},
+		{
+			numSegments: 9,
+			queryIndex:  3,
+			mapping:     indexMappingL2Norm,
+		},
+		{
+			numSegments: 10,
+			queryIndex:  4,
+			mapping:     indexMappingL2Norm,
+		},
+		{
+			numSegments: 11,
+			queryIndex:  5,
+			mapping:     indexMappingL2Norm,
+		},
+		// dot_product similarity
+		{
+			numSegments: 6,
+			queryIndex:  0,
+			mapping:     indexMappingDotProduct,
+		},
+		{
+			numSegments: 7,
+			queryIndex:  1,
+			mapping:     indexMappingDotProduct,
+		},
+		{
+			numSegments: 8,
+			queryIndex:  2,
+			mapping:     indexMappingDotProduct,
+		},
+		{
+			numSegments: 9,
+			queryIndex:  3,
+			mapping:     indexMappingDotProduct,
+		},
+		{
+			numSegments: 10,
+			queryIndex:  4,
+			mapping:     indexMappingDotProduct,
+		},
+		{
+			numSegments: 11,
+			queryIndex:  5,
+			mapping:     indexMappingDotProduct,
+		},
+		// cosine similarity
+		{
+			numSegments: 9,
+			queryIndex:  0,
+			mapping:     indexMappingCosine,
+		},
+		{
+			numSegments: 5,
+			queryIndex:  1,
+			mapping:     indexMappingCosine,
+		},
+		{
+			numSegments: 4,
+			queryIndex:  2,
+			mapping:     indexMappingCosine,
+		},
+		{
+			numSegments: 12,
+			queryIndex:  3,
+			mapping:     indexMappingCosine,
+		},
+		{
+			numSegments: 7,
+			queryIndex:  4,
+			mapping:     indexMappingCosine,
+		},
+		{
+			numSegments: 11,
+			queryIndex:  5,
+			mapping:     indexMappingCosine,
+		},
+		// score none test
+		{
+			numSegments: 3,
+			queryIndex:  0,
+			mapping:     indexMappingL2Norm,
+			scoreValue:  "none",
+		},
+		{
+			numSegments: 7,
+			queryIndex:  1,
+			mapping:     indexMappingL2Norm,
+			scoreValue:  "none",
+		},
+		{
+			numSegments: 8,
+			queryIndex:  2,
+			mapping:     indexMappingL2Norm,
+			scoreValue:  "none",
+		},
+		{
+			numSegments: 3,
+			queryIndex:  0,
+			mapping:     indexMappingDotProduct,
+			scoreValue:  "none",
+		},
+		{
+			numSegments: 7,
+			queryIndex:  1,
+			mapping:     indexMappingDotProduct,
+			scoreValue:  "none",
+		},
+		{
+			numSegments: 8,
+			queryIndex:  2,
+			mapping:     indexMappingDotProduct,
+			scoreValue:  "none",
+		},
+		{
+			numSegments: 3,
+			queryIndex:  0,
+			mapping:     indexMappingCosine,
+			scoreValue:  "none",
+		},
+		{
+			numSegments: 7,
+			queryIndex:  1,
+			mapping:     indexMappingCosine,
+			scoreValue:  "none",
+		},
+		{
+			numSegments: 8,
+			queryIndex:  2,
+			mapping:     indexMappingCosine,
+			scoreValue:  "none",
+		},
+	}
+	for testCaseNum, testCase := range testCases {
+		originalRequest := searchRequests[testCase.queryIndex]
+		for _, operator := range knnOperators {
+			// run single segment test first
+			tmpIndexPath := createTmpIndexPath(t)
+			index, err := New(tmpIndexPath, testCase.mapping)
+			if err != nil {
+				t.Fatal(err)
+			}
+			query := copySearchRequest(originalRequest, nil)
+			query.Sort = reqSort.Copy()
+			query.AddKNNOperator(operator)
+			query.Explain = true
+
+			nameToIndex := make(map[string]Index)
+			nameToIndex[index.Name()] = index
+
+			err = createMultipleSegmentsIndex(documents, index, 1)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			controlResult, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(controlResult.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected control result hits to have valid `Index`", testCaseNum)
+			}
+			if testCase.scoreValue == "none" {
+
+				query := copySearchRequest(originalRequest, nil)
+				query.Sort = reqSort.Copy()
+				query.AddKNNOperator(operator)
+				query.Explain = true
+				query.Score = testCase.scoreValue
+
+				expectedResultScoreNone, err := index.Search(query)
+				if err != nil {
+					cleanUp(t, nameToIndex)
+					t.Fatal(err)
+				}
+				if !finalHitsHaveValidIndex(expectedResultScoreNone.Hits, nameToIndex) {
+					cleanUp(t, nameToIndex)
+					t.Fatalf("test case #%d failed: expected score none hits to have valid `Index`", testCaseNum)
+				}
+				verifyResult(t, controlResult, expectedResultScoreNone, testCaseNum, true)
+			}
+			cleanUp(t, nameToIndex)
+
+			// run multiple segments test
+			tmpIndexPath = createTmpIndexPath(t)
+			index, err = New(tmpIndexPath, testCase.mapping)
+			if err != nil {
+				t.Fatal(err)
+			}
+			nameToIndex = make(map[string]Index)
+			nameToIndex[index.Name()] = index
+			err = createMultipleSegmentsIndex(documents, index, testCase.numSegments)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+
+			query = copySearchRequest(originalRequest, nil)
+			query.Sort = reqSort.Copy()
+			query.AddKNNOperator(operator)
+			query.Explain = true
+
+			experimentalResult, err := index.Search(query)
+			if err != nil {
+				cleanUp(t, nameToIndex)
+				t.Fatal(err)
+			}
+			if !finalHitsHaveValidIndex(experimentalResult.Hits, nameToIndex) {
+				cleanUp(t, nameToIndex)
+				t.Fatalf("test case #%d failed: expected experimental result hits to have valid `Index`", testCaseNum)
+			}
+			verifyResult(t, controlResult, experimentalResult, testCaseNum, false)
+			cleanUp(t, nameToIndex)
+		}
+	}
+}
+
+// Test to determine the impact of boost on kNN queries.
+func TestKNNScoreBoosting(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	const dims = 5
+	getRandomVector := func() []float32 {
+		vec := make([]float32, dims)
+		for i := 0; i < dims; i++ {
+			vec[i] = rand.Float32()
+		}
+		return vec
+	}
+
+	dataset := make([]map[string]interface{}, 10)
+
+	// Indexing just a few docs to populate index.
+	for i := 0; i < 100; i++ {
+		dataset = append(dataset, map[string]interface{}{
+			"type":    "vectorStuff",
+			"content": strconv.Itoa(i),
+			"vector":  getRandomVector(),
+		})
+	}
+
+	indexMapping := NewIndexMapping()
+	indexMapping.TypeField = "type"
+	indexMapping.DefaultAnalyzer = "en"
+	documentMapping := NewDocumentMapping()
+	indexMapping.AddDocumentMapping("vectorStuff", documentMapping)
+
+	contentFieldMapping := NewTextFieldMapping()
+	contentFieldMapping.Index = true
+	contentFieldMapping.Store = true
+	documentMapping.AddFieldMappingsAt("content", contentFieldMapping)
+
+	vecFieldMapping := mapping.NewVectorFieldMapping()
+	vecFieldMapping.Index = true
+	vecFieldMapping.Dims = 5
+	vecFieldMapping.Similarity = "dot_product"
+	documentMapping.AddFieldMappingsAt("vector", vecFieldMapping)
+
+	index, err := New(tmpIndexPath, indexMapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := index.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	batch := index.NewBatch()
+	for i := 0; i < len(dataset); i++ {
+		err = batch.Index(strconv.Itoa(i), dataset[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err = index.Batch(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	queryVec := getRandomVector()
+	searchRequest := NewSearchRequest(NewMatchNoneQuery())
+	searchRequest.AddKNN("vector", queryVec, 3, 1.0)
+	searchRequest.Fields = []string{"content", "vector"}
+
+	hits, err := index.Search(searchRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hitsMap := make(map[string]float64, 0)
+	for _, hit := range hits.Hits {
+		hitsMap[hit.ID] = (hit.Score)
+	}
+
+	searchRequest = NewSearchRequest(NewMatchNoneQuery())
+	searchRequest.AddKNN("vector", queryVec, 3, 10.0)
+	searchRequest.Fields = []string{"content", "vector"}
+
+	hits, err = index.Search(searchRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hitsMap2 := make(map[string]float64, 0)
+	for _, hit := range hits.Hits {
+		hitsMap2[hit.ID] = (hit.Score)
+	}
+
+	for _, hit := range hits.Hits {
+		if hitsMap[hit.ID] != hitsMap2[hit.ID]/10 {
+			t.Errorf("boosting not working: %v %v \n", hitsMap[hit.ID], hitsMap2[hit.ID])
+		}
+	}
+}
+
+// Test to see if KNN Operators get added right to the query.
+func TestKNNOperator(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	const dims = 5
+	getRandomVector := func() []float32 {
+		vec := make([]float32, dims)
+		for i := 0; i < dims; i++ {
+			vec[i] = rand.Float32()
+		}
+		return vec
+	}
+
+	dataset := make([]map[string]interface{}, 10)
+
+	// Indexing just a few docs to populate index.
+	for i := 0; i < 10; i++ {
+		dataset = append(dataset, map[string]interface{}{
+			"type":    "vectorStuff",
+			"content": strconv.Itoa(i),
+			"vector":  getRandomVector(),
+		})
+	}
+
+	indexMapping := NewIndexMapping()
+	indexMapping.TypeField = "type"
+	indexMapping.DefaultAnalyzer = "en"
+	documentMapping := NewDocumentMapping()
+	indexMapping.AddDocumentMapping("vectorStuff", documentMapping)
+
+	contentFieldMapping := NewTextFieldMapping()
+	contentFieldMapping.Index = true
+	contentFieldMapping.Store = true
+	documentMapping.AddFieldMappingsAt("content", contentFieldMapping)
+
+	vecFieldMapping := mapping.NewVectorFieldMapping()
+	vecFieldMapping.Index = true
+	vecFieldMapping.Dims = 5
+	vecFieldMapping.Similarity = "dot_product"
+	documentMapping.AddFieldMappingsAt("vector", vecFieldMapping)
+
+	index, err := New(tmpIndexPath, indexMapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := index.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	batch := index.NewBatch()
+	for i := 0; i < len(dataset); i++ {
+		err = batch.Index(strconv.Itoa(i), dataset[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err = index.Batch(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	termQuery := query.NewTermQuery("2")
+
+	searchRequest := NewSearchRequest(termQuery)
+	searchRequest.AddKNN("vector", getRandomVector(), 3, 2.0)
+	searchRequest.AddKNN("vector", getRandomVector(), 2, 1.5)
+	searchRequest.Fields = []string{"content", "vector"}
+
+	// Conjunction
+	searchRequest.AddKNNOperator(knnOperatorAnd)
+	conjunction, _, _, err := createKNNQuery(searchRequest, nil)
+	if err != nil {
+		t.Fatalf("unexpected error for AND knn operator")
+	}
+
+	conj, ok := conjunction.(*query.DisjunctionQuery)
+	if !ok {
+		t.Fatalf("expected disjunction query")
+	}
+
+	if len(conj.Disjuncts) != 2 {
+		t.Fatalf("expected 2 disjuncts")
+	}
+
+	// Disjunction
+	searchRequest.AddKNNOperator(knnOperatorOr)
+	disjunction, _, _, err := createKNNQuery(searchRequest, nil)
+	if err != nil {
+		t.Fatalf("unexpected error for OR knn operator")
+	}
+
+	disj, ok := disjunction.(*query.DisjunctionQuery)
+	if !ok {
+		t.Fatalf("expected disjunction query")
+	}
+
+	if len(disj.Disjuncts) != 2 {
+		t.Fatalf("expected 2 disjuncts")
+	}
+
+	// Incorrect operator.
+	searchRequest.AddKNNOperator("bs_op")
+	searchRequest.Query, _, _, err = createKNNQuery(searchRequest, nil)
+	if err == nil {
+		t.Fatalf("expected error for incorrect knn operator")
+	}
+}
+
+func TestKNNFiltering(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	const dims = 5
+	getRandomVector := func() []float32 {
+		vec := make([]float32, dims)
+		for i := 0; i < dims; i++ {
+			vec[i] = rand.Float32()
+		}
+		return vec
+	}
+
+	dataset := make([]map[string]interface{}, 0)
+
+	// Indexing just a few docs to populate index.
+	for i := 0; i < 10; i++ {
+		dataset = append(dataset, map[string]interface{}{
+			"type":    "vectorStuff",
+			"content": strconv.Itoa(i + 1000),
+			"vector":  getRandomVector(),
+		})
+	}
+
+	indexMapping := NewIndexMapping()
+	indexMapping.TypeField = "type"
+	indexMapping.DefaultAnalyzer = "en"
+	documentMapping := NewDocumentMapping()
+	indexMapping.AddDocumentMapping("vectorStuff", documentMapping)
+
+	contentFieldMapping := NewTextFieldMapping()
+	contentFieldMapping.Index = true
+	contentFieldMapping.Store = true
+	documentMapping.AddFieldMappingsAt("content", contentFieldMapping)
+
+	vecFieldMapping := mapping.NewVectorFieldMapping()
+	vecFieldMapping.Index = true
+	vecFieldMapping.Dims = 5
+	vecFieldMapping.Similarity = "dot_product"
+	documentMapping.AddFieldMappingsAt("vector", vecFieldMapping)
+
+	index, err := New(tmpIndexPath, indexMapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := index.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	batch := index.NewBatch()
+	for i := 0; i < len(dataset); i++ {
+		// the id of term "i" is (i-1000)
+		err = batch.Index(strconv.Itoa(i), dataset[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err = index.Batch(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	termQuery := query.NewTermQuery("1004")
+	filterRequest := NewSearchRequest(termQuery)
+	filteredHits, err := index.Search(filterRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filteredDocIDs := make(map[string]struct{})
+	for _, match := range filteredHits.Hits {
+		filteredDocIDs[match.ID] = struct{}{}
+	}
+
+	searchRequest := NewSearchRequest(NewMatchNoneQuery())
+	searchRequest.AddKNNWithFilter("vector", getRandomVector(), 3, 2.0, termQuery)
+	searchRequest.Fields = []string{"content", "vector"}
+
+	res, err := index.Search(searchRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// check if any of the returned results are not part of the filtered hits.
+	for _, match := range res.Hits {
+		if _, exists := filteredDocIDs[match.ID]; !exists {
+			t.Errorf("returned result not present in filtered hits")
+		}
+	}
+
+	// No results should be returned with a match_none filter.
+	searchRequest = NewSearchRequest(NewMatchNoneQuery())
+	searchRequest.AddKNNWithFilter("vector", getRandomVector(), 3, 2.0,
+		NewMatchNoneQuery())
+	res, err = index.Search(searchRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Hits) != 0 {
+		t.Errorf("match none filter should return no hits")
+	}
+
+	// Testing with a disjunction query.
+
+	termQuery = query.NewTermQuery("1003")
+	termQuery2 := query.NewTermQuery("1005")
+	disjQuery := query.NewDisjunctionQuery([]query.Query{termQuery, termQuery2})
+	filterRequest = NewSearchRequest(disjQuery)
+	filteredHits, err = index.Search(filterRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filteredDocIDs = make(map[string]struct{})
+	for _, match := range filteredHits.Hits {
+		filteredDocIDs[match.ID] = struct{}{}
+	}
+
+	searchRequest = NewSearchRequest(NewMatchNoneQuery())
+	searchRequest.AddKNNWithFilter("vector", getRandomVector(), 3, 2.0, disjQuery)
+	searchRequest.Fields = []string{"content", "vector"}
+
+	res, err = index.Search(searchRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, match := range res.Hits {
+		if _, exists := filteredDocIDs[match.ID]; !exists {
+			t.Errorf("returned result not present in filtered hits")
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Test nested vectors
+
+func TestNestedVectors(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	const dims = 3
+	const k = 1 // one nearest neighbor
+	const vecFieldName = "vecData"
+
+	dataset := map[string]map[string]interface{}{ // docID -> Doc
+		"doc1": {
+			vecFieldName: []float32{100, 100, 100},
+		},
+		"doc2": {
+			vecFieldName: [][]float32{{0, 0, 0}, {1000, 1000, 1000}},
+		},
+	}
+
+	// Index mapping
+	indexMapping := NewIndexMapping()
+	vm := mapping.NewVectorFieldMapping()
+	vm.Dims = dims
+	vm.Similarity = "l2_norm"
+	indexMapping.DefaultMapping.AddFieldMappingsAt(vecFieldName, vm)
+
+	// Create index and upload documents
+	index, err := New(tmpIndexPath, indexMapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := index.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	batch := index.NewBatch()
+	for docID, doc := range dataset {
+		err = batch.Index(docID, doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err = index.Batch(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Run searches
+
+	tests := []struct {
+		queryVec      []float32
+		expectedDocID string
+	}{
+		{
+			queryVec:      []float32{100, 100, 100},
+			expectedDocID: "doc1",
+		},
+		{
+			queryVec:      []float32{0, 0, 0},
+			expectedDocID: "doc2",
+		},
+		{
+			queryVec:      []float32{1000, 1000, 1000},
+			expectedDocID: "doc2",
+		},
+	}
+
+	for _, test := range tests {
+		searchReq := NewSearchRequest(query.NewMatchNoneQuery())
+		searchReq.AddKNNWithFilter(vecFieldName, test.queryVec, k, 1000,
+			NewMatchAllQuery())
+
+		res, err := index.Search(searchReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(res.Hits) != 1 {
+			t.Fatalf("expected 1 hit, got %d", len(res.Hits))
+		}
+
+		if res.Hits[0].ID != test.expectedDocID {
+			t.Fatalf("expected docID %s, got %s", test.expectedDocID,
+				res.Hits[0].ID)
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+// TestMultiVector tests the KNN functionality which handles duplicate
+// vectors being matched within the same document. When a document has multiple vectors
+// (via [[]] array of vectors or [{}] array of objects with vectors), the KNN
+// searcher must pick the best scoring vector match for that document. This test covers these scenarios:
+// - Single vector field (baseline)
+// - [[]] style: array of vectors (same doc appears multiple times)
+// - [{}] style: array of objects with vector field (chunks pattern)
+func TestMultiVector(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	// JSON documents covering merger scenarios:
+	// - Single vector (baseline)
+	// - [[]] style: array of vectors (same doc appears multiple times)
+	// - [{}] style: array of objects with vector field (chunks pattern)
+	docs := map[string]string{
+		// Single vector - baseline
+		"doc1": `{
+			"vec": [10, 10, 10],
+			"vecB": [100, 100, 100]
+		}`,
+		// [[]] style - array of 2 vectors
+		"doc2": `{
+			"vec": [[0, 0, 0], [500, 500, 500]],
+			"vecB": [[900, 900, 900], [950, 950, 950], [975, 975, 975], [990, 990, 990]]
+		}`,
+		// [[]] style - array of 3 vectors
+		"doc3": `{ 
+			"vec": [[50, 50, 50], [200, 200, 200], [400, 400, 400]],
+			"vecB": [[800, 800, 800], [850, 850, 850]]
+		}`,
+		// Single vector - baseline
+		"doc4": `{
+			"vec": [1000, 1000, 1000],
+			"vecB": [1, 1, 1]
+		}`,
+		// [{}] style - array of objects with vector field (chunks pattern)
+		"doc5": `{
+			"chunks": [
+				{"vec": [10, 10, 10], "text": "chunk1"},
+				{"vec": [20, 20, 20], "text": "chunk2"},
+				{"vec": [30, 30, 30], "text": "chunk3"},
+				{"vec": [40, 40, 40], "text": "chunk4"}
+			]
+		}`,
+		"doc6": `{
+			"chunks": [
+				{"vec": [[10, 10, 10],[20, 20, 20]], "text": "chunk1"},
+				{"vec": [[30, 30, 30],[40, 40, 40]], "text": "chunk2"}
+			]
+		}`,
+	}
+
+	// Parse JSON documents
+	dataset := make(map[string]map[string]interface{})
+	for docID, jsonStr := range docs {
+		var doc map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
+			t.Fatalf("failed to unmarshal %s: %v", docID, err)
+		}
+		dataset[docID] = doc
+	}
+
+	// Index mapping
+	indexMapping := NewIndexMapping()
+
+	vecMapping := mapping.NewVectorFieldMapping()
+	vecMapping.Dims = 3
+	vecMapping.Similarity = index.InnerProduct
+	indexMapping.DefaultMapping.AddFieldMappingsAt("vec", vecMapping)
+	indexMapping.DefaultMapping.AddFieldMappingsAt("vecB", vecMapping)
+
+	// Nested chunks mapping for [{}] style
+	chunksMapping := mapping.NewDocumentMapping()
+	chunksMapping.AddFieldMappingsAt("vec", vecMapping)
+	indexMapping.DefaultMapping.AddSubDocumentMapping("chunks", chunksMapping)
+
+	// Create and populate index
+	idx, err := New(tmpIndexPath, indexMapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := idx.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	batch := idx.NewBatch()
+	for docID, doc := range dataset {
+		if err := batch.Index(docID, doc); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := idx.Batch(batch); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test: Single KNN query - basic functionality
+	t.Run("VecFieldSingle", func(t *testing.T) {
+		searchReq := NewSearchRequest(query.NewMatchNoneQuery())
+		searchReq.AddKNN("vec", []float32{1, 1, 1}, 20, 1.0)
+		res, err := idx.Search(searchReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Inner product: score = sum(query_i * doc_i)
+		// doc1 vec=[10,10,10]: 1*10*3 = 30
+		// doc2 vec best is [500,500,500]: 1*500*3 = 1500
+		// doc3 vec best is [400,400,400]: 1*400*3 = 1200
+		// doc4 vec=[1000,1000,1000]: 1*1000*3 = 3000
+		expectedResult := []struct {
+			docID         string
+			expectedScore float64
+		}{
+			{docID: "doc4", expectedScore: 3000},
+			{docID: "doc2", expectedScore: 1500},
+			{docID: "doc3", expectedScore: 1200},
+			{docID: "doc1", expectedScore: 30},
+		}
+
+		if len(res.Hits) != len(expectedResult) {
+			t.Fatalf("expected %d hits, got %d", len(expectedResult), len(res.Hits))
+		}
+
+		for i, expected := range expectedResult {
+			if res.Hits[i].ID != expected.docID {
+				t.Fatalf("at rank %d, expected docID %s, got %s", i+1, expected.docID, res.Hits[i].ID)
+			}
+			if res.Hits[i].Score != expected.expectedScore {
+				t.Fatalf("at rank %d, expected score %v, got %v", i+1, expected.expectedScore, res.Hits[i].Score)
+			}
+		}
+	})
+
+	// Test: Single KNN query on vecB field
+	t.Run("VecBFieldSingle", func(t *testing.T) {
+		searchReq := NewSearchRequest(query.NewMatchNoneQuery())
+		searchReq.AddKNN("vecB", []float32{1000, 1000, 1000}, 20, 1.0)
+		res, err := idx.Search(searchReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Inner product: score = sum(query_i * doc_i) for each dimension
+		// doc1: vecB=[100,100,100] -> 1000*100*3 = 300,000
+		// doc2: vecB best is [990,990,990] -> 1000*990*3 = 2,970,000
+		// doc3: vecB best is [850,850,850] -> 1000*850*3 = 2,550,000
+		// doc4: vecB=[1,1,1] -> 1000*1*3 = 3,000
+		expectedResult := []struct {
+			docID         string
+			expectedScore float64
+		}{
+			{docID: "doc2", expectedScore: 2970000},
+			{docID: "doc3", expectedScore: 2550000},
+			{docID: "doc1", expectedScore: 300000},
+			{docID: "doc4", expectedScore: 3000},
+		}
+
+		if len(res.Hits) != len(expectedResult) {
+			t.Fatalf("expected %d hits, got %d", len(expectedResult), len(res.Hits))
+		}
+
+		for i, expected := range expectedResult {
+			if res.Hits[i].ID != expected.docID {
+				t.Fatalf("at rank %d, expected docID %s, got %s", i+1, expected.docID, res.Hits[i].ID)
+			}
+			if res.Hits[i].Score != expected.expectedScore {
+				t.Fatalf("at rank %d, expected score %v, got %v", i+1, expected.expectedScore, res.Hits[i].Score)
+			}
+		}
+	})
+
+	// Test: Single KNN query on nested chunks.vec field
+	t.Run("ChunksVecFieldSingle", func(t *testing.T) {
+		searchReq := NewSearchRequest(query.NewMatchNoneQuery())
+		searchReq.AddKNN("chunks.vec", []float32{1, 1, 1}, 20, 1.0)
+		searchReq.SortBy([]string{"_score", "docID"})
+		res, err := idx.Search(searchReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Only doc5 and doc6 have chunks.vec
+		// doc5 chunks: [10,10,10], [20,20,20], [30,30,30], [40,40,40]
+		//   Best score: 1*40*3 = 120
+		// doc6 chunks: [[10,10,10],[20,20,20]], [[30,30,30],[40,40,40]]
+		//   Best score: 1*40*3 = 120
+		if len(res.Hits) != 2 {
+			t.Fatalf("expected 2 hits, got %d", len(res.Hits))
+		}
+
+		// Both should have score 120
+		for _, hit := range res.Hits {
+			if hit.ID != "doc5" && hit.ID != "doc6" {
+				t.Fatalf("unexpected docID %s, expected doc5 or doc6", hit.ID)
+			}
+			if hit.Score != 120 {
+				t.Fatalf("for %s, expected score 120, got %v", hit.ID, hit.Score)
+			}
+		}
+	})
+}
+
+// TestMultiVectorCosineNormalization verifies that multi-vector fields are
+// normalized correctly with cosine similarity. Each sub-vector in a multi-vector
+// should be independently normalized, producing correct similarity scores.
+func TestMultiVectorCosineNormalization(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	const dims = 3
+
+	// Create index with cosine similarity
+	indexMapping := NewIndexMapping()
+	vecFieldMapping := mapping.NewVectorFieldMapping()
+	vecFieldMapping.Dims = dims
+	vecFieldMapping.Similarity = index.CosineSimilarity
+
+	// Single-vector field
+	indexMapping.DefaultMapping.AddFieldMappingsAt("vec", vecFieldMapping)
+	// Multi-vector field
+	indexMapping.DefaultMapping.AddFieldMappingsAt("multi_vec", vecFieldMapping)
+
+	idx, err := New(tmpIndexPath, indexMapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := idx.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	docsString := []string{
+		`{"vec": [3, 0, 0]}`,
+		`{"vec": [0, 4, 0]}`,
+		`{"multi_vec": [[3, 0, 0], [0, 4, 0]]}`,
+	}
+
+	for i, docStr := range docsString {
+		var doc map[string]interface{}
+		err = json.Unmarshal([]byte(docStr), &doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = idx.Index(fmt.Sprintf("doc%d", i+1), doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Query for X direction [1,0,0]
+	searchReq := NewSearchRequest(query.NewMatchNoneQuery())
+	searchReq.AddKNN("vec", []float32{1, 0, 0}, 3, 1.0)
+	res, err := idx.Search(searchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Hits) != 2 {
+		t.Fatalf("expected 2 hits, got %d", len(res.Hits))
+	}
+	// Hit 1 should be doc1 with score 1.0 (perfect match)
+	if res.Hits[0].ID != "doc1" {
+		t.Fatalf("expected doc1 as first hit, got %s", res.Hits[0].ID)
+	}
+	if math.Abs(float64(res.Hits[0].Score-1.0)) > 1e-6 {
+		t.Fatalf("expected score 1.0, got %f", res.Hits[0].Score)
+	}
+	// Hit 2 should be doc2 with a score of 0.0 (orthogonal)
+	if res.Hits[1].ID != "doc2" {
+		t.Fatalf("expected doc2 as second hit, got %s", res.Hits[1].ID)
+	}
+	if math.Abs(float64(res.Hits[1].Score-0.0)) > 1e-6 {
+		t.Fatalf("expected score 0.0, got %f", res.Hits[1].Score)
+	}
+
+	// Query for Y direction [0,1,0]
+	searchReq = NewSearchRequest(query.NewMatchNoneQuery())
+	searchReq.AddKNN("vec", []float32{0, 1, 0}, 3, 1.0)
+	res, err = idx.Search(searchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Hits) != 2 {
+		t.Fatalf("expected 2 hits, got %d", len(res.Hits))
+	}
+	// Hit 1 should be doc2 with score 1.0 (perfect match)
+	if res.Hits[0].ID != "doc2" {
+		t.Fatalf("expected doc2 as first hit, got %s", res.Hits[0].ID)
+	}
+	if math.Abs(float64(res.Hits[0].Score-1.0)) > 1e-6 {
+		t.Fatalf("expected score 1.0, got %f", res.Hits[0].Score)
+	}
+	// Hit 2 should be doc1 with a score of 0.0 (orthogonal)
+	if res.Hits[1].ID != "doc1" {
+		t.Fatalf("expected doc1 as second hit, got %s", res.Hits[1].ID)
+	}
+	if math.Abs(float64(res.Hits[1].Score-0.0)) > 1e-6 {
+		t.Fatalf("expected score 0.0, got %f", res.Hits[1].Score)
+	}
+
+	// Now test querying the nested multi-vector field
+	searchReq = NewSearchRequest(query.NewMatchNoneQuery())
+	searchReq.AddKNN("multi_vec", []float32{1, 0, 0}, 3, 1.0)
+	res, err = idx.Search(searchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Hits) != 1 {
+		t.Fatalf("expected 1 hit, got %d", len(res.Hits))
+	}
+	// Hit should be doc3 with score 1.0 (perfect match on first sub-vector)
+	if res.Hits[0].ID != "doc3" {
+		t.Fatalf("expected doc3 as first hit, got %s", res.Hits[0].ID)
+	}
+	if math.Abs(float64(res.Hits[0].Score-1.0)) > 1e-6 {
+		t.Fatalf("expected score 1.0, got %f", res.Hits[0].Score)
+	}
+	// Query for Y direction [0,1,0] on nested field
+	searchReq = NewSearchRequest(query.NewMatchNoneQuery())
+	searchReq.AddKNN("multi_vec", []float32{0, 1, 0}, 3, 1.0)
+	res, err = idx.Search(searchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Hits) != 1 {
+		t.Fatalf("expected 1 hit, got %d", len(res.Hits))
+	}
+	// Hit should be doc3 with score 1.0 (perfect match on second sub-vector)
+	if res.Hits[0].ID != "doc3" {
+		t.Fatalf("expected doc3 as first hit, got %s", res.Hits[0].ID)
+	}
+	if math.Abs(float64(res.Hits[0].Score-1.0)) > 1e-6 {
+		t.Fatalf("expected score 1.0, got %f", res.Hits[0].Score)
+	}
+}
+
+func TestNumVecsStat(t *testing.T) {
+
+	dataset, _, err := readDatasetAndQueries(testInputCompressedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	documents := makeDatasetIntoDocuments(dataset)
+
+	indexMapping := NewIndexMapping()
+
+	contentFieldMapping := NewTextFieldMapping()
+	contentFieldMapping.Analyzer = en.AnalyzerName
+	indexMapping.DefaultMapping.AddFieldMappingsAt("content", contentFieldMapping)
+
+	vecFieldMapping1 := mapping.NewVectorFieldMapping()
+	vecFieldMapping1.Dims = testDatasetDims
+	vecFieldMapping1.Similarity = index.EuclideanDistance
+	indexMapping.DefaultMapping.AddFieldMappingsAt("vector", vecFieldMapping1)
+
+	tmpIndexPath := createTmpIndexPath(t)
+	index, err := New(tmpIndexPath, indexMapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := index.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	for i := 0; i < 10; i++ {
+		batch := index.NewBatch()
+		for j := 0; j < 3; j++ {
+			for k := 0; k < 10; k++ {
+				err := batch.Index(fmt.Sprintf("%d", i*30+j*10+k), documents[j*10+k])
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		err = index.Batch(batch)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	statsMap := index.StatsMap()
+
+	if indexStats, exists := statsMap["index"]; exists {
+		if indexStatsMap, ok := indexStats.(map[string]interface{}); ok {
+			v1, ok := indexStatsMap["field:vector:num_vectors"].(uint64)
+			if !ok || v1 != uint64(300) {
+				t.Fatalf("mismatch in the number of vectors, expected 300, got %d", indexStatsMap["field:vector:num_vectors"])
+			}
+		}
+	}
+}
+
+func TestIndexUpdateVector(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	indexMappingBefore := mapping.NewIndexMapping()
+	indexMappingBefore.TypeMapping = map[string]*mapping.DocumentMapping{}
+	indexMappingBefore.DefaultMapping = &mapping.DocumentMapping{
+		Enabled: true,
+		Dynamic: false,
+		Properties: map[string]*mapping.DocumentMapping{
+			"a": {
+				Enabled:    true,
+				Dynamic:    false,
+				Properties: map[string]*mapping.DocumentMapping{},
+				Fields: []*mapping.FieldMapping{
+					{
+						Type:                    "vector",
+						Index:                   true,
+						Dims:                    4,
+						Similarity:              "l2_norm",
+						VectorIndexOptimizedFor: "latency",
+					},
+				},
+			},
+			"b": {
+				Enabled:    true,
+				Dynamic:    false,
+				Properties: map[string]*mapping.DocumentMapping{},
+				Fields: []*mapping.FieldMapping{
+					{
+						Type:                    "vector",
+						Index:                   true,
+						Dims:                    4,
+						Similarity:              "l2_norm",
+						VectorIndexOptimizedFor: "latency",
+					},
+				},
+			},
+			"c": {
+				Enabled:    true,
+				Dynamic:    false,
+				Properties: map[string]*mapping.DocumentMapping{},
+				Fields: []*mapping.FieldMapping{
+					{
+						Type:                    "vector_base64",
+						Index:                   true,
+						Dims:                    4,
+						Similarity:              "l2_norm",
+						VectorIndexOptimizedFor: "latency",
+					},
+				},
+			},
+			"d": {
+				Enabled:    true,
+				Dynamic:    false,
+				Properties: map[string]*mapping.DocumentMapping{},
+				Fields: []*mapping.FieldMapping{
+					{
+						Type:                    "vector_base64",
+						Index:                   true,
+						Dims:                    4,
+						Similarity:              "l2_norm",
+						VectorIndexOptimizedFor: "latency",
+					},
+				},
+			},
+		},
+		Fields: []*mapping.FieldMapping{},
+	}
+	indexMappingBefore.IndexDynamic = false
+	indexMappingBefore.StoreDynamic = false
+	indexMappingBefore.DocValuesDynamic = false
+
+	index, err := New(tmpIndexPath, indexMappingBefore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc1 := map[string]interface{}{"a": []float32{0.32894259691238403, 0.6973215341567993, 0.6835201978683472, 0.38296082615852356}, "b": []float32{0.32894259691238403, 0.6973215341567993, 0.6835201978683472, 0.38296082615852356}, "c": "L5MOPw7NID5SQMU9pHUoPw==", "d": "L5MOPw7NID5SQMU9pHUoPw=="}
+	doc2 := map[string]interface{}{"a": []float32{0.0018692062003538013, 0.41076546907424927, 0.5675257444381714, 0.45832985639572144}, "b": []float32{0.0018692062003538013, 0.41076546907424927, 0.5675257444381714, 0.45832985639572144}, "c": "czloP94ZCD71ldY+GbAOPw==", "d": "czloP94ZCD71ldY+GbAOPw=="}
+	doc3 := map[string]interface{}{"a": []float32{0.7853356599807739, 0.6904757618904114, 0.5643226504325867, 0.682637631893158}, "b": []float32{0.7853356599807739, 0.6904757618904114, 0.5643226504325867, 0.682637631893158}, "c": "Chh6P2lOqT47mjg/0odlPg==", "d": "Chh6P2lOqT47mjg/0odlPg=="}
+	batch := index.NewBatch()
+	err = batch.Index("001", doc1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = batch.Index("002", doc2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = batch.Index("003", doc3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = index.Batch(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = index.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	indexMappingAfter := mapping.NewIndexMapping()
+	indexMappingAfter.TypeMapping = map[string]*mapping.DocumentMapping{}
+	indexMappingAfter.DefaultMapping = &mapping.DocumentMapping{
+		Enabled: true,
+		Dynamic: false,
+		Properties: map[string]*mapping.DocumentMapping{
+			"a": {
+				Enabled:    true,
+				Dynamic:    false,
+				Properties: map[string]*mapping.DocumentMapping{},
+				Fields: []*mapping.FieldMapping{
+					{
+						Type:                    "vector",
+						Index:                   true,
+						Dims:                    4,
+						Similarity:              "l2_norm",
+						VectorIndexOptimizedFor: "latency",
+					},
+				},
+			},
+			"c": {
+				Enabled:    true,
+				Dynamic:    false,
+				Properties: map[string]*mapping.DocumentMapping{},
+				Fields: []*mapping.FieldMapping{
+					{
+						Type:                    "vector_base64",
+						Index:                   true,
+						Dims:                    4,
+						Similarity:              "l2_norm",
+						VectorIndexOptimizedFor: "latency",
+					},
+				},
+			},
+			"d": {
+				Enabled:    true,
+				Dynamic:    false,
+				Properties: map[string]*mapping.DocumentMapping{},
+				Fields: []*mapping.FieldMapping{
+					{
+						Type:                    "vector_base64",
+						Index:                   false,
+						Dims:                    4,
+						Similarity:              "l2_norm",
+						VectorIndexOptimizedFor: "latency",
+					},
+				},
+			},
+		},
+		Fields: []*mapping.FieldMapping{},
+	}
+	indexMappingAfter.IndexDynamic = false
+	indexMappingAfter.StoreDynamic = false
+	indexMappingAfter.DocValuesDynamic = false
+
+	mappingString, err := json.Marshal(indexMappingAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := map[string]interface{}{
+		"updated_mapping": string(mappingString),
+	}
+
+	index, err = OpenUsing(tmpIndexPath, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q1 := NewSearchRequest(NewMatchNoneQuery())
+	q1.AddKNN("a", []float32{1, 2, 3, 4}, 3, 1.0)
+	res1, err := index.Search(q1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res1.Hits) != 3 {
+		t.Fatalf("Expected 3 hits, got %d", len(res1.Hits))
+	}
+	q2 := NewSearchRequest(NewMatchNoneQuery())
+	q2.AddKNN("b", []float32{1, 2, 3, 4}, 3, 1.0)
+	res2, err := index.Search(q2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res2.Hits) != 0 {
+		t.Fatalf("Expected 0 hits, got %d", len(res2.Hits))
+	}
+	q3 := NewSearchRequest(NewMatchNoneQuery())
+	q3.AddKNN("c", []float32{1, 2, 3, 4}, 3, 1.0)
+	res3, err := index.Search(q3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res3.Hits) != 3 {
+		t.Fatalf("Expected 3 hits, got %d", len(res3.Hits))
+	}
+	q4 := NewSearchRequest(NewMatchNoneQuery())
+	q4.AddKNN("d", []float32{1, 2, 3, 4}, 3, 1.0)
+	res4, err := index.Search(q4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res4.Hits) != 0 {
+		t.Fatalf("Expected 0 hits, got %d", len(res4.Hits))
+	}
+}
+
+func TestIndexInsightsTermFrequencies(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	mp := mapping.NewIndexMapping()
+	textMapping := mapping.NewTextFieldMapping()
+	textMapping.Analyzer = "en"
+	mp.DefaultMapping.AddFieldMappingsAt("text", textMapping)
+
+	idx, err := New(tmpIndexPath, mp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err = idx.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	data := []map[string]string{
+		{
+			"id":   "one",
+			"text": "She sells sea shells by the sea shore",
+		},
+		{
+			"id":   "two",
+			"text": "The quick brown fox jumps over the lazy dog",
+		},
+		{
+			"id":   "three",
+			"text": "She sold sea shells to the person with the dog",
+		},
+		{
+			"id":   "four",
+			"text": "But there are a lot of dogs on the beach",
+		},
+		{
+			"id":   "five",
+			"text": "To hell with the foxes",
+		},
+		{
+			"id":   "six",
+			"text": "What about the dogs",
+		},
+		{
+			"id":   "seven",
+			"text": "Dogs are OK, foxes are not",
+		},
+	}
+
+	expectTermFreqs := []index.TermFreq{
+		{Term: "dog", Frequency: 5},
+		{Term: "fox", Frequency: 3},
+		{Term: "sea", Frequency: 2},
+		{Term: "shell", Frequency: 2},
+		{Term: "beach", Frequency: 1},
+	}
+
+	for _, d := range data {
+		err = idx.Index(d["id"], d)
+		if err != nil {
+			t.Errorf("Error updating index: %v", err)
+		}
+	}
+
+	insightsIdx, ok := idx.(InsightsIndex)
+	if !ok {
+		t.Fatal("index does not support insights")
+	}
+
+	termFreqs, err := insightsIdx.TermFrequencies("text", 5, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(termFreqs, expectTermFreqs) {
+		t.Fatalf("term freqs do not match: got: %v, expected: %v", termFreqs, expectTermFreqs)
+	}
+}
+
+func TestIndexInsightsCentroidCardinalities(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	vectorDims := 5
+
+	mp := mapping.NewIndexMapping()
+	vecFieldMapping := mapping.NewVectorFieldMapping()
+	vecFieldMapping.Dims = vectorDims
+	vecFieldMapping.Similarity = index.CosineSimilarity
+	mp.DefaultMapping.AddFieldMappingsAt("vec", vecFieldMapping)
+
+	idx, err := New(tmpIndexPath, mp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err = idx.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	rand.Seed(time.Now().UnixNano())
+	min, max := float32(-10.0), float32(10.0)
+	genRandomVector := func() []float32 {
+		vec := make([]float32, vectorDims)
+		for i := range vec {
+			vec[i] = min + rand.Float32()*(max-min)
+		}
+		return vec
+	}
+
+	batch := idx.NewBatch()
+	for i := 1; i <= 50000; i++ {
+		if err = batch.Index(fmt.Sprintf("doc-%d", i), map[string]interface{}{
+			"vec": genRandomVector(),
+		}); err != nil {
+			t.Fatalf("error indexing doc: %v", err)
+		}
+
+		if i%200 == 0 {
+			err = idx.Batch(batch)
+			if err != nil {
+				t.Fatalf("Error adding batch to index: %v", err)
+			}
+			batch = idx.NewBatch()
+		}
+	}
+
+	if batch.Size() > 0 {
+		// In case doc count is not a multiple of 200, we need to add the final batch
+		err = idx.Batch(batch)
+		if err != nil {
+			t.Errorf("Error adding final batch to index: %v", err)
+		}
+	}
+
+	insightsIdx, ok := idx.(InsightsIndex)
+	if !ok {
+		t.Fatal("index does not support insights")
+	}
+
+	centroids, err := insightsIdx.CentroidCardinalities("vec", 5, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(centroids) != 5 {
+		t.Fatalf("expected 5 centroids, got %d", len(centroids))
+	}
+
+	for _, entry := range centroids {
+		if len(entry.Index) == 0 {
+			t.Fatal("expected index name for each centroid")
+		}
+	}
+}

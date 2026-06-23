@@ -1,0 +1,141 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PKG_NAME: "hc-install"
+
+jobs:
+  get-go-version:
+    name: "Determine Go toolchain version"
+    runs-on: ubuntu-latest
+    outputs:
+      go-version: ${{ steps.get-go-version.outputs.go-version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Determine Go version
+        id: get-go-version
+        run: |
+          echo "Building with Go $(cat .go-version)"
+          echo "go-version=$(cat .go-version)" >> $GITHUB_OUTPUT
+
+  set-product-version:
+    runs-on: ubuntu-latest
+    outputs:
+      product-version: ${{ steps.set-product-version.outputs.product-version }}
+      product-base-version: ${{ steps.set-product-version.outputs.base-product-version }}
+      product-prerelease-version: ${{ steps.set-product-version.outputs.prerelease-product-version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set Product version
+        id: set-product-version
+        uses: hashicorp/actions-set-product-version@2ec1b51402b3070bccf7ca95306afbd039e574ff # v2.0.1
+        with:
+          checkout: false
+
+  generate-metadata-file:
+    needs: set-product-version
+    runs-on: ubuntu-latest
+    outputs:
+      filepath: ${{ steps.generate-metadata-file.outputs.filepath }}
+    steps:
+      - name: "Checkout directory"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Generate metadata file
+        id: generate-metadata-file
+        uses: hashicorp/actions-generate-metadata@f1d852525201cb7bbbf031dd2e985fb4c22307fc # v1.1.3
+        with:
+          version: ${{ needs.set-product-version.outputs.product-version }}
+          product: ${{ env.PKG_NAME }}
+          repositoryOwner: "hashicorp"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: metadata.json
+          path: ${{ steps.generate-metadata-file.outputs.filepath }}
+
+  build:
+    needs:
+      - get-go-version
+      - set-product-version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: "linux", goarch: "386" }
+          - { goos: "linux", goarch: "amd64" }
+          - { goos: "linux", goarch: "arm" }
+          - { goos: "linux", goarch: "arm64" }
+          - { goos: "freebsd", goarch: "386" }
+          - { goos: "freebsd", goarch: "amd64" }
+          - { goos: "freebsd", goarch: "arm" }
+          - { goos: "freebsd", goarch: "arm64" }
+          - { goos: "openbsd", goarch: "386" }
+          - { goos: "openbsd", goarch: "amd64" }
+          - { goos: "solaris", goarch: "amd64" }
+          - { goos: "darwin", goarch: "arm64" }
+          - { goos: "darwin", goarch: "amd64" }
+          - { goos: "windows", goarch: "386" }
+          - { goos: "windows", goarch: "amd64" }
+          - { goos: "windows", goarch: "arm64" }
+      fail-fast: true
+    name: Go ${{ needs.get-go-version.outputs.go-version }} ${{ matrix.goos }} ${{ matrix.goarch }} build
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: hashicorp/actions-go-build@b9e2cfba3013adccdc112b01cba922d83c78fac5 # v1.1.1
+        env:
+          BASE_VERSION: ${{ needs.set-product-version.outputs.product-base-version }}
+          PRERELEASE_VERSION: ${{ needs.set-product-version.outputs.product-prerelease-version}}
+          METADATA_VERSION: ${{ env.METADATA }}
+          CGO_ENABLED: 0
+        with:
+          product_name: ${{ env.PKG_NAME }}
+          product_version: ${{ needs.set-product-version.outputs.product-version }}
+          go_version: ${{ needs.get-go-version.outputs.go-version }}
+          os: ${{ matrix.goos }}
+          arch: ${{ matrix.goarch }}
+          reproducible: report
+          instructions: |
+            go build -trimpath -ldflags "-s -w" -o "$BIN_PATH" ./cmd/hc-install
+            cp LICENSE "$TARGET_DIR/LICENSE.txt"
+      - name: Copy license file to config_dir # for Linux packages
+        if: ${{ matrix.goos == 'linux' }}
+        env:
+          LICENSE_DIR: ".release/linux/package/usr/share/doc/${{ env.PKG_NAME }}"
+        run: |
+          mkdir -p "$LICENSE_DIR" && cp LICENSE "$LICENSE_DIR/LICENSE.txt"
+      - name: Package
+        if: ${{ matrix.goos == 'linux' }}
+        uses: hashicorp/actions-packaging-linux@129994a18b8e7dc106937edf859fddd97af66365 # v1.10
+        with:
+          name: ${{ github.event.repository.name }}
+          description: "hc-install CLI allows installing multiple versions of HashiCorp products in automation"
+          arch: ${{ matrix.goarch }}
+          version: ${{ needs.set-product-version.outputs.product-version }}
+          maintainer: "HashiCorp"
+          homepage: "https://github.com/hashicorp/hc-install"
+          license: "MPL-2.0"
+          binary: "dist/${{ env.PKG_NAME }}"
+          deb_depends: "openssl"
+          rpm_depends: "openssl"
+          config_dir: ".release/linux/package/"
+
+      - name: Set Package Names
+        if: ${{ matrix.goos == 'linux' }}
+        run: |
+          echo "RPM_PACKAGE=$(basename out/*.rpm)" >> $GITHUB_ENV
+          echo "DEB_PACKAGE=$(basename out/*.deb)" >> $GITHUB_ENV
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: ${{ matrix.goos == 'linux' }}
+        with:
+          name: ${{ env.RPM_PACKAGE }}
+          path: out/${{ env.RPM_PACKAGE }}
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: ${{ matrix.goos == 'linux' }}
+        with:
+          name: ${{ env.DEB_PACKAGE }}
+          path: out/${{ env.DEB_PACKAGE }}
