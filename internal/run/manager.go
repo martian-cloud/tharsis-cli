@@ -17,6 +17,7 @@ import (
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
+	"google.golang.org/grpc"
 )
 
 // runStatus represents the overall status of a run.
@@ -308,42 +309,39 @@ func (m *Manager) waitForRunJob(
 		return rErr
 	}
 
-	// Subscribe to run events for wake-ups. The server keeps the subscription open
-	// until the RPC is canceled, so use a child context that is canceled on return to
-	// tear the stream down once the job is available.
-	subCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// Subscribe to run events as wake-ups, re-checking the authoritative status on each.
+	// StreamWithReconnect rides through server drains; it tears the stream down on return.
+	err = client.StreamWithReconnect(ctx,
+		func(streamCtx context.Context) (grpc.ServerStreamingClient[pb.RunEvent], error) {
+			return m.grpcClient.RunsClient.SubscribeToRunEvents(streamCtx, &pb.SubscribeToRunEventsRequest{
+				WorkspaceId: &workspaceID,
+				RunId:       &runID,
+			})
+		},
+		func(_ *pb.RunEvent) (bool, error) {
+			status, err := getStatus(ctx)
+			if err != nil {
+				return false, err
+			}
 
-	stream, err := m.grpcClient.RunsClient.SubscribeToRunEvents(subCtx, &pb.SubscribeToRunEventsRequest{
-		WorkspaceId: &workspaceID,
-		RunId:       &runID,
-	})
+			return ready(status)
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to run events: %w", err)
+		return err
 	}
 
-	for {
-		// Block until the next run event, then re-check the authoritative status.
-		_, recvErr := stream.Recv()
-
-		status, err := getStatus(ctx)
-		if err != nil {
-			return err
-		}
-		done, err := ready(status)
-		if err != nil {
-			return err
-		}
-		if done {
-			return nil
-		}
-
-		// The stream closed before the job became available; the status above is the
-		// most current we can get, so report the stream failure.
-		if recvErr != nil {
-			return fmt.Errorf("run event stream closed before a job was available: %w", recvErr)
-		}
+	// The handler reported ready, or the stream ended; a final check decides which, since
+	// events during a reconnect gap aren't replayed.
+	status, err = getStatus(ctx)
+	if err != nil {
+		return err
 	}
+	if done, rErr := ready(status); rErr != nil || done {
+		return rErr
+	}
+
+	return fmt.Errorf("run event stream closed before a job was available")
 }
 
 // planJobReady reports whether the plan's job has been created, based on the plan
@@ -379,33 +377,29 @@ func applyJobReady(status string) (bool, error) {
 }
 
 func (m *Manager) streamJobLogs(ctx context.Context, jobID string) error {
-	stream, err := m.grpcClient.JobsClient.SubscribeToJobLogStream(ctx, &pb.SubscribeToJobLogStreamRequest{
-		JobId: jobID,
-	})
-	if err != nil {
-		return err
-	}
+	var lastSeen int32
 
-	for {
-		event, err := stream.Recv()
-		if err != nil {
-			return err
-		}
-
-		if event.Data != nil {
-			logs := strings.TrimSpace(event.Data.Logs)
-			if color.NoColor {
-				logs = terminal.StripAnsi(logs)
+	// Resume from the last byte seen so a reconnect (e.g. server drain) doesn't reprint logs.
+	return client.StreamWithReconnect(ctx,
+		func(streamCtx context.Context) (grpc.ServerStreamingClient[pb.JobLogStreamEvent], error) {
+			return m.grpcClient.JobsClient.SubscribeToJobLogStream(streamCtx, &pb.SubscribeToJobLogStreamRequest{
+				JobId:           jobID,
+				LastSeenLogSize: &lastSeen,
+			})
+		},
+		func(event *pb.JobLogStreamEvent) (bool, error) {
+			lastSeen = event.Size
+			if event.Data != nil {
+				logs := strings.TrimSpace(event.Data.Logs)
+				if color.NoColor {
+					logs = terminal.StripAnsi(logs)
+				}
+				m.ui.Output(logs)
 			}
-			m.ui.Output(logs)
-		}
 
-		if event.Completed {
-			break
-		}
-	}
-
-	return nil
+			return event.Completed, nil
+		},
+	)
 }
 
 func (m *Manager) parseVariables(directoryPath string, input *CreateRunInput) ([]*pb.RunVariableInput, error) {

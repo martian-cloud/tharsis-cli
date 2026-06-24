@@ -1,0 +1,3 @@
+kind: Fixed
+body: Reconnect log stream on connection errors to prevent jobs from hanging
+time: 2026-06-24T09:59:39.052876155-04:00
