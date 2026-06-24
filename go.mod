@@ -32,7 +32,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zclconf/go-cty v1.18.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.92.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.95.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/term v0.42.0
 	golang.org/x/text v0.36.0
@@ -50,6 +50,7 @@ require (
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
+	github.com/avast/retry-go/v4 v4.6.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/blevesearch/bleve/v2 v2.5.7 // indirect
 	github.com/blevesearch/bleve_index_api v1.3.9 // indirect
