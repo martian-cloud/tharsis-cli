@@ -1,0 +1,3 @@
+kind: Added
+body: release-prep now supports cutting prereleases (RELEASE_PRERELEASE), keeping fragments so they roll into the final release; release-prep also runs only after a green pipeline.
+time: 2026-06-24T10:30:04.848035-04:00
