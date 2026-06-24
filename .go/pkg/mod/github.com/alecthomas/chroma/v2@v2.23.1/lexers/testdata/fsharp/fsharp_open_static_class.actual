@@ -1,4 +1,0 @@
-open type System.Math
-
-module A =
-    open type System.Math

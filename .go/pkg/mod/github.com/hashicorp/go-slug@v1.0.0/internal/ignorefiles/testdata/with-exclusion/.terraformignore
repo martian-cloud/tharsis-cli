@@ -1,5 +1,0 @@
-src/**/*
-# except at one directory
-!src/foo/bar.txt
-logs/
-tmp/

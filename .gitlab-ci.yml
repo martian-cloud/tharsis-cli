@@ -34,7 +34,6 @@ include:
       version: $CI_COMMIT_TAG
 
 stages:
-  - release-prep
   - test
   - build
   - upload
@@ -127,9 +126,7 @@ changelog-check:
       # guaranteed to be fetched (GIT_DEPTH: 0 removes the depth limit but does
       # not fetch the target branch). Compute the diff up front so a git failure
       # surfaces as a real error instead of being mistaken for "no fragment".
-      # core.quotepath=false keeps non-ASCII fragment filenames unquoted (changie
-      # names files after the kind label, which includes an emoji) so the match works.
-      changed=$(git -c core.quotepath=false diff --name-only "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD)
+      changed=$(git diff --name-only "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD)
       if printf '%s\n' "$changed" | grep -q "^\.changes/unreleased/"; then
         echo "✅ Changelog fragment found"
       else
@@ -189,7 +186,7 @@ auto-tag-release:
 # otherwise the version is auto-computed from the fragments' bump levels.
 release-prep:
   image: golang:${GO_VERSION}-alpine
-  stage: release-prep
+  stage: .post
   needs: []
   variables:
     GIT_DEPTH: 0
