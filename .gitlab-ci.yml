@@ -182,12 +182,24 @@ auto-tag-release:
 # push triggers a fresh default-branch pipeline whose auto-tag-release job
 # tags the new version and kicks off build / upload / release.
 #
-# Optionally set a RELEASE_VERSION pipeline variable (e.g. v1.2.3) when running;
-# otherwise the version is auto-computed from the fragments' bump levels.
+# Pipeline variables (set when running the manual job):
+#   RELEASE_VERSION    optional base version (e.g. v1.2.3). Auto-computed from the
+#                      fragments' bump levels if unset.
+#   RELEASE_PRERELEASE optional prerelease suffix (e.g. alpha.1). When set, cuts a
+#                      prerelease: the version becomes <base>-<suffix> and the
+#                      fragments are KEPT so the eventual final release still lists
+#                      them. When unset (a final release), any superseded prerelease
+#                      changelog sections are removed.
+# Note: once a prerelease has been cut for a release cycle, pass RELEASE_VERSION
+# explicitly for any further prereleases and for the final — auto-compute would
+# over-bump (it treats the prerelease as the latest version).
 release-prep:
   image: golang:${GO_VERSION}-alpine
+  # .post runs last, and with no `needs` this job inherits stage ordering — it only
+  # becomes runnable after every earlier stage has succeeded, so a release is never
+  # cut on a red pipeline. (Do not add `needs: []`: that would let it start
+  # immediately at pipeline creation, bypassing the .post gating.)
   stage: .post
-  needs: []
   variables:
     GIT_DEPTH: 0
   before_script:
@@ -216,8 +228,8 @@ release-prep:
         exit 0
       fi
 
-      # Batch fragments into CHANGELOG.md. RELEASE_VERSION optional; empty => auto.
-      make release-prep VERSION="${RELEASE_VERSION:-}"
+      # Batch fragments into CHANGELOG.md. RELEASE_VERSION/RELEASE_PRERELEASE optional.
+      make release-prep VERSION="${RELEASE_VERSION:-}" PRERELEASE="${RELEASE_PRERELEASE:-}"
 
       # Guard against a no-op (e.g. changie produced no diff).
       if [ -z "$(git status --porcelain)" ]; then

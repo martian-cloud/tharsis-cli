@@ -104,6 +104,16 @@ The job batches the unreleased fragments into `CHANGELOG.md`, commits the bump, 
 
 > **One-time setup:** this job requires a `RELEASE_TOKEN` CI/CD variable — a Maintainer-role project access token with the `api` and `write_repository` scopes, configured as **masked** and **protected** — whose bot user is added to `main`'s **"Allowed to push and merge"** list (Settings → Repository → Protected branches). The token also backs `auto-tag-release`. Project access tokens expire, so rotate it before it lapses or releases will start failing.
 
+#### Cutting a prerelease (alpha)
+
+To cut a prerelease (e.g. to validate a release before finalizing it), run the `release-prep` job with a `RELEASE_PRERELEASE` variable:
+
+1. **Build → Pipelines → Run pipeline** on `main`.
+2. Set `RELEASE_PRERELEASE` to the suffix (e.g. `alpha.1`). For the **first** prerelease of a cycle you may let the base version auto-compute; for **any subsequent** prerelease — or the final release — also set `RELEASE_VERSION` (e.g. `v1.2.3`), because once a prerelease exists, auto-compute would over-bump the version.
+3. Run the manual `release-prep` job.
+
+This produces a `vX.Y.Z-alpha.1` changelog section containing the accumulated entries and tags `vX.Y.Z-alpha.1`, but **keeps** the fragments so they roll forward into the final release. When you later cut the final release (run `release-prep` with no `RELEASE_PRERELEASE`, passing `RELEASE_VERSION=vX.Y.Z`), the superseded prerelease sections are removed and the fragments are consumed into the final `vX.Y.Z` changelog.
+
 #### Locally (alternative)
 
 Use this if you need to prepare or hand-tweak the changelog before releasing:
@@ -114,7 +124,7 @@ Use this if you need to prepare or hand-tweak the changelog before releasing:
    make release-prep VERSION=vX.Y.Z
    ```
 
-   Omit `VERSION` to let changie auto-compute the next version from the fragments' bump levels.
+   Omit `VERSION` to let changie auto-compute the next version from the fragments' bump levels. To cut a prerelease, add `PRERELEASE=alpha.1` (and pass `VERSION` explicitly once any prerelease exists for the cycle).
 
 2. Review the resulting `CHANGELOG.md` change, commit it, and open an MR with the `skip-changelog` label.
 
