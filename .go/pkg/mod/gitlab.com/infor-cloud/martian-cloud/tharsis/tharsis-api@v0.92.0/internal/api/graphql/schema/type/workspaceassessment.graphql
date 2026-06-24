@@ -1,8 +1,0 @@
-type WorkspaceAssessment implements Node {
-  id: ID!
-  metadata: ResourceMetadata!
-  hasDrift: Boolean!
-  startedAt: Time!
-  completedAt: Time
-  run: Run
-}

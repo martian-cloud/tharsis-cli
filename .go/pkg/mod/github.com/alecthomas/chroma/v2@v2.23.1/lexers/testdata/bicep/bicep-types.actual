@@ -1,7 +1,0 @@
-type fizz = string
-
-type buzz = fizz[]
-
-type pop = {
-  krispies: 'snap'|'crackle'|'pop'
-}
