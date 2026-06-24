@@ -182,18 +182,23 @@ auto-tag-release:
 # push triggers a fresh default-branch pipeline whose auto-tag-release job
 # tags the new version and kicks off build / upload / release.
 #
-# Pipeline variables (set when running the manual job):
-#   RELEASE_VERSION    optional base version (e.g. v1.2.3). Auto-computed from the
-#                      fragments' bump levels if unset.
-#   RELEASE_PRERELEASE optional prerelease suffix (e.g. alpha.1). When set, cuts a
-#                      prerelease: the version becomes <base>-<suffix> and the
-#                      fragments are KEPT so the eventual final release still lists
-#                      them. When unset (a final release), any superseded prerelease
-#                      changelog sections are removed.
+# Prereleases (version contains a hyphen, e.g. v1.2.3-alpha.1) take a
+# different path: the tag is created directly via the API without committing
+# to the default branch. This keeps main's history clean — no temporary
+# prerelease sections that would later be removed by the final release.
+#
+# Pipeline variable (set when running the manual job):
+#   RELEASE_VERSION  optional version (e.g. v1.2.3 or v1.2.3-alpha.1).
+#                    Auto-computed from the fragments' bump levels if unset.
+#                    If the version contains a hyphen it is treated as a
+#                    prerelease: fragments are KEPT so the eventual final
+#                    release still lists them. A version without a hyphen (or
+#                    auto-computed) is a final release: any superseded
+#                    prerelease changelog sections are removed.
 # Note: once a prerelease has been cut for a release cycle, pass RELEASE_VERSION
 # explicitly for any further prereleases and for the final — auto-compute would
 # over-bump (it treats the prerelease as the latest version).
-release-prep:
+create-release:
   image: golang:${GO_VERSION}-alpine
   # .post runs last, and with no `needs` this job inherits stage ordering — it only
   # becomes runnable after every earlier stage has succeeded, so a release is never
@@ -228,35 +233,58 @@ release-prep:
         exit 0
       fi
 
-      # Batch fragments into CHANGELOG.md. RELEASE_VERSION/RELEASE_PRERELEASE optional.
-      make release-prep VERSION="${RELEASE_VERSION:-}" PRERELEASE="${RELEASE_PRERELEASE:-}"
+      # Batch fragments into CHANGELOG.md. RELEASE_VERSION optional.
+      make release-prep VERSION="${RELEASE_VERSION:-}"
 
       # Guard against a no-op (e.g. changie produced no diff).
       if [ -z "$(git status --porcelain)" ]; then
-        echo "release-prep produced no changes — nothing to commit."
+        echo "release-prep produced no changes — nothing to release."
         exit 1
       fi
 
       VERSION=$(grep -m1 '^## v' CHANGELOG.md | sed -E 's/^## (v[^ ]+).*/\1/')
       echo "Prepared release ${VERSION}"
 
-      git config user.name "release-bot"
-      git config user.email "release-bot@noreply.${CI_SERVER_HOST}"
-      git add CHANGELOG.md .changes/
-      git commit -m "chore(release): ${VERSION}"
+      # Extract release notes for the tag message / release description.
+      NOTES=$(awk '/^## v/{c++} c==1{print} c==2{exit}' CHANGELOG.md | tail -n +2)
 
-      # Push the bump straight to the default branch, authenticating with an
-      # Authorization header rather than embedding the token in the remote URL.
-      # Git echoes the remote URL in its error output (e.g. on a non-fast-forward
-      # rejection), which would leak the token into the job log; it does not echo
-      # extra headers. GitLab Git-over-HTTPS uses Basic auth (any non-empty
-      # username + the token as the password), so we send a Basic header.
-      # RELEASE_TOKEN must be a masked + protected CI/CD variable.
-      # No [skip ci]: the push must trigger a pipeline so auto-tag-release runs.
-      # Not a force push — if main has moved, the push is rejected (re-run after rebasing).
-      auth=$(printf '%s' "oauth2:${RELEASE_TOKEN}" | base64 | tr -d '\n')
-      git -c http.extraHeader="Authorization: Basic ${auth}" \
-        push "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "HEAD:${CI_DEFAULT_BRANCH}"
+      # Prereleases vs final releases take different paths:
+      # - Final: commit the changelog bump to main and push. The push triggers a
+      #   fresh pipeline whose auto-tag-release job creates the tag (and the tag
+      #   pipeline builds + publishes the release).
+      # - Prerelease: do NOT commit to main (avoids temporary alpha sections in
+      #   main's history that would later be removed). Instead, create the tag
+      #   directly via the API. The tag pipeline still fires and builds/publishes.
+      case "${VERSION}" in
+        *-*)
+          echo "Prerelease detected — creating tag ${VERSION} directly (not pushing to main)."
+          curl --fail-with-body --request POST \
+            --header "PRIVATE-TOKEN: ${RELEASE_TOKEN}" \
+            "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags" \
+            --data-urlencode "tag_name=${VERSION}" \
+            --data-urlencode "ref=${CI_COMMIT_SHA}" \
+            --data-urlencode "message=${NOTES}"
+          ;;
+        *)
+          git config user.name "release-bot"
+          git config user.email "release-bot@noreply.${CI_SERVER_HOST}"
+          git add CHANGELOG.md .changes/
+          git commit -m "chore(release): ${VERSION}"
+
+          # Push the bump straight to the default branch, authenticating with an
+          # Authorization header rather than embedding the token in the remote URL.
+          # Git echoes the remote URL in its error output (e.g. on a non-fast-forward
+          # rejection), which would leak the token into the job log; it does not echo
+          # extra headers. GitLab Git-over-HTTPS uses Basic auth (any non-empty
+          # username + the token as the password), so we send a Basic header.
+          # RELEASE_TOKEN must be a masked + protected CI/CD variable.
+          # No [skip ci]: the push must trigger a pipeline so auto-tag-release runs.
+          # Not a force push — if main has moved, the push is rejected (re-run).
+          auth=$(printf '%s' "oauth2:${RELEASE_TOKEN}" | base64 | tr -d '\n')
+          git -c http.extraHeader="Authorization: Basic ${auth}" \
+            push "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "HEAD:${CI_DEFAULT_BRANCH}"
+          ;;
+      esac
 
 #################################
 ##            BUILD            ##
