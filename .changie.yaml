@@ -4,20 +4,20 @@ headerPath: ""
 changelogPath: CHANGELOG.md
 versionExt: md
 versionFormat: '## v{{.Version}} - {{.Time.Format "2006-01-02"}} ({{len .Changes}} changes)'
-kindFormat: '### {{.Kind}}'
-changeFormat: '- {{.Body}}'
+kindFormat: "### {{.Kind}}"
+changeFormat: "- {{.Body}}"
 newlines:
   endOfVersion: 1
 kinds:
-  - label: ✨ Added
+  - label: Added
     auto: minor
-  - label: 🔄 Changed
+  - label: Changed
     auto: minor
-  - label: 🐛 Fixed
+  - label: Fixed
     auto: patch
-  - label: ⚠️ Deprecated
+  - label: Deprecated
     auto: minor
-  - label: 🗑️ Removed
+  - label: Removed
     auto: major
-  - label: 🔒 Security
+  - label: Security
     auto: patch

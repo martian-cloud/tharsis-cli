@@ -1,0 +1,3 @@
+kind: Fixed
+body: Remove accidentally committed .go/ CI GOPATH cache from repository
+time: 2026-06-24T09:13:05.651925733-04:00
