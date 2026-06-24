@@ -230,7 +230,7 @@ release-prep:
 
       git config user.name "release-bot"
       git config user.email "release-bot@noreply.${CI_SERVER_HOST}"
-      git add -A
+      git add CHANGELOG.md .changes/
       git commit -m "chore(release): ${VERSION}"
 
       # Push the bump straight to the default branch, authenticating with an
@@ -361,8 +361,8 @@ Release Tharsis CLI:
         ASSETS="$ASSETS --assets-link {\"name\":\"${BINARY_NAME}\",\"url\":\"${UNVERSIONED_PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}/${BINARY_NAME}\"}"
       done
 
-      # Use this version's changelog notes as the release description. Prereleases
-      # (e.g. v1.2.3-alpha.1) have no changelog section, so fall back to a generic line.
+      # Use this version's changelog notes as the release description.
+      # Falls back to a generic line if no matching section exists.
       NOTES=""
       if [ -f CHANGELOG.md ]; then
         NOTES=$(awk -v tag="$CI_COMMIT_TAG" '
