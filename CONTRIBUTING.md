@@ -92,13 +92,13 @@ If a change genuinely does not need a changelog entry (e.g. a CI tweak or a docs
 
 Releases are cut from the accumulated fragments — no manual tagging or hand-edited changelog. There are two ways to do it; the CI job is the preferred path.
 
-#### Via the CI `release-prep` job (preferred)
+#### Via the CI `create-release` job (preferred)
 
 This cuts a release with no MR — the unreleased fragments were already reviewed when their own MRs merged.
 
 1. Go to **Build → Pipelines** and either open the latest pipeline on `main`, or click **Run pipeline** with the branch set to `main`.
-2. (Optional) To pin the version instead of letting changie auto-compute it from the fragments' bump levels, add a `RELEASE_VERSION` variable (e.g. `v1.2.3`) when running the pipeline.
-3. In the pipeline, click the manual **`release-prep`** job (it only appears on `main`).
+2. (Optional) To pin the version instead of letting changie auto-compute it from the fragments' bump levels, add a `RELEASE_VERSION` variable (e.g. `v1.2.3` for a final release, or `v1.2.3-alpha.1` for a prerelease).
+3. In the pipeline, click the manual **`create-release`** job (it only appears on `main`).
 
 The job batches the unreleased fragments into `CHANGELOG.md`, commits the bump, and pushes it directly to `main`. That push triggers `auto-tag-release`, which creates the matching `vX.Y.Z` tag, which in turn runs the build/upload/release pipeline — publishing the binaries and creating the GitLab release with the changelog notes as its description.
 
@@ -106,13 +106,13 @@ The job batches the unreleased fragments into `CHANGELOG.md`, commits the bump, 
 
 #### Cutting a prerelease (alpha)
 
-To cut a prerelease (e.g. to validate a release before finalizing it), run the `release-prep` job with a `RELEASE_PRERELEASE` variable:
+To cut a prerelease (e.g. to validate a release before finalizing it), run the `create-release` job with a prerelease version:
 
 1. **Build → Pipelines → Run pipeline** on `main`.
-2. Set `RELEASE_PRERELEASE` to the suffix (e.g. `alpha.1`). For the **first** prerelease of a cycle you may let the base version auto-compute; for **any subsequent** prerelease — or the final release — also set `RELEASE_VERSION` (e.g. `v1.2.3`), because once a prerelease exists, auto-compute would over-bump the version.
-3. Run the manual `release-prep` job.
+2. Set `RELEASE_VERSION` to the full prerelease version (e.g. `v0.36.0-alpha.1`). The hyphen signals that this is a prerelease. For the **first** prerelease of a cycle you may let the base version auto-compute; for **any subsequent** prerelease — or the final release — set `RELEASE_VERSION` explicitly, because once a prerelease exists, auto-compute would over-bump the version.
+3. Run the manual `create-release` job.
 
-This produces a `vX.Y.Z-alpha.1` changelog section containing the accumulated entries and tags `vX.Y.Z-alpha.1`, but **keeps** the fragments so they roll forward into the final release. When you later cut the final release (run `release-prep` with no `RELEASE_PRERELEASE`, passing `RELEASE_VERSION=vX.Y.Z`), the superseded prerelease sections are removed and the fragments are consumed into the final `vX.Y.Z` changelog.
+This produces a `vX.Y.Z-alpha.1` tag (created directly, without committing to `main`) and triggers the build/release pipeline. The fragments are **kept** so they roll forward into the final release, and `main`'s history stays clean — no temporary prerelease changelog sections. When you later cut the final release (run `create-release` with `RELEASE_VERSION=vX.Y.Z` — no hyphen), the changelog bump is committed to `main`, the superseded prerelease sections are removed, and the fragments are consumed into the final `vX.Y.Z` changelog.
 
 #### Locally (alternative)
 
@@ -124,7 +124,7 @@ Use this if you need to prepare or hand-tweak the changelog before releasing:
    make release-prep VERSION=vX.Y.Z
    ```
 
-   Omit `VERSION` to let changie auto-compute the next version from the fragments' bump levels. To cut a prerelease, add `PRERELEASE=alpha.1` (and pass `VERSION` explicitly once any prerelease exists for the cycle).
+   Omit `VERSION` to let changie auto-compute the next version from the fragments' bump levels. To cut a prerelease, pass the full version including the suffix (e.g. `VERSION=v0.36.0-alpha.1`) — the hyphen signals prerelease mode. Pass `VERSION` explicitly once any prerelease exists for the cycle.
 
 2. Review the resulting `CHANGELOG.md` change, commit it, and open an MR with the `skip-changelog` label.
 
