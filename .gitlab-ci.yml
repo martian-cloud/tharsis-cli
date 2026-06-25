@@ -408,7 +408,6 @@ Release Tharsis CLI:
       done
 
       # Use this version's changelog notes as the release description.
-      # Falls back to a generic line if no matching section exists.
       NOTES=""
       if [ -f CHANGELOG.md ]; then
         NOTES=$(awk -v tag="$CI_COMMIT_TAG" '
@@ -417,6 +416,15 @@ Release Tharsis CLI:
           f {print}
         ' CHANGELOG.md)
       fi
+      # Prereleases tag directly without committing the changelog section to the
+      # default branch, so it won't be in CHANGELOG.md at the tagged commit. Fall
+      # back to the tag's annotation message — create-release and auto-tag-release
+      # both populate it with the same notes when creating the tag.
+      if [ -z "$NOTES" ]; then
+        git config --global --add safe.directory "$CI_PROJECT_DIR"
+        NOTES=$(git tag -l --format='%(contents)' "$CI_COMMIT_TAG")
+      fi
+      # Last resort (e.g. a tag with no annotation).
       if [ -z "$NOTES" ]; then
         NOTES="Tharsis CLI Release $CI_COMMIT_TAG"
       fi
