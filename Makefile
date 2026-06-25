@@ -85,3 +85,29 @@ release-prep: ## batch unreleased changie fragments into the changelog (VERSION=
 	changie merge; \
 	echo "✅ CHANGELOG.md updated."; \
 	echo "   Commit the change. Once it lands on the default branch, CI tags the version and cuts the release."
+
+.PHONY: prerelease
+prerelease: ## cut & push a prerelease tag from your local machine without committing to the branch (VERSION=vX.Y.Z-alpha.1 required)
+	@command -v changie >/dev/null 2>&1 || { echo "changie not found. Install: https://changie.dev/guide/installation/"; exit 1; }
+	@set -eu; \
+	if [ -z "$${VERSION:-}" ]; then echo "VERSION is required, e.g. VERSION=v0.36.0-alpha.1"; exit 1; fi; \
+	case "$$VERSION" in \
+		*-*) ;; \
+		*) echo "VERSION must be a prerelease (contain a hyphen), e.g. v0.36.0-alpha.1. Use 'make release-prep' / the create-release CI job for final releases."; exit 1;; \
+	esac; \
+	REL_VERSION=$${VERSION#v}; \
+	BASE=$${REL_VERSION%%-*}; \
+	PRE=$${REL_VERSION#*-}; \
+	if git ls-remote --tags origin "refs/tags/v$$REL_VERSION" | grep -q "refs/tags/v$$REL_VERSION$$"; then \
+		echo "Tag v$$REL_VERSION already exists on origin — nothing to do."; \
+		exit 1; \
+	fi; \
+	echo "Batching prerelease v$$REL_VERSION (fragments kept; CHANGELOG.md not modified or committed)"; \
+	changie batch $$BASE --prerelease $$PRE --keep; \
+	NOTES=$$(tail -n +2 ".changes/$$REL_VERSION.md"); \
+	rm -f ".changes/$$REL_VERSION.md"; \
+	echo "Creating annotated tag v$$REL_VERSION at $$(git rev-parse --short HEAD)"; \
+	printf '%s\n' "$$NOTES" | git tag -a "v$$REL_VERSION" --cleanup=verbatim -F -; \
+	echo "Pushing tag v$$REL_VERSION to origin"; \
+	git push origin "v$$REL_VERSION"; \
+	echo "✅ Pushed tag v$$REL_VERSION. CI builds and publishes the prerelease; the fragments remain unreleased for the final release."

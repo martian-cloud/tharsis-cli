@@ -106,13 +106,17 @@ The job batches the unreleased fragments into `CHANGELOG.md`, commits the bump, 
 
 #### Cutting a prerelease (alpha)
 
-To cut a prerelease (e.g. to validate a release before finalizing it), run the `create-release` job with a prerelease version:
+To cut a prerelease (e.g. to validate a release before finalizing it), run `make prerelease` from your local machine with the prerelease version:
 
-1. **Build → Pipelines → Run pipeline** on `main`.
-2. Set `RELEASE_VERSION` to the full prerelease version (e.g. `v0.36.0-alpha.1`). The hyphen signals that this is a prerelease. For the **first** prerelease of a cycle you may let the base version auto-compute; for **any subsequent** prerelease — or the final release — set `RELEASE_VERSION` explicitly, because once a prerelease exists, auto-compute would over-bump the version.
-3. Run the manual `create-release` job.
+```
+make prerelease VERSION=v0.36.0-alpha.1
+```
 
-This produces a `vX.Y.Z-alpha.1` tag (created directly, without committing to `main`) and triggers the build/release pipeline. The fragments are **kept** so they roll forward into the final release, and `main`'s history stays clean — no temporary prerelease changelog sections. When you later cut the final release (run `create-release` with `RELEASE_VERSION=vX.Y.Z` — no hyphen), the changelog bump is committed to `main`, the superseded prerelease sections are removed, and the fragments are consumed into the final `vX.Y.Z` changelog.
+Run it from an up-to-date `main` checkout. It batches the accumulated fragments for `v0.36.0-alpha.1` (keeping them in `.changes/unreleased/` so they roll into the final release), creates an annotated tag with the changelog notes — **without** committing anything to `main` — and pushes the tag. Because you push it as yourself, the tag triggers the build/release pipeline, which publishes the prerelease (its notes come from the tag annotation).
+
+> Why local for now: the `create-release` CI job also detects a hyphenated `RELEASE_VERSION` and cuts a prerelease the same way (tagging directly via the API). That path works on `main`, but the protected `RELEASE_TOKEN` isn't available in branch/MR pipelines, so it can't be exercised before merge — hence the local command. Both share the same model: batch with `--keep`, tag directly, don't commit to `main`.
+
+When you later cut the final release (the `create-release` CI job with `RELEASE_VERSION=v0.36.0` — no hyphen, or `make release-prep VERSION=v0.36.0`), the fragments are consumed into the final `v0.36.0` changelog and any superseded prerelease sections are removed.
 
 #### Locally (alternative)
 
