@@ -95,12 +95,17 @@ prerelease: ## cut & push a prerelease tag from your local machine without commi
 		*-*) ;; \
 		*) echo "VERSION must be a prerelease (contain a hyphen), e.g. v0.36.0-alpha.1. Use 'make release-prep' / the create-release CI job for final releases."; exit 1;; \
 	esac; \
+	if [ "$$(git rev-parse --abbrev-ref HEAD)" != "main" ] && [ -z "$${ALLOW_NON_MAIN:-}" ]; then \
+		echo "make prerelease must be run from the main branch (it tags the current commit)."; \
+		echo "Set ALLOW_NON_MAIN=1 to override (e.g. to test from a feature branch before merge)."; \
+		exit 1; \
+	fi; \
 	REL_VERSION=$${VERSION#v}; \
 	BASE=$${REL_VERSION%%-*}; \
 	PRE=$${REL_VERSION#*-}; \
 	if git ls-remote --tags origin "refs/tags/v$$REL_VERSION" | grep -q "refs/tags/v$$REL_VERSION$$"; then \
 		echo "Tag v$$REL_VERSION already exists on origin — nothing to do."; \
-		exit 1; \
+		exit 0; \
 	fi; \
 	echo "Batching prerelease v$$REL_VERSION (fragments kept; CHANGELOG.md not modified or committed)"; \
 	changie batch $$BASE --prerelease $$PRE --keep; \
