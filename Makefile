@@ -86,33 +86,61 @@ release-prep: ## batch unreleased changie fragments into the changelog (VERSION=
 	echo "✅ CHANGELOG.md updated."; \
 	echo "   Commit the change. Once it lands on the default branch, CI tags the version and cuts the release."
 
+# TEMPORARY — local test helper for validating the temp-branch prerelease model
+# before the create-release CI job can be exercised (RELEASE_TOKEN is a protected
+# variable unavailable in branch/MR pipelines). Remove once the CI prerelease
+# path has been validated end-to-end.
+# Mirrors the create-release CI job's prerelease path exactly:
+# temp branch → commit changelog → GitLab API tag → delete temp branch.
+# Requires: GITLAB_TOKEN (a personal access token with `api` scope)
+#           VERSION       (e.g. VERSION=v0.36.0-alpha.2)
+# Optional: ALLOW_NON_MAIN=1 to run from a non-main branch (needed pre-merge)
+# Usage: GITLAB_TOKEN=<pat> VERSION=v0.36.0-alpha.2 ALLOW_NON_MAIN=1 make prerelease
 .PHONY: prerelease
-prerelease: ## cut & push a prerelease tag from your local machine without committing to the branch (VERSION=vX.Y.Z-alpha.1 required)
+prerelease: ## TEMPORARY: test the temp-branch prerelease model locally (remove after CI path is validated)
 	@command -v changie >/dev/null 2>&1 || { echo "changie not found. Install: https://changie.dev/guide/installation/"; exit 1; }
+	@[ -n "$${GITLAB_TOKEN:-}" ] || { echo "GITLAB_TOKEN is required (a personal access token with api scope)"; exit 1; }
+	@[ -n "$${VERSION:-}" ] || { echo "VERSION is required, e.g. VERSION=v0.36.0-alpha.2"; exit 1; }
+	@case "$${VERSION}" in *-*) ;; *) echo "VERSION must be a prerelease (contain a hyphen)"; exit 1;; esac
+	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "main" ] && [ -z "$${ALLOW_NON_MAIN:-}" ]; then \
+		echo "Run from main, or set ALLOW_NON_MAIN=1 to override."; exit 1; fi
 	@set -eu; \
-	if [ -z "$${VERSION:-}" ]; then echo "VERSION is required, e.g. VERSION=v0.36.0-alpha.1"; exit 1; fi; \
-	case "$$VERSION" in \
-		*-*) ;; \
-		*) echo "VERSION must be a prerelease (contain a hyphen), e.g. v0.36.0-alpha.1. Use 'make release-prep' / the create-release CI job for final releases."; exit 1;; \
-	esac; \
-	if [ "$$(git rev-parse --abbrev-ref HEAD)" != "main" ] && [ -z "$${ALLOW_NON_MAIN:-}" ]; then \
-		echo "make prerelease must be run from the main branch (it tags the current commit)."; \
-		echo "Set ALLOW_NON_MAIN=1 to override (e.g. to test from a feature branch before merge)."; \
-		exit 1; \
-	fi; \
 	REL_VERSION=$${VERSION#v}; \
-	BASE=$${REL_VERSION%%-*}; \
-	PRE=$${REL_VERSION#*-}; \
-	if git ls-remote --tags origin "refs/tags/v$$REL_VERSION" | grep -q "refs/tags/v$$REL_VERSION$$"; then \
-		echo "Tag v$$REL_VERSION already exists on origin — nothing to do."; \
-		exit 0; \
-	fi; \
-	echo "Batching prerelease v$$REL_VERSION (fragments kept; CHANGELOG.md not modified or committed)"; \
-	changie batch $$BASE --prerelease $$PRE --keep; \
-	NOTES=$$(tail -n +2 ".changes/$$REL_VERSION.md"); \
-	rm -f ".changes/$$REL_VERSION.md"; \
-	echo "Creating annotated tag v$$REL_VERSION at $$(git rev-parse --short HEAD)"; \
-	printf '%s\n' "$$NOTES" | git tag -a "v$$REL_VERSION" --cleanup=verbatim -F -; \
-	echo "Pushing tag v$$REL_VERSION to origin"; \
-	git push origin "v$$REL_VERSION"; \
-	echo "✅ Pushed tag v$$REL_VERSION. CI builds and publishes the prerelease; the fragments remain unreleased for the final release."
+	TEMP_BRANCH="release-prep/local-$$REL_VERSION"; \
+	ORIGIN_URL=$$(git remote get-url origin); \
+	GITLAB_HOST="gitlab.com"; \
+	PROJECT_PATH=$$(echo "$$ORIGIN_URL" | sed -E 's|.*:([^/].*\.git)$$|\1|;s|\.git$$||;s|/|%2F|g'); \
+	echo "=== Creating temp branch $$TEMP_BRANCH ==="; \
+	git checkout -b "$$TEMP_BRANCH"; \
+	echo "=== Batching changelog ==="; \
+	$(MAKE) release-prep VERSION=$$VERSION; \
+	if [ -z "$$(git status --porcelain)" ]; then echo "No changes produced"; git checkout -; git branch -D "$$TEMP_BRANCH"; exit 1; fi; \
+	git config user.name "release-bot"; \
+	git config user.email "release-bot@noreply.$$GITLAB_HOST"; \
+	git add CHANGELOG.md .changes/; \
+	git commit -m "chore(release): $$VERSION"; \
+	RELEASE_SHA=$$(git rev-parse HEAD); \
+	echo "=== Pushing temp branch $$TEMP_BRANCH ==="; \
+	git push "https://oauth2:$${GITLAB_TOKEN}@$$GITLAB_HOST/$$(echo "$$PROJECT_PATH" | sed 's|%2F|/|g').git" "$$TEMP_BRANCH"; \
+	echo "=== Checking tag does not already exist ==="; \
+	EXISTING=$$(curl -sf --header "PRIVATE-TOKEN: $${GITLAB_TOKEN}" \
+		"https://$$GITLAB_HOST/api/v4/projects/$$PROJECT_PATH/repository/tags/$$VERSION" 2>/dev/null || echo ""); \
+	if [ -n "$$EXISTING" ]; then \
+		echo "Tag $$VERSION already exists — nothing to do."; \
+		git push "https://oauth2:$${GITLAB_TOKEN}@$$GITLAB_HOST/$$(echo "$$PROJECT_PATH" | sed 's|%2F|/|g').git" --delete "$$TEMP_BRANCH" || true; \
+		git checkout -; git branch -D "$$TEMP_BRANCH"; exit 0; fi; \
+	echo "=== Creating tag $$VERSION at $$RELEASE_SHA via API ==="; \
+	NOTES=$$(tail -n +2 ".changes/$$REL_VERSION.md" 2>/dev/null || echo ""); \
+	curl --fail-with-body --request POST \
+		--header "PRIVATE-TOKEN: $${GITLAB_TOKEN}" \
+		"https://$$GITLAB_HOST/api/v4/projects/$$PROJECT_PATH/repository/tags" \
+		--data-urlencode "tag_name=$$VERSION" \
+		--data-urlencode "ref=$$RELEASE_SHA" \
+		--data-urlencode "message=$$NOTES"; \
+	echo ""; \
+	echo "=== Deleting temp branch (prerelease: main untouched) ==="; \
+	git push "https://oauth2:$${GITLAB_TOKEN}@$$GITLAB_HOST/$$(echo "$$PROJECT_PATH" | sed 's|%2F|/|g').git" --delete "$$TEMP_BRANCH" || true; \
+	git checkout -; git branch -D "$$TEMP_BRANCH"; \
+	echo "✅ Tag $$VERSION created. CI build/release pipeline should start now."; \
+	echo "   Verify: the tagged commit's CHANGELOG.md shows ## $$VERSION at the top."
+

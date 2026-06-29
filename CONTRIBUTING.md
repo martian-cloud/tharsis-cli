@@ -97,26 +97,26 @@ Releases are cut from the accumulated fragments — no manual tagging or hand-ed
 This cuts a release with no MR — the unreleased fragments were already reviewed when their own MRs merged.
 
 1. Go to **Build → Pipelines** and either open the latest pipeline on `main`, or click **Run pipeline** with the branch set to `main`.
-2. (Optional) To pin the version instead of letting changie auto-compute it from the fragments' bump levels, add a `RELEASE_VERSION` variable (e.g. `v1.2.3` for a final release, or `v1.2.3-alpha.1` for a prerelease).
+2. (Optional) Set pipeline variables when running:
+   - `RELEASE_VERSION` — the version to cut (e.g. `v1.2.3` for a final, `v1.2.3-alpha.1` for a prerelease). Auto-computed from the fragments' bump levels if unset. Once a prerelease version file exists, pass this explicitly to avoid changie over-bumping.
+   - `RELEASE_REF` — the commit, branch, or tag to release from. Defaults to `main` HEAD. Set to an older tag for backport releases (e.g. `v0.35.0`).
 3. In the pipeline, click the manual **`create-release`** job (it only appears on `main`).
 
-The job batches the unreleased fragments into `CHANGELOG.md`, commits the bump, and pushes it directly to `main`. That push triggers `auto-tag-release`, which creates the matching `vX.Y.Z` tag, which in turn runs the build/upload/release pipeline — publishing the binaries and creating the GitLab release with the changelog notes as its description.
+The job creates a short-lived temp branch off `RELEASE_REF`, commits the changelog there, and tags that commit. This ensures the tagged commit always has the correct changelog. Then:
+- **Prerelease** (hyphen in version): the temp branch is deleted; `main` is untouched. Fragments are kept so they roll into the eventual final release.
+- **Final release**: if `RELEASE_REF` is on `main`'s history (normal case), the temp branch is merged into `main` and deleted. If not (backport), the temp branch is deleted without merging.
 
-> **One-time setup:** this job requires a `RELEASE_TOKEN` CI/CD variable — a Maintainer-role project access token with the `api` and `write_repository` scopes, configured as **masked** and **protected** — whose bot user is added to `main`'s **"Allowed to push and merge"** list (Settings → Repository → Protected branches). The token also backs `auto-tag-release`. Project access tokens expire, so rotate it before it lapses or releases will start failing.
+The tag triggers the build/upload/release pipeline, which publishes the binaries and creates the GitLab release with the changelog notes as its description.
+
+> **One-time setup:** this job requires a `RELEASE_TOKEN` CI/CD variable — a Maintainer-role project access token with the `api` and `write_repository` scopes, configured as **masked** and **protected** — whose bot user is added to `main`'s **"Allowed to push and merge"** list (Settings → Repository → Protected branches). Project access tokens expire, so rotate it before it lapses or releases will start failing.
 
 #### Cutting a prerelease (alpha)
 
-To cut a prerelease (e.g. to validate a release before finalizing it), run `make prerelease` from your local machine with the prerelease version:
+To cut a prerelease, run the `create-release` CI job with `RELEASE_VERSION=v0.36.0-alpha.1`. The job commits the prerelease changelog on a temp branch and tags that commit — so the tagged commit has the correct changelog — then deletes the temp branch without touching `main`. Fragments are kept so the final release inherits them.
 
-```
-make prerelease VERSION=v0.36.0-alpha.1
-```
+> **Local testing only (temporary):** a `make prerelease` target exists to mirror this same flow from your local machine — useful when the CI job can't be exercised pre-merge because `RELEASE_TOKEN` is a protected variable. Run `GITLAB_TOKEN=<your-pat> VERSION=v0.36.0-alpha.2 ALLOW_NON_MAIN=1 make prerelease`. This target will be removed once the CI prerelease path is validated end-to-end.
 
-Run it from an up-to-date `main` checkout. It batches the accumulated fragments for `v0.36.0-alpha.1` (keeping them in `.changes/unreleased/` so they roll into the final release), creates an annotated tag with the changelog notes — **without** committing anything to `main` — and pushes the tag. Because you push it as yourself, the tag triggers the build/release pipeline, which publishes the prerelease (its notes come from the tag annotation).
-
-> Why local for now: the `create-release` CI job also detects a hyphenated `RELEASE_VERSION` and cuts a prerelease the same way (tagging directly via the API). That path works on `main`, but the protected `RELEASE_TOKEN` isn't available in branch/MR pipelines, so it can't be exercised before merge — hence the local command. Both share the same model: batch with `--keep`, tag directly, don't commit to `main`.
-
-When you later cut the final release (the `create-release` CI job with `RELEASE_VERSION=v0.36.0` — no hyphen, or `make release-prep VERSION=v0.36.0`), the fragments are consumed into the final `v0.36.0` changelog and any superseded prerelease sections are removed.
+When you later cut the final `v0.36.0`, the temp branch is merged to `main`, the prerelease sections are removed, and the fragments are consumed into the final changelog.
 
 #### Locally (alternative)
 
@@ -132,7 +132,8 @@ Use this if you need to prepare or hand-tweak the changelog before releasing:
 
 2. Review the resulting `CHANGELOG.md` change, commit it, and open an MR with the `skip-changelog` label.
 
-3. Once the MR is merged to `main`, CI (`auto-tag-release`) reads the new top version from `CHANGELOG.md` and creates the matching `vX.Y.Z` git tag. That tag triggers the existing build/upload/release pipeline, which publishes the binaries and creates the GitLab release using the changelog notes as its description.
+
+3. Once the MR is merged to `main`, the next `create-release` job run will detect the changelog and include these changes in the release.
 
 ## Writing Documentation
 
