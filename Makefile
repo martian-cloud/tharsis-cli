@@ -60,12 +60,29 @@ release:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ${GCFLAGS} ${LDFLAGS} -a -o ./bin/${BINARY}_${VERSION}_windows_amd64 $(BUILD_PATH)
 
 .PHONY: release-prep
-release-prep: ## batch unreleased changie fragments into the changelog for a release (VERSION=vX.Y.Z, or omit to auto-compute)
+release-prep: ## batch unreleased changie fragments into the changelog (VERSION=vX.Y.Z for final, VERSION=vX.Y.Z-alpha.1 for prerelease, or omit to auto-compute a final)
 	@command -v changie >/dev/null 2>&1 || { echo "changie not found. Install: https://changie.dev/guide/installation/"; exit 1; }
-	@REL_VERSION=$${VERSION:-$$(changie next auto)}; \
+	@set -eu; \
+	if [ -z "$${VERSION:-}" ] && ls .changes/*-*.md >/dev/null 2>&1; then \
+		echo "Prerelease version files exist in .changes/ — auto-compute would over-bump the version."; \
+		echo "Pass VERSION=vX.Y.Z explicitly (the intended base/final version)."; \
+		exit 1; \
+	fi; \
+	REL_VERSION=$${VERSION:-$$(changie next auto)}; \
 	REL_VERSION=$${REL_VERSION#v}; \
-	echo "Preparing changelog for v$$REL_VERSION"; \
-	changie batch $$REL_VERSION && \
-	changie merge && \
-	echo "✅ CHANGELOG.md updated for v$$REL_VERSION."; \
-	echo "   Commit the change. Once it lands on the default branch, CI tags v$$REL_VERSION and cuts the release."
+	case "$$REL_VERSION" in \
+		*-*) \
+			BASE=$${REL_VERSION%%-*}; \
+			PRERELEASE=$${REL_VERSION#*-}; \
+			echo "Preparing prerelease changelog for v$$REL_VERSION"; \
+			changie batch $$BASE --prerelease $$PRERELEASE --keep; \
+			;; \
+		*) \
+			echo "Preparing changelog for v$$REL_VERSION"; \
+			changie batch $$REL_VERSION --remove-prereleases; \
+			;; \
+	esac; \
+	changie merge; \
+	echo "✅ CHANGELOG.md updated."; \
+	echo "   Commit the change. Once it lands on the default branch, CI tags the version and cuts the release."
+
