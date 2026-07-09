@@ -126,7 +126,9 @@ changelog-check:
       # guaranteed to be fetched (GIT_DEPTH: 0 removes the depth limit but does
       # not fetch the target branch). Compute the diff up front so a git failure
       # surfaces as a real error instead of being mistaken for "no fragment".
-      changed=$(git diff --name-only "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD)
+      # --diff-filter=A limits to Added files only — so deleting a fragment does
+      # not count as "has a fragment" (which --name-only alone would allow).
+      changed=$(git diff --name-only --diff-filter=A "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD)
       if printf '%s\n' "$changed" | grep -q "^\.changes/unreleased/"; then
         echo "✅ Changelog fragment found"
       else
