@@ -88,6 +88,8 @@ Pick a kind (Added, Changed, Fixed, Deprecated, Removed, Security) and write a s
 
 If a change genuinely does not need a changelog entry (e.g. a CI tweak or a docs-only fix), add the `skip-changelog` label to the MR to bypass the check.
 
+> **Note:** the label is evaluated at pipeline creation time, not on retry. If you add `skip-changelog` after a pipeline has already run, trigger a new pipeline to pick it up — go to **Build → Pipelines → Run pipeline** on your branch (no commit needed).
+
 ### Creating a release (maintainers)
 
 Releases are cut from the accumulated fragments — no manual tagging or hand-edited changelog. There are two ways to do it; the CI job is the preferred path.
