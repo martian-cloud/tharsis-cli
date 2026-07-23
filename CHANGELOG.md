@@ -1,3 +1,9 @@
+## v0.36.0-alpha.3 - 2026-07-23 (3 changes)
+### Added
+- Create Release job supports cutting prereleases (via hyphen in RELEASE_VERSION, e.g. v1.2.3-alpha.1) that tag directly without pushing to main, keeping fragments so they roll into the final release; the job also only runs after a green pipeline.
+### Fixed
+- Remove accidentally committed .go/ CI GOPATH cache from repository
+- Reconnect log stream on connection errors to prevent jobs from hanging
 ## v0.35.0 - 2026-06-23 (1 changes)
 ### ✨ Added
 - Changelog automation and release tagging via changie: changelog fragments enforced per MR, automated version tagging from CHANGELOG.md, and a manual job to cut releases.
