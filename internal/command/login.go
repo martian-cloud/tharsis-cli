@@ -2,6 +2,7 @@ package command
 
 import (
 	"errors"
+	"fmt"
 
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/auth"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/settings"
@@ -45,6 +46,24 @@ func (c *loginCommand) Run(args []string) int {
 	currentSettings, err := c.getCurrentSettings()
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to read settings file")
+		return 1
+	}
+
+	// Detect duplicate profiles sharing the same endpoint to prevent
+	// non-deterministic token retrieval from the profiles map.
+	duplicates := findDuplicateEndpointProfiles(currentSettings.Profiles, c.CurrentProfileName)
+	if len(duplicates) > 0 {
+		c.UI.Errorf("Multiple profiles share the same endpoint %q: %q and %v",
+			currentSettings.CurrentProfile.Endpoint, c.CurrentProfileName, duplicates)
+		c.UI.Output("")
+		c.UI.Output("Each profile must have a unique endpoint. Remove the duplicate profile(s):")
+		c.UI.Output("")
+		for _, name := range duplicates {
+			c.UI.Output(fmt.Sprintf("  tharsis configure delete %s", name))
+		}
+		c.UI.Output("")
+		c.UI.Output("Then retry the login with:")
+		c.UI.Output(fmt.Sprintf("  tharsis -p %s sso login", c.CurrentProfileName))
 		return 1
 	}
 
@@ -106,4 +125,21 @@ func (c *loginCommand) Example() string {
 	return `
 tharsis sso login
 `
+}
+
+// findDuplicateEndpointProfiles returns the names of other profiles that have
+// the same endpoint as currentProfileName.
+func findDuplicateEndpointProfiles(profiles map[string]settings.Profile, currentProfileName string) []string {
+	currentEndpoint := profiles[currentProfileName].Endpoint
+
+	var duplicates []string
+	for name, p := range profiles {
+		if name == currentProfileName {
+			continue
+		}
+		if p.Endpoint == currentEndpoint {
+			duplicates = append(duplicates, name)
+		}
+	}
+	return duplicates
 }
