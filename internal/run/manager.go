@@ -3,6 +3,7 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -88,6 +89,7 @@ type CreateRunInput struct {
 	TfVariables      []string
 	EnvVariables     []string
 	TargetAddresses  []string
+	Annotations      []string
 	IsDestroy        bool
 	IsSpeculative    bool
 	Refresh          bool
@@ -121,6 +123,22 @@ func NewManager(
 		logger:     logger,
 		ui:         ui,
 	}, nil
+}
+
+// parseAnnotations converts the raw --annotation JSON strings into proto run annotations.
+func parseAnnotations(raw []string) ([]*pb.RunAnnotation, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	annotations := make([]*pb.RunAnnotation, len(raw))
+	for i, s := range raw {
+		var a pb.RunAnnotation
+		if err := json.Unmarshal([]byte(s), &a); err != nil {
+			return nil, fmt.Errorf("failed to parse annotation %q: %w", s, err)
+		}
+		annotations[i] = &a
+	}
+	return annotations, nil
 }
 
 // CreateRun creates and executes a run
@@ -171,6 +189,11 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		configVersionID = &id
 	}
 
+	annotations, err := parseAnnotations(input.Annotations)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create run
 	createRunInput := &pb.CreateRunRequest{
 		WorkspaceId:              workspace.Metadata.Id,
@@ -180,6 +203,7 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		ModuleVersion:            input.ModuleVersion,
 		Variables:                runVariables,
 		TargetAddresses:          input.TargetAddresses,
+		Annotations:              annotations,
 		Refresh:                  input.Refresh,
 		RefreshOnly:              input.RefreshOnly,
 		Speculative:              &input.IsSpeculative,
