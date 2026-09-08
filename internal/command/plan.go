@@ -20,6 +20,7 @@ type planCommand struct {
 	tfVariables              []string
 	envVariables             []string
 	targetAddresses          []string
+	annotations              []string
 	destroy                  *bool
 	refresh                  *bool
 	refreshOnly              *bool
@@ -87,6 +88,7 @@ func (c *planCommand) Run(args []string) int {
 		TfVariables:              c.tfVariables,
 		EnvVariables:             c.envVariables,
 		TargetAddresses:          c.targetAddresses,
+		Annotations:              c.annotations,
 		IsDestroy:                *c.destroy,
 		IsSpeculative:            true,
 		Refresh:                  *c.refresh,
@@ -209,6 +211,11 @@ func (c *planCommand) Flags() *flag.Set {
 		&c.targetAddresses,
 		"target",
 		"The Terraform address of the resources to be acted upon.",
+	)
+	f.StringSliceVar(
+		&c.annotations,
+		"annotation",
+		`An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.`,
 	)
 
 	f.MutuallyExclusive("directory-path", "module-source")
