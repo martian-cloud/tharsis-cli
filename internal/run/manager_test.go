@@ -101,9 +101,9 @@ func TestApplyRun(t *testing.T) {
 				mockRuns := c.RunsClient.(*mocks.RunsClient)
 				mockJobs := c.JobsClient.(*mocks.JobsClient)
 				mockRuns.On("ApplyRun", mock.Anything, &pb.ApplyRunRequest{RunId: "run1"}).
-					Return(&pb.Run{ApplyId: "apply1", Status: "apply_queued"}, nil)
+					Return(&pb.Run{ApplyId: "apply1", Status: pb.RunStatus_APPLY_QUEUED}, nil)
 				mockRuns.On("GetApplyByID", mock.Anything, &pb.GetApplyByIDRequest{Id: "apply1"}).
-					Return(&pb.Apply{Status: "queued"}, nil)
+					Return(&pb.Apply{Status: pb.ApplyStatus_QUEUED}, nil)
 				mockJobs.On("GetLatestJobForApply", mock.Anything, &pb.GetLatestJobForApplyRequest{ApplyId: "apply1"}).
 					Return(nil, assert.AnError)
 			},
@@ -269,7 +269,7 @@ func TestWaitForRunJob(t *testing.T) {
 	t.Run("waits for a run event then proceeds", func(t *testing.T) {
 		mgr, runs := newManager(t)
 		runs.On("SubscribeToRunEvents", mock.Anything, mock.Anything).
-			Return(&fakeRunEventStream{events: []*pb.RunEvent{{Run: &pb.Run{Status: "plan_queued"}}}}, nil)
+			Return(&fakeRunEventStream{events: []*pb.RunEvent{{Run: &pb.Run{Status: pb.RunStatus_PLAN_QUEUED}}}}, nil)
 		err := mgr.waitForRunJob(context.Background(), "ws-1", "run-1",
 			statusReturner("pending", "queued"), planJobReady)
 		require.NoError(t, err)

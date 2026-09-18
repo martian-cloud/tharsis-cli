@@ -2,6 +2,7 @@ package command
 
 import (
 	"errors"
+	"strings"
 
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
@@ -102,7 +103,7 @@ func (c *destroyCommand) Run(args []string) int {
 	}
 
 	// Check if plan has changes
-	if runResult.Status == plannedAndFinished {
+	if strings.ToLower(runResult.Status.String()) == plannedAndFinished {
 		c.UI.Output("Stopping since plan had no changes.")
 		return 0
 	}

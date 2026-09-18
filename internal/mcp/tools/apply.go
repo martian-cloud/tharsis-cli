@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -22,7 +23,7 @@ func toApply(a *pb.Apply) *apply {
 	return &apply{
 		ID:           a.Metadata.Id,
 		TRN:          a.Metadata.Trn,
-		Status:       a.Status,
+		Status:       strings.ToLower(a.Status.String()),
 		TriggeredBy:  a.TriggeredBy,
 		ErrorMessage: a.ErrorMessage,
 	}

@@ -387,7 +387,7 @@ func (c *tfExecCommand) findLastAppliedRun(workspaceID string) (*pb.Run, error) 
 			return nil, fmt.Errorf("failed to list runs: %w", err)
 		}
 		for _, run := range resp.Runs {
-			if run.Status == "applied" && run.ConfigurationVersionId != nil {
+			if strings.ToLower(run.Status.String()) == "applied" && run.ConfigurationVersionId != nil {
 				return run, nil
 			}
 		}

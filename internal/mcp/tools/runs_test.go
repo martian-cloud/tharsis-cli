@@ -40,7 +40,7 @@ func TestListRuns(t *testing.T) {
 					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
 				}).Return(&pb.GetRunsResponse{
 					Runs: []*pb.Run{
-						{Metadata: &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"}, Status: "applied", WorkspaceId: "ws1"},
+						{Metadata: &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"}, Status: pb.RunStatus_APPLIED, WorkspaceId: "ws1"},
 					},
 					PageInfo: &pb.PageInfo{HasNextPage: false},
 				}, nil)
@@ -106,7 +106,7 @@ func TestGetRun(t *testing.T) {
 			mockSetup: func(m *runMocks) {
 				m.runs.On("GetRunByID", mock.Anything, &pb.GetRunByIDRequest{Id: "r1"}).Return(&pb.Run{
 					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:      "applied",
+					Status:      pb.RunStatus_APPLIED,
 					WorkspaceId: "ws1",
 				}, nil)
 			},
@@ -172,9 +172,10 @@ func TestCreateRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.runs.On("CreateRun", mock.Anything, &pb.CreateRunRequest{
 					WorkspaceId: "ws1",
+					Refresh:     ptr.Bool(false),
 				}).Return(&pb.Run{
 					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:      "pending",
+					Status:      pb.RunStatus_PENDING,
 					WorkspaceId: "ws1",
 				}, nil)
 			},
@@ -203,9 +204,10 @@ func TestCreateRun(t *testing.T) {
 					WorkspaceId:   "ws1",
 					ModuleSource:  ptr.String("registry.terraform.io/hashicorp/consul"),
 					ModuleVersion: ptr.String("1.0.0"),
+					Refresh:       ptr.Bool(false),
 				}).Return(&pb.Run{
 					Metadata:      &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:        "pending",
+					Status:        pb.RunStatus_PENDING,
 					WorkspaceId:   "ws1",
 					ModuleSource:  ptr.String("registry.terraform.io/hashicorp/consul"),
 					ModuleVersion: ptr.String("1.0.0"),
@@ -222,6 +224,7 @@ func TestCreateRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.TypeWorkspace).Return(nil)
 				m.runs.On("CreateRun", mock.Anything, &pb.CreateRunRequest{
 					WorkspaceId: "nonexistent",
+					Refresh:     ptr.Bool(false),
 				}).Return(nil, status.Error(codes.NotFound, "workspace not found"))
 			},
 			expectError: true,
@@ -276,7 +279,7 @@ func TestApplyRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "r1", trn.TypeRun).Return(nil)
 				m.runs.On("ApplyRun", mock.Anything, &pb.ApplyRunRequest{RunId: "r1"}).Return(&pb.Run{
 					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:      "apply_queued",
+					Status:      pb.RunStatus_APPLY_QUEUED,
 					WorkspaceId: "ws1",
 				}, nil)
 			},
@@ -349,7 +352,7 @@ func TestCancelRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "r1", trn.TypeRun).Return(nil)
 				m.runs.On("CancelRun", mock.Anything, &pb.CancelRunRequest{Id: "r1"}).Return(&pb.Run{
 					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:      "canceled",
+					Status:      pb.RunStatus_CANCELED,
 					WorkspaceId: "ws1",
 				}, nil)
 			},
@@ -369,7 +372,7 @@ func TestCancelRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "r1", trn.TypeRun).Return(nil)
 				m.runs.On("CancelRun", mock.Anything, &pb.CancelRunRequest{Id: "r1", Force: ptr.Bool(true)}).Return(&pb.Run{
 					Metadata:      &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:        "canceled",
+					Status:        pb.RunStatus_CANCELED,
 					WorkspaceId:   "ws1",
 					ForceCanceled: true,
 				}, nil)
