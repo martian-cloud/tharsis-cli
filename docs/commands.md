@@ -159,6 +159,10 @@ tharsis apply -directory-path "./terraform" trn:workspace:<workspace_path>
   
 #### Options
   
+#### annotation <span style={{color:'green'}}>...</span>
+
+An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.
+
 #### auto-approve
 
 Skip interactive approval of the plan.\
@@ -316,6 +320,10 @@ tharsis destroy -directory-path "./terraform" trn:workspace:<workspace_path>
   
 #### Options
   
+#### annotation <span style={{color:'green'}}>...</span>
+
+An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.
+
 #### auto-approve
 
 Skip interactive approval of the plan.\
@@ -1348,7 +1356,7 @@ The type of access rule.\
 #### run-stage <span style={{color:'red'}}>*</span>
 
 The run stage.\
-**Values:** `apply`, `plan`
+**Values:** `apply`, `opa`, `plan`
 
 #### verify-state-lineage
 
@@ -2167,6 +2175,10 @@ tharsis plan -directory-path "./terraform" trn:workspace:<workspace_path>
   
 #### Options
   
+#### annotation <span style={{color:'green'}}>...</span>
+
+An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.
+
 #### destroy
 
 Designates this run as a destroy operation.\
