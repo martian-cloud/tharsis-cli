@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -39,7 +40,7 @@ func toRun(r *pb.Run) *run {
 	return &run{
 		ID:                     r.Metadata.Id,
 		TRN:                    r.Metadata.Trn,
-		Status:                 r.Status,
+		Status:                 strings.ToLower(r.Status.String()),
 		WorkspaceID:            r.WorkspaceId,
 		CreatedBy:              r.CreatedBy,
 		TerraformVersion:       r.TerraformVersion,
@@ -190,7 +191,7 @@ func createRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createRunInput, *
 			TerraformVersion:         input.TerraformVersion,
 			IsDestroy:                input.IsDestroy,
 			Speculative:              input.Speculative,
-			Refresh:                  input.Refresh,
+			Refresh:                  &input.Refresh,
 			RefreshOnly:              input.RefreshOnly,
 			IncludeModulePrereleases: input.IncludeModulePrereleases,
 			TargetAddresses:          input.TargetAddresses,
@@ -241,7 +242,7 @@ func applyRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*applyRunInput, *ap
 
 		return nil, &applyRunOutput{
 			RunID:  resp.Metadata.Id,
-			Status: resp.Status,
+			Status: strings.ToLower(resp.Status.String()),
 		}, nil
 	}
 

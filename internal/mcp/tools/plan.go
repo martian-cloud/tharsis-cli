@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -22,7 +23,7 @@ func toPlan(p *pb.Plan) *plan {
 	return &plan{
 		ID:           p.Metadata.Id,
 		TRN:          p.Metadata.Trn,
-		Status:       p.Status,
+		Status:       strings.ToLower(p.Status.String()),
 		ErrorMessage: p.ErrorMessage,
 		HasChanges:   p.HasChanges,
 	}

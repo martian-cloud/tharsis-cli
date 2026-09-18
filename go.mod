@@ -23,7 +23,7 @@ require (
 	github.com/lab47/vterm v0.0.0-20211107042118-80c3d2849f9c
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/cli v1.1.5
-	github.com/modelcontextprotocol/go-sdk v1.5.0
+	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/morikuni/aec v1.1.0
 	github.com/nao1215/markdown v0.13.0
 	github.com/olekukonko/tablewriter v1.1.4
@@ -32,7 +32,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zclconf/go-cty v1.18.0
-	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.95.0
+	gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api v0.99.1-0.20260917133412-4155cfdab232
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/term v0.44.0
 	golang.org/x/text v0.39.0
@@ -81,7 +81,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/google/jsonschema-go v0.4.2 // indirect
+	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -134,6 +134,7 @@ require (
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
@@ -141,8 +142,3 @@ require (
 )
 
 tool github.com/vektra/mockery/v2
-
-// TEMPORARY local development override so the CLI can build against the run-annotations changes in
-// tharsis-api before they are merged and released. MUST be removed before this MR is merged — replace
-// with a version/commit bump to the published tharsis-api once #1754 (API) lands.
-replace gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api => ../../infor-tharsis-api/oss

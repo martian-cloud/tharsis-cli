@@ -204,7 +204,7 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		Variables:                runVariables,
 		TargetAddresses:          input.TargetAddresses,
 		Annotations:              annotations,
-		Refresh:                  input.Refresh,
+		Refresh:                  &input.Refresh,
 		RefreshOnly:              input.RefreshOnly,
 		Speculative:              &input.IsSpeculative,
 		TerraformVersion:         input.TerraformVersion,
@@ -229,7 +229,7 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		if pErr != nil {
 			return "", pErr
 		}
-		return plan.Status, nil
+		return strings.ToLower(plan.Status.String()), nil
 	}, planJobReady); err != nil {
 		return nil, fmt.Errorf("failed waiting for plan job: %w", err)
 	}
@@ -255,8 +255,9 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		return nil, fmt.Errorf("failed to get final run: %w", err)
 	}
 
-	if finalRun.Status == string(runCanceled) || finalRun.Status == string(runDiscarded) || finalRun.Status == string(runErrored) {
-		return nil, fmt.Errorf("run ended with status: %s", finalRun.Status)
+	fs := runStatus(strings.ToLower(finalRun.Status.String()))
+	if fs == runCanceled || fs == runDiscarded || fs == runErrored {
+		return nil, fmt.Errorf("run ended with status: %s", fs)
 	}
 
 	return finalRun, nil
@@ -279,7 +280,7 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 		if aErr != nil {
 			return "", aErr
 		}
-		return apply.Status, nil
+		return strings.ToLower(apply.Status.String()), nil
 	}, applyJobReady); err != nil {
 		return nil, fmt.Errorf("failed waiting for apply job: %w", err)
 	}
@@ -305,8 +306,8 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 		return nil, fmt.Errorf("failed to get final run: %w", err)
 	}
 
-	if finalRun.Status != string(runApplied) {
-		return nil, fmt.Errorf("apply ended with status: %s", finalRun.Status)
+	if runStatus(strings.ToLower(finalRun.Status.String())) != runApplied {
+		return nil, fmt.Errorf("apply ended with status: %s", strings.ToLower(finalRun.Status.String()))
 	}
 
 	return finalRun, nil

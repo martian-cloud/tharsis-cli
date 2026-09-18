@@ -2,6 +2,7 @@ package command
 
 import (
 	"errors"
+	"strings"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
@@ -85,12 +86,12 @@ func (c *runCancelCommand) Run(args []string) int {
 				return 1
 			}
 
-			switch event.Run.Status {
+			switch strings.ToLower(event.Run.Status.String()) {
 			case "canceled":
 				c.UI.Successf("Run canceled successfully!")
 				return 0
 			case "applied", "planned", "planned_and_finished", "errored":
-				c.UI.Errorf("Run completed with status: %s", event.Run.Status)
+				c.UI.Errorf("Run completed with status: %s", strings.ToLower(event.Run.Status.String()))
 				return 1
 			}
 		}
