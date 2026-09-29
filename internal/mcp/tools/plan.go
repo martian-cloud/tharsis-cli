@@ -22,7 +22,7 @@ func toPlan(p *pb.Plan) *plan {
 	return &plan{
 		ID:           p.Metadata.Id,
 		TRN:          p.Metadata.Trn,
-		Status:       p.Status,
+		Status:       p.Status.String(),
 		ErrorMessage: p.ErrorMessage,
 		HasChanges:   p.HasChanges,
 	}

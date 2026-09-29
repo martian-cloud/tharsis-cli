@@ -129,6 +129,43 @@ func (_m *WorkspacesClient) GetWorkspaceByID(ctx context.Context, in *gen.GetWor
 	return r0, r1
 }
 
+// GetWorkspaceRoleBindingByWorkspaceID provides a mock function with given fields: ctx, in, opts
+func (_m *WorkspacesClient) GetWorkspaceRoleBindingByWorkspaceID(ctx context.Context, in *gen.GetWorkspaceRoleBindingByWorkspaceIDRequest, opts ...grpc.CallOption) (*gen.WorkspaceRoleBinding, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetWorkspaceRoleBindingByWorkspaceID")
+	}
+
+	var r0 *gen.WorkspaceRoleBinding
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.GetWorkspaceRoleBindingByWorkspaceIDRequest, ...grpc.CallOption) (*gen.WorkspaceRoleBinding, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.GetWorkspaceRoleBindingByWorkspaceIDRequest, ...grpc.CallOption) *gen.WorkspaceRoleBinding); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gen.WorkspaceRoleBinding)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.GetWorkspaceRoleBindingByWorkspaceIDRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetWorkspaces provides a mock function with given fields: ctx, in, opts
 func (_m *WorkspacesClient) GetWorkspaces(ctx context.Context, in *gen.GetWorkspacesRequest, opts ...grpc.CallOption) (*gen.GetWorkspacesResponse, error) {
 	_va := make([]interface{}, len(opts))
@@ -232,6 +269,43 @@ func (_m *WorkspacesClient) MigrateWorkspace(ctx context.Context, in *gen.Migrat
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, *gen.MigrateWorkspaceRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// SetWorkspaceRoleBinding provides a mock function with given fields: ctx, in, opts
+func (_m *WorkspacesClient) SetWorkspaceRoleBinding(ctx context.Context, in *gen.SetWorkspaceRoleBindingRequest, opts ...grpc.CallOption) (*gen.WorkspaceRoleBinding, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetWorkspaceRoleBinding")
+	}
+
+	var r0 *gen.WorkspaceRoleBinding
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.SetWorkspaceRoleBindingRequest, ...grpc.CallOption) (*gen.WorkspaceRoleBinding, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.SetWorkspaceRoleBindingRequest, ...grpc.CallOption) *gen.WorkspaceRoleBinding); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gen.WorkspaceRoleBinding)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.SetWorkspaceRoleBindingRequest, ...grpc.CallOption) error); ok {
 		r1 = rf(ctx, in, opts...)
 	} else {
 		r1 = ret.Error(1)

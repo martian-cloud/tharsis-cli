@@ -40,7 +40,7 @@ func TestListRuns(t *testing.T) {
 					PaginationOptions: &pb.PaginationOptions{First: ptr.Int32(10)},
 				}).Return(&pb.GetRunsResponse{
 					Runs: []*pb.Run{
-						{Metadata: &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"}, Status: "applied", WorkspaceId: "ws1"},
+						{Metadata: &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"}, Status: pb.RunStatus_APPLIED, WorkspaceId: "ws1"},
 					},
 					PageInfo: &pb.PageInfo{HasNextPage: false},
 				}, nil)
@@ -106,7 +106,7 @@ func TestGetRun(t *testing.T) {
 			mockSetup: func(m *runMocks) {
 				m.runs.On("GetRunByID", mock.Anything, &pb.GetRunByIDRequest{Id: "r1"}).Return(&pb.Run{
 					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:      "applied",
+					Status:      pb.RunStatus_APPLIED,
 					WorkspaceId: "ws1",
 				}, nil)
 			},
@@ -172,9 +172,10 @@ func TestCreateRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
 				m.runs.On("CreateRun", mock.Anything, &pb.CreateRunRequest{
 					WorkspaceId: "ws1",
+					Refresh:     nil,
 				}).Return(&pb.Run{
 					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:      "pending",
+					Status:      pb.RunStatus_PENDING,
 					WorkspaceId: "ws1",
 				}, nil)
 			},
@@ -203,12 +204,91 @@ func TestCreateRun(t *testing.T) {
 					WorkspaceId:   "ws1",
 					ModuleSource:  ptr.String("registry.terraform.io/hashicorp/consul"),
 					ModuleVersion: ptr.String("1.0.0"),
+					Refresh:       nil,
 				}).Return(&pb.Run{
 					Metadata:      &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:        "pending",
+					Status:        pb.RunStatus_PENDING,
 					WorkspaceId:   "ws1",
 					ModuleSource:  ptr.String("registry.terraform.io/hashicorp/consul"),
 					ModuleVersion: ptr.String("1.0.0"),
+				}, nil)
+			},
+			expectID: "r1",
+		},
+		{
+			name: "create run with annotations",
+			input: &createRunInput{
+				WorkspaceID: "ws1",
+				Annotations: []*runAnnotation{
+					{Key: "commit", Value: "abc123", Link: ptr.String("https://example.com/commit/abc123")},
+					{Key: "ref", Value: "main"},
+				},
+			},
+			mockSetup: func(m *runMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
+				m.runs.On("CreateRun", mock.Anything, &pb.CreateRunRequest{
+					WorkspaceId: "ws1",
+					Refresh:     nil,
+					Annotations: []*pb.RunAnnotation{
+						{Key: "commit", Value: "abc123", Link: ptr.String("https://example.com/commit/abc123")},
+						{Key: "ref", Value: "main"},
+					},
+				}).Return(&pb.Run{
+					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
+					Status:      pb.RunStatus_PENDING,
+					WorkspaceId: "ws1",
+					Annotations: []*pb.RunAnnotation{
+						{Key: "commit", Value: "abc123", Link: ptr.String("https://example.com/commit/abc123")},
+						{Key: "ref", Value: "main"},
+					},
+				}, nil)
+			},
+			expectID: "r1",
+		},
+		{
+			name: "annotation with empty key is rejected before reaching the server",
+			input: &createRunInput{
+				WorkspaceID: "ws1",
+				Annotations: []*runAnnotation{
+					{Key: "", Value: "abc123"},
+				},
+			},
+			mockSetup: func(m *runMocks) {
+				// Only authorization is expected. CreateRun must never be called: the malformed
+				// annotation is rejected client-side, matching the CLI flag path. mockery fails the
+				// test if an unexpected CreateRun call is made.
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
+			},
+			expectError: true,
+		},
+		{
+			name: "annotation with empty value is rejected before reaching the server",
+			input: &createRunInput{
+				WorkspaceID: "ws1",
+				Annotations: []*runAnnotation{
+					{Key: "commit", Value: ""},
+				},
+			},
+			mockSetup: func(m *runMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
+			},
+			expectError: true,
+		},
+		{
+			name: "explicit refresh false is passed through",
+			input: &createRunInput{
+				WorkspaceID: "ws1",
+				Refresh:     ptr.Bool(false),
+			},
+			mockSetup: func(m *runMocks) {
+				m.acl.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
+				m.runs.On("CreateRun", mock.Anything, &pb.CreateRunRequest{
+					WorkspaceId: "ws1",
+					Refresh:     ptr.Bool(false),
+				}).Return(&pb.Run{
+					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
+					Status:      pb.RunStatus_PENDING,
+					WorkspaceId: "ws1",
 				}, nil)
 			},
 			expectID: "r1",
@@ -222,6 +302,7 @@ func TestCreateRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "nonexistent", trn.TypeWorkspace).Return(nil)
 				m.runs.On("CreateRun", mock.Anything, &pb.CreateRunRequest{
 					WorkspaceId: "nonexistent",
+					Refresh:     nil,
 				}).Return(nil, status.Error(codes.NotFound, "workspace not found"))
 			},
 			expectError: true,
@@ -260,6 +341,45 @@ func TestCreateRun(t *testing.T) {
 	}
 }
 
+// TestCreateRun_AnnotationsInOutput pins the annotation read-back on the MCP output. The table cases
+// above only assert the run ID, so dropping the conversion in toRun would otherwise go unnoticed —
+// leaving callers able to set annotations but never see them.
+func TestCreateRun_AnnotationsInOutput(t *testing.T) {
+	mockRuns := mocks.NewRunsClient(t)
+	mockACL := acl.NewMockChecker(t)
+
+	mockACL.On("Authorize", mock.Anything, mock.Anything, "ws1", trn.TypeWorkspace).Return(nil)
+	mockRuns.On("CreateRun", mock.Anything, mock.Anything).Return(&pb.Run{
+		Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
+		Status:      pb.RunStatus_PENDING,
+		WorkspaceId: "ws1",
+		Annotations: []*pb.RunAnnotation{
+			{Key: "commit", Value: "abc123", Link: ptr.String("https://example.com/commit/abc123")},
+			{Key: "ref", Value: "main"},
+		},
+	}, nil)
+
+	toolCtx := &ToolContext{
+		grpcClient: &client.GRPCClient{RunsClient: mockRuns},
+		acl:        mockACL,
+	}
+
+	_, handler := createRun(toolCtx)
+	_, output, err := handler(t.Context(), nil, &createRunInput{WorkspaceID: "ws1"})
+	require.NoError(t, err)
+
+	require.Len(t, output.Run.Annotations, 2)
+
+	assert.Equal(t, "commit", output.Run.Annotations[0].Key)
+	assert.Equal(t, "abc123", output.Run.Annotations[0].Value)
+	require.NotNil(t, output.Run.Annotations[0].Link)
+	assert.Equal(t, "https://example.com/commit/abc123", *output.Run.Annotations[0].Link)
+
+	assert.Equal(t, "ref", output.Run.Annotations[1].Key)
+	assert.Equal(t, "main", output.Run.Annotations[1].Value)
+	assert.Nil(t, output.Run.Annotations[1].Link)
+}
+
 func TestApplyRun(t *testing.T) {
 	type testCase struct {
 		name        string
@@ -276,7 +396,7 @@ func TestApplyRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "r1", trn.TypeRun).Return(nil)
 				m.runs.On("ApplyRun", mock.Anything, &pb.ApplyRunRequest{RunId: "r1"}).Return(&pb.Run{
 					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:      "apply_queued",
+					Status:      pb.RunStatus_APPLY_QUEUED,
 					WorkspaceId: "ws1",
 				}, nil)
 			},
@@ -349,7 +469,7 @@ func TestCancelRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "r1", trn.TypeRun).Return(nil)
 				m.runs.On("CancelRun", mock.Anything, &pb.CancelRunRequest{Id: "r1"}).Return(&pb.Run{
 					Metadata:    &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:      "canceled",
+					Status:      pb.RunStatus_CANCELED,
 					WorkspaceId: "ws1",
 				}, nil)
 			},
@@ -369,7 +489,7 @@ func TestCancelRun(t *testing.T) {
 				m.acl.On("Authorize", mock.Anything, mock.Anything, "r1", trn.TypeRun).Return(nil)
 				m.runs.On("CancelRun", mock.Anything, &pb.CancelRunRequest{Id: "r1", Force: ptr.Bool(true)}).Return(&pb.Run{
 					Metadata:      &pb.ResourceMetadata{Id: "r1", Trn: "trn:run:r1"},
-					Status:        "canceled",
+					Status:        pb.RunStatus_CANCELED,
 					WorkspaceId:   "ws1",
 					ForceCanceled: true,
 				}, nil)

@@ -8,30 +8,32 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
+	runpkg "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
 )
 
 // run represents a Tharsis run in MCP responses.
 type run struct {
-	ID                     string   `json:"id" jsonschema:"The unique identifier of the run"`
-	Status                 string   `json:"status" jsonschema:"Overall run status (e.g. pending plan_queued planned applied errored canceled)"`
-	WorkspaceID            string   `json:"workspace_id" jsonschema:"The unique identifier of the workspace"`
-	CreatedBy              string   `json:"created_by" jsonschema:"Username or service account that created this run"`
-	TerraformVersion       string   `json:"terraform_version" jsonschema:"Version of Terraform used to execute this run"`
-	IsDestroy              bool     `json:"is_destroy" jsonschema:"True if this run will destroy resources instead of creating/updating them"`
-	Speculative            bool     `json:"speculative" jsonschema:"True if this is a speculative plan (plan-only no apply will occur)"`
-	Refresh                bool     `json:"refresh" jsonschema:"True if this run will refresh the state"`
-	RefreshOnly            bool     `json:"refresh_only" jsonschema:"True if this run will only refresh the state without applying changes"`
-	ConfigurationVersionID *string  `json:"configuration_version_id,omitempty" jsonschema:"ID of the configuration version used for this run"`
-	ModuleSource           *string  `json:"module_source,omitempty" jsonschema:"Source location of the Terraform module used for this run"`
-	ModuleVersion          *string  `json:"module_version,omitempty" jsonschema:"Version of the module used for this run"`
-	ModuleDigest           *string  `json:"module_digest,omitempty" jsonschema:"Digest of the module used for this run"`
-	TargetAddresses        []string `json:"target_addresses,omitempty" jsonschema:"List of resource addresses targeted by this run"`
-	ForceCanceled          bool     `json:"force_canceled,omitempty" jsonschema:"True if this run was force canceled"`
-	ForceCanceledBy        *string  `json:"force_canceled_by,omitempty" jsonschema:"Username or service account that force canceled this run"`
-	PlanID                 string   `json:"plan_id" jsonschema:"ID of the plan associated with this run"`
-	ApplyID                string   `json:"apply_id" jsonschema:"ID of the apply associated with this run"`
-	HasChanges             bool     `json:"has_changes" jsonschema:"True if the plan has changes"`
-	TRN                    string   `json:"trn" jsonschema:"Tharsis Resource Name"`
+	ID                     string           `json:"id" jsonschema:"The unique identifier of the run"`
+	Status                 string           `json:"status" jsonschema:"Overall run status (e.g. pending plan_queued planned applied errored canceled)"`
+	WorkspaceID            string           `json:"workspace_id" jsonschema:"The unique identifier of the workspace"`
+	CreatedBy              string           `json:"created_by" jsonschema:"Username or service account that created this run"`
+	TerraformVersion       string           `json:"terraform_version" jsonschema:"Version of Terraform used to execute this run"`
+	IsDestroy              bool             `json:"is_destroy" jsonschema:"True if this run will destroy resources instead of creating/updating them"`
+	Speculative            bool             `json:"speculative" jsonschema:"True if this is a speculative plan (plan-only no apply will occur)"`
+	Refresh                bool             `json:"refresh" jsonschema:"True if this run will refresh the state"`
+	RefreshOnly            bool             `json:"refresh_only" jsonschema:"True if this run will only refresh the state without applying changes"`
+	ConfigurationVersionID *string          `json:"configuration_version_id,omitempty" jsonschema:"ID of the configuration version used for this run"`
+	ModuleSource           *string          `json:"module_source,omitempty" jsonschema:"Source location of the Terraform module used for this run"`
+	ModuleVersion          *string          `json:"module_version,omitempty" jsonschema:"Version of the module used for this run"`
+	ModuleDigest           *string          `json:"module_digest,omitempty" jsonschema:"Digest of the module used for this run"`
+	TargetAddresses        []string         `json:"target_addresses,omitempty" jsonschema:"List of resource addresses targeted by this run"`
+	ForceCanceled          bool             `json:"force_canceled,omitempty" jsonschema:"True if this run was force canceled"`
+	ForceCanceledBy        *string          `json:"force_canceled_by,omitempty" jsonschema:"Username or service account that force canceled this run"`
+	PlanID                 string           `json:"plan_id" jsonschema:"ID of the plan associated with this run"`
+	ApplyID                string           `json:"apply_id" jsonschema:"ID of the apply associated with this run"`
+	HasChanges             bool             `json:"has_changes" jsonschema:"True if the plan has changes"`
+	TRN                    string           `json:"trn" jsonschema:"Tharsis Resource Name"`
+	Annotations            []*runAnnotation `json:"annotations,omitempty" jsonschema:"Immutable key/value annotations attached to this run at creation"`
 }
 
 // toRun converts a proto run to MCP run.
@@ -39,7 +41,7 @@ func toRun(r *pb.Run) *run {
 	return &run{
 		ID:                     r.Metadata.Id,
 		TRN:                    r.Metadata.Trn,
-		Status:                 r.Status,
+		Status:                 r.Status.String(),
 		WorkspaceID:            r.WorkspaceId,
 		CreatedBy:              r.CreatedBy,
 		TerraformVersion:       r.TerraformVersion,
@@ -57,6 +59,7 @@ func toRun(r *pb.Run) *run {
 		PlanID:                 r.PlanId,
 		ApplyID:                r.ApplyId,
 		HasChanges:             r.HasChanges,
+		Annotations:            fromPBRunAnnotations(r.Annotations),
 	}
 }
 
@@ -146,19 +149,65 @@ func getRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*getRunInput, *getRun
 	return tool, handler
 }
 
+// runAnnotation is a key/value annotation (with an optional link) attached to a run at creation.
+type runAnnotation struct {
+	Link  *string `json:"link,omitempty" jsonschema:"Optional URL the annotation links to (e.g. a commit or pipeline URL)"`
+	Key   string  `json:"key" jsonschema:"required,Annotation key (e.g. commit)"`
+	Value string  `json:"value" jsonschema:"required,Annotation value (e.g. the commit SHA)"`
+}
+
 // createRunInput is the input for the create_run tool.
 type createRunInput struct {
-	WorkspaceID              string   `json:"workspace_id" jsonschema:"required,Workspace ID or TRN (e.g. Ul8yZ... or trn:workspace:group/workspace-name)"`
-	ConfigurationVersionID   *string  `json:"configuration_version_id,omitempty" jsonschema:"ID of an existing configuration version to use for this run"`
-	ModuleSource             *string  `json:"module_source,omitempty" jsonschema:"Source location of the Terraform module (e.g. registry.terraform.io/namespace/module)"`
-	ModuleVersion            *string  `json:"module_version,omitempty" jsonschema:"Version of the module to use (e.g. 1.0.0)"`
-	TerraformVersion         *string  `json:"terraform_version,omitempty" jsonschema:"Version of Terraform to use (e.g. 1.5.0)"`
-	IsDestroy                bool     `json:"is_destroy,omitempty" jsonschema:"True to destroy resources instead of creating/updating them"`
-	Speculative              *bool    `json:"speculative,omitempty" jsonschema:"True for a speculative plan (plan-only no apply will occur)"`
-	Refresh                  bool     `json:"refresh,omitempty" jsonschema:"True to refresh the state"`
-	RefreshOnly              bool     `json:"refresh_only,omitempty" jsonschema:"True to only refresh the state without applying changes"`
-	IncludeModulePrereleases *bool    `json:"include_module_prereleases,omitempty" jsonschema:"When module_version is empty or a constraint range, allow prerelease module versions to be selected as latest"`
-	TargetAddresses          []string `json:"target_addresses,omitempty" jsonschema:"List of resource addresses to target (e.g. aws_instance.example)"`
+	WorkspaceID              string           `json:"workspace_id" jsonschema:"required,Workspace ID or TRN (e.g. Ul8yZ... or trn:workspace:group/workspace-name)"`
+	ConfigurationVersionID   *string          `json:"configuration_version_id,omitempty" jsonschema:"ID of an existing configuration version to use for this run"`
+	ModuleSource             *string          `json:"module_source,omitempty" jsonschema:"Source location of the Terraform module (e.g. registry.terraform.io/namespace/module)"`
+	ModuleVersion            *string          `json:"module_version,omitempty" jsonschema:"Version of the module to use (e.g. 1.0.0)"`
+	TerraformVersion         *string          `json:"terraform_version,omitempty" jsonschema:"Version of Terraform to use (e.g. 1.5.0)"`
+	IsDestroy                bool             `json:"is_destroy,omitempty" jsonschema:"True to destroy resources instead of creating/updating them"`
+	Speculative              *bool            `json:"speculative,omitempty" jsonschema:"True for a speculative plan (plan-only no apply will occur)"`
+	Refresh                  *bool            `json:"refresh,omitempty" jsonschema:"True to refresh the state. Defaults to true when omitted."`
+	RefreshOnly              bool             `json:"refresh_only,omitempty" jsonschema:"True to only refresh the state without applying changes"`
+	IncludeModulePrereleases *bool            `json:"include_module_prereleases,omitempty" jsonschema:"When module_version is empty or a constraint range, allow prerelease module versions to be selected as latest"`
+	TargetAddresses          []string         `json:"target_addresses,omitempty" jsonschema:"List of resource addresses to target (e.g. aws_instance.example)"`
+	Annotations              []*runAnnotation `json:"annotations,omitempty" jsonschema:"Immutable key/value annotations to attach to the run so it can be traced back to what created it (e.g. commit ref merge request pipeline)"`
+}
+
+// toPBRunAnnotations converts MCP run annotations to their proto form, validating each one so the
+// MCP create_run path rejects the same malformed annotations as the CLI flag path. It returns nil
+// for empty input, matching how run creation treats "no annotations".
+func toPBRunAnnotations(in []*runAnnotation) ([]*pb.RunAnnotation, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make([]*pb.RunAnnotation, len(in))
+	for i, a := range in {
+		pbAnnotation := &pb.RunAnnotation{
+			Key:   a.Key,
+			Value: a.Value,
+			Link:  a.Link,
+		}
+		if err := runpkg.ValidateRunAnnotation(pbAnnotation); err != nil {
+			return nil, fmt.Errorf("invalid annotation at index %d: %w", i, err)
+		}
+		out[i] = pbAnnotation
+	}
+	return out, nil
+}
+
+// fromPBRunAnnotations converts proto run annotations to their MCP form.
+func fromPBRunAnnotations(in []*pb.RunAnnotation) []*runAnnotation {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]*runAnnotation, len(in))
+	for i, a := range in {
+		out[i] = &runAnnotation{
+			Key:   a.Key,
+			Value: a.Value,
+			Link:  a.Link,
+		}
+	}
+	return out
 }
 
 // createRunOutput is the output for the create_run tool.
@@ -182,6 +231,11 @@ func createRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createRunInput, *
 			return nil, nil, err
 		}
 
+		annotations, err := toPBRunAnnotations(input.Annotations)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		resp, err := tc.grpcClient.RunsClient.CreateRun(ctx, &pb.CreateRunRequest{
 			WorkspaceId:              input.WorkspaceID,
 			ConfigurationVersionId:   input.ConfigurationVersionID,
@@ -194,6 +248,7 @@ func createRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*createRunInput, *
 			RefreshOnly:              input.RefreshOnly,
 			IncludeModulePrereleases: input.IncludeModulePrereleases,
 			TargetAddresses:          input.TargetAddresses,
+			Annotations:              annotations,
 		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create run in workspace %q: %w", input.WorkspaceID, err)
@@ -241,7 +296,7 @@ func applyRun(tc *ToolContext) (mcp.Tool, mcp.ToolHandlerFor[*applyRunInput, *ap
 
 		return nil, &applyRunOutput{
 			RunID:  resp.Metadata.Id,
-			Status: resp.Status,
+			Status: resp.Status.String(),
 		}, nil
 	}
 

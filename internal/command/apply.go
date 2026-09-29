@@ -3,14 +3,11 @@ package command
 import (
 	"errors"
 
+	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-)
-
-const (
-	plannedAndFinished = "planned_and_finished"
 )
 
 type applyCommand struct {
@@ -25,6 +22,7 @@ type applyCommand struct {
 	tfVariables              []string
 	envVariables             []string
 	targetAddresses          []string
+	annotations              []string
 	autoApprove              *bool
 	input                    *bool
 	refresh                  *bool
@@ -94,9 +92,10 @@ func (c *applyCommand) Run(args []string) int {
 		TfVariables:              c.tfVariables,
 		EnvVariables:             c.envVariables,
 		TargetAddresses:          c.targetAddresses,
+		Annotations:              c.annotations,
 		IsDestroy:                false,
 		IsSpeculative:            false,
-		Refresh:                  *c.refresh,
+		Refresh:                  c.refresh,
 		RefreshOnly:              *c.refreshOnly,
 		IncludeModulePrereleases: *c.includeModulePrereleases,
 	})
@@ -106,7 +105,7 @@ func (c *applyCommand) Run(args []string) int {
 	}
 
 	// Check if plan has changes
-	if runResult.Status == plannedAndFinished {
+	if runResult.Status == pb.RunStatus_PLANNED_AND_FINISHED {
 		c.UI.Output("Stopping since plan had no changes.")
 		return 0
 	}
@@ -143,7 +142,7 @@ func (c *applyCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.Logger.Debug("apply completed", "run_id", appliedRun.Metadata.Id, "status", appliedRun.Status)
+	c.Logger.Debug("apply completed", "run_id", appliedRun.Metadata.Id, "status", appliedRun.Status.String())
 
 	return 0
 }
@@ -250,6 +249,11 @@ func (c *applyCommand) Flags() *flag.Set {
 		&c.targetAddresses,
 		"target",
 		"The Terraform address of the resources to be acted upon.",
+	)
+	f.StringSliceVar(
+		&c.annotations,
+		"annotation",
+		`An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.`,
 	)
 
 	f.MutuallyExclusive("directory-path", "module-source")

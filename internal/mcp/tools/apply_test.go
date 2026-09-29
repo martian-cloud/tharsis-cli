@@ -27,7 +27,7 @@ func TestGetApply(t *testing.T) {
 			mockSetup: func(rc *mocks.RunsClient) {
 				rc.On("GetApplyByID", mock.Anything, &pb.GetApplyByIDRequest{Id: "trn:apply:a1"}).Return(&pb.Apply{
 					Metadata:     &pb.ResourceMetadata{Id: "a1", Trn: "trn:apply:a1"},
-					Status:       "finished",
+					Status:       pb.ApplyStatus_FINISHED,
 					TriggeredBy:  "user1",
 					ErrorMessage: nil,
 				}, nil)
