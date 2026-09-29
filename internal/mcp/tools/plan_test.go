@@ -29,7 +29,7 @@ func TestGetPlan(t *testing.T) {
 			mockSetup: func(rc *mocks.RunsClient) {
 				rc.On("GetPlanByID", mock.Anything, &pb.GetPlanByIDRequest{Id: "p1"}).Return(&pb.Plan{
 					Metadata:   &pb.ResourceMetadata{Id: "p1", Trn: "trn:plan:p1"},
-					Status:     "finished",
+					Status:     pb.PlanStatus_FINISHED,
 					HasChanges: true,
 				}, nil)
 			},
