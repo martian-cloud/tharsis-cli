@@ -18,54 +18,7 @@ import (
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
 	"google.golang.org/grpc"
-)
-
-// runStatus represents the overall status of a run.
-type runStatus string
-
-// runStatus constants.
-const (
-	runApplied            runStatus = "applied"
-	runApplyQueued        runStatus = "apply_queued"
-	runApplying           runStatus = "applying"
-	runCanceled           runStatus = "canceled"
-	runDiscarded          runStatus = "discarded"
-	runErrored            runStatus = "errored"
-	runPending            runStatus = "pending"
-	runPlanQueued         runStatus = "plan_queued"
-	runPlanned            runStatus = "planned"
-	runPlannedAndFinished runStatus = "planned_and_finished"
-	runPlanning           runStatus = "planning"
-	runQueuing            runStatus = "queuing"
-	runQueuingApply       runStatus = "queuing_apply"
-)
-
-// planStatus represents the status of a plan resource.
-type planStatus string
-
-// planStatus constants.
-const (
-	planCreated  planStatus = "created"
-	planCanceled planStatus = "canceled"
-	planQueued   planStatus = "queued"
-	planErrored  planStatus = "errored"
-	planFinished planStatus = "finished"
-	planPending  planStatus = "pending"
-	planRunning  planStatus = "running"
-)
-
-// applyStatus represents the status of an apply resource.
-type applyStatus string
-
-// applyStatus constants.
-const (
-	applyCanceled applyStatus = "canceled"
-	applyCreated  applyStatus = "created"
-	applyErrored  applyStatus = "errored"
-	applyFinished applyStatus = "finished"
-	applyPending  applyStatus = "pending"
-	applyQueued   applyStatus = "queued"
-	applyRunning  applyStatus = "running"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // Manager provides high-level run management operations
@@ -88,9 +41,10 @@ type CreateRunInput struct {
 	TfVariables      []string
 	EnvVariables     []string
 	TargetAddresses  []string
+	Annotations      []string
 	IsDestroy        bool
 	IsSpeculative    bool
-	Refresh          bool
+	Refresh          *bool
 	RefreshOnly      bool
 	// IncludeModulePrereleases, when true and ModuleVersion is unset or a constraint
 	// range, allows prerelease module versions to be selected as "latest".
@@ -121,6 +75,46 @@ func NewManager(
 		logger:     logger,
 		ui:         ui,
 	}, nil
+}
+
+// parseAnnotations converts the raw --annotation JSON strings into proto run annotations. It uses
+// protojson rather than encoding/json so the input is validated against the proto schema: unknown
+// fields and wrong-case keys are rejected locally with a clear message instead of being silently
+// dropped and reaching the server as empty annotations.
+func parseAnnotations(raw []string) ([]*pb.RunAnnotation, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	annotations := make([]*pb.RunAnnotation, len(raw))
+	for i, s := range raw {
+		if strings.TrimSpace(s) == "null" {
+			return nil, fmt.Errorf("failed to parse annotation %q: must be a JSON object with a key and value", s)
+		}
+		var a pb.RunAnnotation
+		if err := protojson.Unmarshal([]byte(s), &a); err != nil {
+			return nil, fmt.Errorf("failed to parse annotation %q: %w", s, err)
+		}
+		// protojson leaves omitted fields as empty strings, so a missing or blank key or value
+		// unmarshals cleanly and would only be rejected by the server. Catch it here instead.
+		if err := ValidateRunAnnotation(&a); err != nil {
+			return nil, fmt.Errorf("failed to parse annotation %q: %w", s, err)
+		}
+		annotations[i] = &a
+	}
+	return annotations, nil
+}
+
+// ValidateRunAnnotation checks the required fields of a single run annotation. Both the CLI flag
+// path (parseAnnotations) and the MCP create_run tool call this so the two entry points reject the
+// same malformed annotations (e.g. an empty key or value) before reaching the server.
+func ValidateRunAnnotation(a *pb.RunAnnotation) error {
+	if a.Key == "" {
+		return fmt.Errorf("annotation key cannot be empty")
+	}
+	if a.Value == "" {
+		return fmt.Errorf("annotation value cannot be empty")
+	}
+	return nil
 }
 
 // CreateRun creates and executes a run
@@ -171,6 +165,12 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		configVersionID = &id
 	}
 
+	// Parse run annotations
+	annotations, err := parseAnnotations(input.Annotations)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create run
 	createRunInput := &pb.CreateRunRequest{
 		WorkspaceId:              workspace.Metadata.Id,
@@ -180,6 +180,7 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		ModuleVersion:            input.ModuleVersion,
 		Variables:                runVariables,
 		TargetAddresses:          input.TargetAddresses,
+		Annotations:              annotations,
 		Refresh:                  input.Refresh,
 		RefreshOnly:              input.RefreshOnly,
 		Speculative:              &input.IsSpeculative,
@@ -200,10 +201,10 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 
 	// Wait until the plan job has been created before requesting it, to avoid a race
 	// where the job does not yet exist. The plan status is the authoritative signal.
-	if err = m.waitForRunJob(ctx, createdRun.WorkspaceId, createdRun.Metadata.Id, func(ctx context.Context) (string, error) {
+	if err = waitForRunJob(ctx, m, createdRun.WorkspaceId, createdRun.Metadata.Id, func(ctx context.Context) (pb.PlanStatus, error) {
 		plan, pErr := m.grpcClient.RunsClient.GetPlanByID(ctx, &pb.GetPlanByIDRequest{Id: createdRun.PlanId})
 		if pErr != nil {
-			return "", pErr
+			return pb.PlanStatus_UNSPECIFIED, pErr
 		}
 		return plan.Status, nil
 	}, planJobReady); err != nil {
@@ -231,7 +232,7 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		return nil, fmt.Errorf("failed to get final run: %w", err)
 	}
 
-	if finalRun.Status == string(runCanceled) || finalRun.Status == string(runDiscarded) || finalRun.Status == string(runErrored) {
+	if finalRun.Status == pb.RunStatus_CANCELED || finalRun.Status == pb.RunStatus_DISCARDED || finalRun.Status == pb.RunStatus_ERRORED {
 		return nil, fmt.Errorf("run ended with status: %s", finalRun.Status)
 	}
 
@@ -250,10 +251,10 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 
 	// Wait until the apply job has been created before requesting it, to avoid a race
 	// where the job does not yet exist. The apply status is the authoritative signal.
-	if err = m.waitForRunJob(ctx, appliedRun.WorkspaceId, runID, func(ctx context.Context) (string, error) {
+	if err = waitForRunJob(ctx, m, appliedRun.WorkspaceId, runID, func(ctx context.Context) (pb.ApplyStatus, error) {
 		apply, aErr := m.grpcClient.RunsClient.GetApplyByID(ctx, &pb.GetApplyByIDRequest{Id: appliedRun.ApplyId})
 		if aErr != nil {
-			return "", aErr
+			return pb.ApplyStatus_UNSPECIFIED, aErr
 		}
 		return apply.Status, nil
 	}, applyJobReady); err != nil {
@@ -281,7 +282,7 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 		return nil, fmt.Errorf("failed to get final run: %w", err)
 	}
 
-	if finalRun.Status != string(runApplied) {
+	if finalRun.Status != pb.RunStatus_APPLIED {
 		return nil, fmt.Errorf("apply ended with status: %s", finalRun.Status)
 	}
 
@@ -293,11 +294,12 @@ func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
 // re-checking the authoritative plan/apply status (getStatus) on each event. It returns
 // an error if the plan/apply reaches a final state before a job becomes available, or
 // if the run event stream cannot be established or closes first.
-func (m *Manager) waitForRunJob(
+func waitForRunJob[S comparable](
 	ctx context.Context,
+	m *Manager,
 	workspaceID, runID string,
-	getStatus func(context.Context) (string, error),
-	ready func(status string) (bool, error),
+	getStatus func(context.Context) (S, error),
+	ready func(status S) (bool, error),
 ) error {
 	// Check current state first; the subscription does not replay current state, so a
 	// transition that already happened could otherwise be missed.
@@ -347,12 +349,12 @@ func (m *Manager) waitForRunJob(
 // planJobReady reports whether the plan's job has been created, based on the plan
 // status. A job exists once the plan reaches queued and through its terminal states.
 // A plan that reaches a final state without a job (canceled) is an error.
-func planJobReady(status string) (bool, error) {
-	switch planStatus(status) {
-	case planQueued, planRunning, planFinished, planErrored:
+func planJobReady(status pb.PlanStatus) (bool, error) {
+	switch status {
+	case pb.PlanStatus_QUEUED, pb.PlanStatus_RUNNING, pb.PlanStatus_FINISHED, pb.PlanStatus_ERRORED:
 		// A job exists.
 		return true, nil
-	case planCanceled:
+	case pb.PlanStatus_CANCELED:
 		return false, fmt.Errorf("plan reached final state before a job was available; status: %s", status)
 	default:
 		// created, pending: job not created yet.
@@ -363,12 +365,12 @@ func planJobReady(status string) (bool, error) {
 // applyJobReady reports whether the apply's job has been created, based on the apply
 // status. A job exists once the apply reaches queued and through its terminal states.
 // An apply that reaches a final state without a job (canceled) is an error.
-func applyJobReady(status string) (bool, error) {
-	switch applyStatus(status) {
-	case applyQueued, applyRunning, applyFinished, applyErrored:
+func applyJobReady(status pb.ApplyStatus) (bool, error) {
+	switch status {
+	case pb.ApplyStatus_QUEUED, pb.ApplyStatus_RUNNING, pb.ApplyStatus_FINISHED, pb.ApplyStatus_ERRORED:
 		// A job exists.
 		return true, nil
-	case applyCanceled:
+	case pb.ApplyStatus_CANCELED:
 		return false, fmt.Errorf("apply reached final state before a job was available; status: %s", status)
 	default:
 		// created, pending: job not created yet.

@@ -22,7 +22,7 @@ func toApply(a *pb.Apply) *apply {
 	return &apply{
 		ID:           a.Metadata.Id,
 		TRN:          a.Metadata.Trn,
-		Status:       a.Status,
+		Status:       a.Status.String(),
 		TriggeredBy:  a.TriggeredBy,
 		ErrorMessage: a.ErrorMessage,
 	}
