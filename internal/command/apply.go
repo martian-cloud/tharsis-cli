@@ -253,7 +253,7 @@ func (c *applyCommand) Flags() *flag.Set {
 	f.StringSliceVar(
 		&c.annotations,
 		"annotation",
-		`An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.`,
+		`An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}.`,
 	)
 
 	f.MutuallyExclusive("directory-path", "module-source")
