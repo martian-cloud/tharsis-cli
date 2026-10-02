@@ -257,11 +257,12 @@ func writeFlags(m *md.Markdown, flagSet *flag.Set) {
 			meta = append(meta, "**Conflicts:** "+strings.Join(names, ", "))
 		}
 
+		usage := sanitizeForMarkdown(f.Usage)
 		if len(meta) > 0 {
-			buf.WriteString(f.Usage + "\\\n")
+			buf.WriteString(usage + "\\\n")
 			buf.WriteString(strings.Join(meta, "\\\n"))
 		} else {
-			buf.WriteString(f.Usage)
+			buf.WriteString(usage)
 		}
 
 		buf.WriteString("\n\n")
