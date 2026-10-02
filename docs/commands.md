@@ -161,7 +161,7 @@ tharsis apply -directory-path "./terraform" trn:workspace:<workspace_path>
   
 #### annotation <span style={{color:'green'}}>...</span>
 
-An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.
+An annotation as a JSON object with a key, value, and optional link, e.g. \{"key":"commit","value":"abc123","link":"https://..."\}.
 
 #### auto-approve
 
@@ -322,7 +322,7 @@ tharsis destroy -directory-path "./terraform" trn:workspace:<workspace_path>
   
 #### annotation <span style={{color:'green'}}>...</span>
 
-An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.
+An annotation as a JSON object with a key, value, and optional link, e.g. \{"key":"commit","value":"abc123","link":"https://..."\}.
 
 #### auto-approve
 
@@ -1346,7 +1346,7 @@ Resource path to the managed identity.\
 
 #### module-attestation-policy <span style={{color:'green'}}>...</span>
 
-Module attestation policy in format "[PredicateType=someval,]PublicKeyFile=/path/to/file".
+Module attestation policy in format "\[PredicateType=someval,\]PublicKeyFile=/path/to/file".
 
 #### rule-type <span style={{color:'red'}}>*</span>
 
@@ -1450,7 +1450,7 @@ Show final output as JSON.
 
 #### module-attestation-policy <span style={{color:'green'}}>...</span>
 
-Module attestation policy in format "[PredicateType=someval,]PublicKeyFile=/path/to/file".
+Module attestation policy in format "\[PredicateType=someval,\]PublicKeyFile=/path/to/file".
 
 #### verify-state-lineage
 
@@ -2177,7 +2177,7 @@ tharsis plan -directory-path "./terraform" trn:workspace:<workspace_path>
   
 #### annotation <span style={{color:'green'}}>...</span>
 
-An annotation as a JSON object with a key, value, and optional link, e.g. {"key":"commit","value":"abc123","link":"https://..."}. May be repeated.
+An annotation as a JSON object with a key, value, and optional link, e.g. \{"key":"commit","value":"abc123","link":"https://..."\}.
 
 #### destroy
 
