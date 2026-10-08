@@ -307,6 +307,21 @@ Create Release:
 
       echo "✅ Released ${VERSION}."
 
+#################################
+##            DOCS             ##
+#################################
+
+# Redeploy the docs site when the generated CLI command reference changes.
+Trigger Docs Redeploy:
+  stage: .post
+  trigger:
+    project: infor-cloud/martian-cloud/tharsis/tharsis-docs
+    branch: main
+    strategy: depend
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - docs/commands.md
 
 #################################
 ##            BUILD            ##
