@@ -1,0 +1,3 @@
+kind: Fixed
+body: Print streamed job logs verbatim so a '%' in the output is no longer interpreted as a format verb and corrupted (e.g. 80%!o(MISSING)f).
+time: 2026-10-08T15:38:34.000000000-04:00
