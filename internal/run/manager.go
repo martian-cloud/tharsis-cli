@@ -396,7 +396,7 @@ func (m *Manager) streamJobLogs(ctx context.Context, jobID string) error {
 				if color.NoColor {
 					logs = terminal.StripAnsi(logs)
 				}
-				m.ui.Output(logs)
+				m.ui.Output("%s", logs)
 			}
 
 			return event.Completed, nil
