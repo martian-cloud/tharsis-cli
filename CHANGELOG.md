@@ -1,3 +1,11 @@
+## v0.36.0 - 2026-10-06 (5 changes)
+### Added
+- Create Release job supports cutting prereleases (via hyphen in RELEASE_VERSION, e.g. v1.2.3-alpha.1) that tag directly without pushing to main, keeping fragments so they roll into the final release; the job also only runs after a green pipeline.
+- Support run annotations via a repeatable --annotation flag on plan, apply, and destroy, and via the MCP create_run tool, so runs can be traced back to what created them (e.g. commit, ref, merge request, pipeline).
+### Fixed
+- Remove accidentally committed .go/ CI GOPATH cache from repository
+- Reconnect log stream on connection errors to prevent jobs from hanging
+- Detect duplicate endpoint profiles during SSO login and fail with a clear error instead of non-deterministic auth failures
 ## v0.35.0 - 2026-06-23 (1 changes)
 ### ✨ Added
 - Changelog automation and release tagging via changie: changelog fragments enforced per MR, automated version tagging from CHANGELOG.md, and a manual job to cut releases.

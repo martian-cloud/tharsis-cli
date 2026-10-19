@@ -34,7 +34,7 @@ func (r *renderer) Logs(_ runpkg.StageRef, chunk string) error {
 		logs = terminal.StripAnsi(logs)
 	}
 	if logs != "" {
-		r.ui.Output(logs)
+		r.ui.Output("%s", logs)
 	}
 	return nil
 }
