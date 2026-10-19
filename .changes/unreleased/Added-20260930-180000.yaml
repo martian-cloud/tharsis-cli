@@ -1,0 +1,3 @@
+kind: Added
+body: plan, apply and destroy follow every stage of a run, including pre-plan, post-plan, pre-apply and post-apply policy stages, and show each stage's policy findings.
+time: 2026-09-30T18:00:00.000000000-04:00

@@ -11,15 +11,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/hashicorp/go-hclog"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/varparser"
-	"google.golang.org/grpc"
+	runpkg "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/pkg/run"
 	"google.golang.org/protobuf/encoding/protojson"
 )
+
+// createRunTimeout bounds the create run request, which isn't canceled by the caller's context once
+// it has been sent.
+const createRunTimeout = 2 * time.Minute
 
 // Manager provides high-level run management operations
 type Manager struct {
@@ -44,8 +47,11 @@ type CreateRunInput struct {
 	Annotations      []string
 	IsDestroy        bool
 	IsSpeculative    bool
-	Refresh          *bool
-	RefreshOnly      bool
+	// AutoApply, when true, has the server start the apply phase as soon as the plan (and any
+	// post-plan policy stage) clears, instead of waiting at planned for approval.
+	AutoApply   bool
+	Refresh     *bool
+	RefreshOnly bool
 	// IncludeModulePrereleases, when true and ModuleVersion is unset or a constraint
 	// range, allows prerelease module versions to be selected as "latest".
 	IncludeModulePrereleases bool
@@ -117,7 +123,10 @@ func ValidateRunAnnotation(a *pb.RunAnnotation) error {
 	return nil
 }
 
-// CreateRun creates and executes a run
+// CreateRun uploads the configuration (when a directory is used) and creates the run. It returns
+// the created run without waiting on it; use FollowRun to follow it through its stages.
+//
+// Canceling ctx stops the upload, but not a create request that has already been sent.
 func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run, error) {
 	if input.DirectoryPath != nil && input.ModuleSource != nil {
 		return nil, fmt.Errorf("must not supply both directory-path and module-source")
@@ -186,222 +195,67 @@ func (m *Manager) CreateRun(ctx context.Context, input *CreateRunInput) (*pb.Run
 		Speculative:              &input.IsSpeculative,
 		TerraformVersion:         input.TerraformVersion,
 		IncludeModulePrereleases: &input.IncludeModulePrereleases,
+		AutoApply:                &input.AutoApply,
 	}
 
 	m.logger.Debug("create run input", "input", createRunInput)
 
-	createdRun, err := m.grpcClient.RunsClient.CreateRun(ctx, createRunInput)
+	if err = ctx.Err(); err != nil {
+		return nil, fmt.Errorf("failed to create run: %w", err)
+	}
+
+	// Once the request is sent, see it through even if ctx is canceled (by Ctrl-C) meanwhile: a
+	// canceled request may still have created the run, which the caller then couldn't follow or
+	// cancel. The caller sees ctx is done when it follows the returned run.
+	createCtx, cancelCreate := context.WithTimeout(context.WithoutCancel(ctx), createRunTimeout)
+	defer cancelCreate()
+	createdRun, err := m.grpcClient.RunsClient.CreateRun(createCtx, createRunInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create run: %w", err)
 	}
 
-	m.ui.Output("Waiting on run to start")
-
 	m.logger.Debug("created run", "run_id", createdRun.Metadata.Id)
 
-	// Wait until the plan job has been created before requesting it, to avoid a race
-	// where the job does not yet exist. The plan status is the authoritative signal.
-	if err = waitForRunJob(ctx, m, createdRun.WorkspaceId, createdRun.Metadata.Id, func(ctx context.Context) (pb.PlanStatus, error) {
-		plan, pErr := m.grpcClient.RunsClient.GetPlanByID(ctx, &pb.GetPlanByIDRequest{Id: createdRun.PlanId})
-		if pErr != nil {
-			return pb.PlanStatus_UNSPECIFIED, pErr
-		}
-		return plan.Status, nil
-	}, planJobReady); err != nil {
-		return nil, fmt.Errorf("failed waiting for plan job: %w", err)
-	}
-
-	// Get the job for the plan
-	job, err := m.grpcClient.JobsClient.GetLatestJobForPlan(ctx, &pb.GetLatestJobForPlanRequest{
-		PlanId: createdRun.PlanId,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get job for plan: %w", err)
-	}
-
-	// Stream plan logs
-	if err = m.streamJobLogs(ctx, job.Metadata.Id); err != nil {
-		return nil, fmt.Errorf("failed to stream plan logs: %w", err)
-	}
-
-	// Get final run status
-	finalRun, err := m.grpcClient.RunsClient.GetRunByID(ctx, &pb.GetRunByIDRequest{
-		Id: createdRun.Metadata.Id,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get final run: %w", err)
-	}
-
-	if finalRun.Status == pb.RunStatus_CANCELED || finalRun.Status == pb.RunStatus_DISCARDED || finalRun.Status == pb.RunStatus_ERRORED {
-		return nil, fmt.Errorf("run ended with status: %s", finalRun.Status)
-	}
-
-	return finalRun, nil
+	return createdRun, nil
 }
 
-// ApplyRun applies a run
-func (m *Manager) ApplyRun(ctx context.Context, runID string) (*pb.Run, error) {
-	// Apply the run
-	appliedRun, err := m.grpcClient.RunsClient.ApplyRun(ctx, &pb.ApplyRunRequest{
-		RunId: runID,
+// Overridable for tests; zero uses the pkg/run defaults.
+var (
+	pollInterval   time.Duration
+	readRetryDelay time.Duration
+)
+
+// FollowOptions controls how the CLI follows a run.
+type FollowOptions struct {
+	// Input is false when the user passed -input=false; the CLI then never prompts, and waits for
+	// decisions to be made elsewhere (the Tharsis UI). A non-interactive terminal is treated the
+	// same way for policy gates.
+	Input bool
+	// WaitTimeout is how long to wait on a decision, whether asked for at the terminal or being made
+	// in the Tharsis UI, before leaving the run waiting and exiting. Zero uses
+	// runpkg.DefaultWaitTimeout; there is no way to wait forever.
+	WaitTimeout time.Duration
+}
+
+// FollowRun follows a created run through each of its stages at the terminal, asking for decisions
+// when a stage blocks on a person. It wires the CLI's hooks (rendering, prompting and interrupt
+// handling) into the generic follower in pkg/run.
+//
+// ctx is canceled by the first interrupt, with a SignalError cause naming the signal, and cancelCtx
+// by the second. At an interactive terminal the first Ctrl-C asks whether to cancel a run that is
+// still doing work; the second abandons that question. Any other interrupt leaves the run going.
+func (m *Manager) FollowRun(ctx, cancelCtx context.Context, createdRun *pb.Run, opts *FollowOptions) (*runpkg.Outcome, error) {
+	prompter := NewPrompter(m.ui, opts.Input)
+	return runpkg.Follow(ctx, m.grpcClient, createdRun, &runpkg.Options{
+		Observer:       &renderer{ui: m.ui, runID: createdRun.Metadata.Id},
+		Decider:        &cliDecider{ui: m.ui, prompter: prompter},
+		Interrupter:    &cliInterrupter{ui: m.ui, prompter: prompter, stopCtx: ctx},
+		CleanupContext: cancelCtx,
+		WaitTimeout:    opts.WaitTimeout,
+		PollInterval:   pollInterval,
+		RetryDelay:     readRetryDelay,
+		Logger:         m.logger,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to apply run: %w", err)
-	}
-
-	// Wait until the apply job has been created before requesting it, to avoid a race
-	// where the job does not yet exist. The apply status is the authoritative signal.
-	if err = waitForRunJob(ctx, m, appliedRun.WorkspaceId, runID, func(ctx context.Context) (pb.ApplyStatus, error) {
-		apply, aErr := m.grpcClient.RunsClient.GetApplyByID(ctx, &pb.GetApplyByIDRequest{Id: appliedRun.ApplyId})
-		if aErr != nil {
-			return pb.ApplyStatus_UNSPECIFIED, aErr
-		}
-		return apply.Status, nil
-	}, applyJobReady); err != nil {
-		return nil, fmt.Errorf("failed waiting for apply job: %w", err)
-	}
-
-	// Get the job for the apply
-	job, err := m.grpcClient.JobsClient.GetLatestJobForApply(ctx, &pb.GetLatestJobForApplyRequest{
-		ApplyId: appliedRun.ApplyId,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get job for apply: %w", err)
-	}
-
-	// Stream apply logs
-	if err = m.streamJobLogs(ctx, job.Metadata.Id); err != nil {
-		return nil, fmt.Errorf("failed to stream apply logs: %w", err)
-	}
-
-	// Get final run status
-	finalRun, err := m.grpcClient.RunsClient.GetRunByID(ctx, &pb.GetRunByIDRequest{
-		Id: runID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get final run: %w", err)
-	}
-
-	if finalRun.Status != pb.RunStatus_APPLIED {
-		return nil, fmt.Errorf("apply ended with status: %s", finalRun.Status)
-	}
-
-	return finalRun, nil
-}
-
-// waitForRunJob blocks until ready reports the plan/apply job has been created. It
-// checks the current status first, then subscribes to run events as a wake-up signal,
-// re-checking the authoritative plan/apply status (getStatus) on each event. It returns
-// an error if the plan/apply reaches a final state before a job becomes available, or
-// if the run event stream cannot be established or closes first.
-func waitForRunJob[S comparable](
-	ctx context.Context,
-	m *Manager,
-	workspaceID, runID string,
-	getStatus func(context.Context) (S, error),
-	ready func(status S) (bool, error),
-) error {
-	// Check current state first; the subscription does not replay current state, so a
-	// transition that already happened could otherwise be missed.
-	status, err := getStatus(ctx)
-	if err != nil {
-		return err
-	}
-	if done, rErr := ready(status); rErr != nil || done {
-		return rErr
-	}
-
-	// Subscribe to run events as wake-ups, re-checking the authoritative status on each.
-	// StreamWithReconnect rides through server drains; it tears the stream down on return.
-	err = client.StreamWithReconnect(ctx,
-		func(streamCtx context.Context) (grpc.ServerStreamingClient[pb.RunEvent], error) {
-			return m.grpcClient.RunsClient.SubscribeToRunEvents(streamCtx, &pb.SubscribeToRunEventsRequest{
-				WorkspaceId: &workspaceID,
-				RunId:       &runID,
-			})
-		},
-		func(_ *pb.RunEvent) (bool, error) {
-			status, err := getStatus(ctx)
-			if err != nil {
-				return false, err
-			}
-
-			return ready(status)
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	// The handler reported ready, or the stream ended; a final check decides which, since
-	// events during a reconnect gap aren't replayed.
-	status, err = getStatus(ctx)
-	if err != nil {
-		return err
-	}
-	if done, rErr := ready(status); rErr != nil || done {
-		return rErr
-	}
-
-	return fmt.Errorf("run event stream closed before a job was available")
-}
-
-// planJobReady reports whether the plan's job has been created, based on the plan
-// status. A job exists once the plan reaches queued and through its terminal states.
-// A plan that reaches a final state without a job (canceled) is an error.
-func planJobReady(status pb.PlanStatus) (bool, error) {
-	switch status {
-	case pb.PlanStatus_QUEUED, pb.PlanStatus_RUNNING, pb.PlanStatus_FINISHED, pb.PlanStatus_ERRORED:
-		// A job exists.
-		return true, nil
-	case pb.PlanStatus_CANCELED:
-		return false, fmt.Errorf("plan reached final state before a job was available; status: %s", status)
-	default:
-		// created, pending: job not created yet.
-		return false, nil
-	}
-}
-
-// applyJobReady reports whether the apply's job has been created, based on the apply
-// status. A job exists once the apply reaches queued and through its terminal states.
-// An apply that reaches a final state without a job (canceled) is an error.
-func applyJobReady(status pb.ApplyStatus) (bool, error) {
-	switch status {
-	case pb.ApplyStatus_QUEUED, pb.ApplyStatus_RUNNING, pb.ApplyStatus_FINISHED, pb.ApplyStatus_ERRORED:
-		// A job exists.
-		return true, nil
-	case pb.ApplyStatus_CANCELED:
-		return false, fmt.Errorf("apply reached final state before a job was available; status: %s", status)
-	default:
-		// created, pending: job not created yet.
-		return false, nil
-	}
-}
-
-func (m *Manager) streamJobLogs(ctx context.Context, jobID string) error {
-	var lastSeen int32
-
-	// Resume from the last byte seen so a reconnect (e.g. server drain) doesn't reprint logs.
-	return client.StreamWithReconnect(ctx,
-		func(streamCtx context.Context) (grpc.ServerStreamingClient[pb.JobLogStreamEvent], error) {
-			return m.grpcClient.JobsClient.SubscribeToJobLogStream(streamCtx, &pb.SubscribeToJobLogStreamRequest{
-				JobId:           jobID,
-				LastSeenLogSize: &lastSeen,
-			})
-		},
-		func(event *pb.JobLogStreamEvent) (bool, error) {
-			lastSeen = event.Size
-			if event.Data != nil {
-				logs := strings.TrimSpace(event.Data.Logs)
-				if color.NoColor {
-					logs = terminal.StripAnsi(logs)
-				}
-				m.ui.Output(logs)
-			}
-
-			return event.Completed, nil
-		},
-	)
 }
 
 func (m *Manager) parseVariables(directoryPath string, input *CreateRunInput) ([]*pb.RunVariableInput, error) {
