@@ -2,12 +2,11 @@ package command
 
 import (
 	"errors"
+	"time"
 
-	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/run"
-	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
 )
 
 type destroyCommand struct {
@@ -25,6 +24,7 @@ type destroyCommand struct {
 	annotations              []string
 	autoApprove              *bool
 	input                    *bool
+	waitTimeout              *time.Duration
 	refresh                  *bool
 	includeModulePrereleases *bool
 }
@@ -73,6 +73,10 @@ func (c *destroyCommand) Run(args []string) int {
 
 	defer tokenResolver.Close()
 
+	// The first Ctrl-C stops following and offers to cancel the run; a second exits immediately.
+	ctx, cancelCtx, release := interruptContexts(c.Context)
+	defer release()
+
 	runMgr, err := run.NewManager(c.grpcClient, tokenResolver, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create run manager")
@@ -80,7 +84,7 @@ func (c *destroyCommand) Run(args []string) int {
 	}
 
 	// Create non-speculative destroy run
-	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
+	createdRun, err := runMgr.CreateRun(ctx, &run.CreateRunInput{
 		WorkspaceID:              trn.TypeWorkspace.Normalize(c.arguments[0]),
 		DirectoryPath:            c.directoryPath,
 		ModuleSource:             c.moduleSource,
@@ -94,6 +98,7 @@ func (c *destroyCommand) Run(args []string) int {
 		Annotations:              c.annotations,
 		IsDestroy:                true,
 		IsSpeculative:            false,
+		AutoApply:                *c.autoApprove,
 		Refresh:                  c.refresh,
 		IncludeModulePrereleases: *c.includeModulePrereleases,
 	})
@@ -102,47 +107,10 @@ func (c *destroyCommand) Run(args []string) int {
 		return 1
 	}
 
-	// Check if plan has changes
-	if runResult.Status == pb.RunStatus_PLANNED_AND_FINISHED {
-		c.UI.Output("Stopping since plan had no changes.")
-		return 0
-	}
-
-	// Return if input is false and autoApprove is not set
-	if !*c.input && !*c.autoApprove {
-		c.UI.Output("Will not apply the plan since -input was false.")
-		return 0
-	}
-
-	// Handle approval
-	if *c.autoApprove {
-		c.UI.Output("\nAuto-approving.\n")
-	} else {
-		c.UI.Output("\nDo you approve to destroy the above resources?\n")
-		answer, err := c.UI.Input(&terminal.Input{
-			Prompt: "  only 'yes' will be accepted: ",
-		})
-		if err != nil {
-			c.UI.ErrorWithSummary(err, "failed to ask for approval")
-			return 1
-		}
-		if answer != "yes" {
-			c.UI.Output("Approval response was negative. Will not destroy resources.")
-			return 0
-		}
-		c.UI.Output("\n")
-	}
-
-	// Apply the destroy run
-	appliedRun, err := runMgr.ApplyRun(c.Context, runResult.Metadata.Id)
-	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to apply run")
-		return 1
-	}
-
-	c.Logger.Debug("destroy completed", "run_id", appliedRun.Metadata.Id, "status", appliedRun.Status.String())
-
-	return 0
+	return followRunAndReport(ctx, cancelCtx, c.UI, runMgr, createdRun, &run.FollowOptions{
+		Input:       *c.input,
+		WaitTimeout: *c.waitTimeout,
+	})
 }
 
 func (*destroyCommand) Synopsis() string {
@@ -154,6 +122,7 @@ func (*destroyCommand) Description() string {
    Destroys all resources in a workspace. Creates a
    destroy plan, then applies after approval.
 
+` + followHelp("destroy", true) + `
    Terraform variables may be passed in via supported
    options or from the environment with a 'TF_VAR_' prefix.
 `
@@ -198,12 +167,7 @@ func (c *destroyCommand) Flags() *flag.Set {
 		"Skip interactive approval of the plan.",
 		flag.Default(false),
 	)
-	f.BoolVar(
-		&c.input,
-		"input",
-		"Ask for input for variables if not directly set.",
-		flag.Default(true),
-	)
+	addFollowFlags(f, &c.input, &c.waitTimeout)
 	f.BoolVar(
 		&c.refresh,
 		"refresh",

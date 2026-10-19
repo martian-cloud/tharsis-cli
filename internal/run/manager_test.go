@@ -2,7 +2,6 @@ package run
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,15 +9,10 @@ import (
 	"github.com/aws/smithy-go/ptr"
 	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
-	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/mcp/tools/mocks"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/terminal"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 )
 
 func TestCreateRun(t *testing.T) {
@@ -73,209 +67,6 @@ func TestCreateRun(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestApplyRun(t *testing.T) {
-	// Note: Success cases with log streaming are not tested here due to complexity of mocking gRPC streams.
-	// Those scenarios are covered by integration tests.
-	type testCase struct {
-		name       string
-		runID      string
-		setupMocks func(*client.GRPCClient)
-	}
-
-	testCases := []testCase{
-		{
-			name:  "apply run fails",
-			runID: "run1",
-			setupMocks: func(c *client.GRPCClient) {
-				mockRuns := c.RunsClient.(*mocks.RunsClient)
-				mockRuns.On("ApplyRun", mock.Anything, &pb.ApplyRunRequest{RunId: "run1"}).
-					Return(nil, assert.AnError)
-			},
-		},
-		{
-			name:  "get job fails",
-			runID: "run1",
-			setupMocks: func(c *client.GRPCClient) {
-				mockRuns := c.RunsClient.(*mocks.RunsClient)
-				mockJobs := c.JobsClient.(*mocks.JobsClient)
-				mockRuns.On("ApplyRun", mock.Anything, &pb.ApplyRunRequest{RunId: "run1"}).
-					Return(&pb.Run{ApplyId: "apply1", Status: pb.RunStatus_APPLY_QUEUED}, nil)
-				mockRuns.On("GetApplyByID", mock.Anything, &pb.GetApplyByIDRequest{Id: "apply1"}).
-					Return(&pb.Apply{Status: pb.ApplyStatus_QUEUED}, nil)
-				mockJobs.On("GetLatestJobForApply", mock.Anything, &pb.GetLatestJobForApplyRequest{ApplyId: "apply1"}).
-					Return(nil, assert.AnError)
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			grpcClient := &client.GRPCClient{
-				RunsClient: mocks.NewRunsClient(t),
-				JobsClient: mocks.NewJobsClient(t),
-			}
-			tc.setupMocks(grpcClient)
-
-			mgr := &Manager{
-				grpcClient: grpcClient,
-				logger:     hclog.NewNullLogger(),
-				ui:         terminal.NewNoopUI(),
-			}
-
-			_, err := mgr.ApplyRun(context.Background(), tc.runID)
-			require.Error(t, err)
-		})
-	}
-}
-
-func TestPlanJobReady(t *testing.T) {
-	type testCase struct {
-		name        string
-		status      pb.PlanStatus
-		expectReady bool
-		expectError bool
-	}
-
-	testCases := []testCase{
-		{name: "created", status: pb.PlanStatus_CREATED, expectReady: false},
-		{name: "pending", status: pb.PlanStatus_PENDING, expectReady: false},
-		{name: "queued", status: pb.PlanStatus_QUEUED, expectReady: true},
-		{name: "running", status: pb.PlanStatus_RUNNING, expectReady: true},
-		{name: "finished", status: pb.PlanStatus_FINISHED, expectReady: true},
-		{name: "errored", status: pb.PlanStatus_ERRORED, expectReady: true},
-		{name: "canceled", status: pb.PlanStatus_CANCELED, expectError: true},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ready, err := planJobReady(tc.status)
-			if tc.expectError {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tc.expectReady, ready)
-		})
-	}
-}
-
-func TestApplyJobReady(t *testing.T) {
-	type testCase struct {
-		name        string
-		status      pb.ApplyStatus
-		expectReady bool
-		expectError bool
-	}
-
-	testCases := []testCase{
-		{name: "created", status: pb.ApplyStatus_CREATED, expectReady: false},
-		{name: "pending", status: pb.ApplyStatus_PENDING, expectReady: false},
-		{name: "queued", status: pb.ApplyStatus_QUEUED, expectReady: true},
-		{name: "running", status: pb.ApplyStatus_RUNNING, expectReady: true},
-		{name: "finished", status: pb.ApplyStatus_FINISHED, expectReady: true},
-		{name: "errored", status: pb.ApplyStatus_ERRORED, expectReady: true},
-		{name: "canceled", status: pb.ApplyStatus_CANCELED, expectError: true},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ready, err := applyJobReady(tc.status)
-			if tc.expectError {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tc.expectReady, ready)
-		})
-	}
-}
-
-// fakeRunEventStream is a minimal grpc.ServerStreamingClient[pb.RunEvent] for tests.
-type fakeRunEventStream struct {
-	events []*pb.RunEvent
-	idx    int
-}
-
-func (s *fakeRunEventStream) Recv() (*pb.RunEvent, error) {
-	if s.idx >= len(s.events) {
-		return nil, io.EOF
-	}
-	event := s.events[s.idx]
-	s.idx++
-	return event, nil
-}
-
-func (*fakeRunEventStream) Header() (metadata.MD, error) { return nil, nil }
-func (*fakeRunEventStream) Trailer() metadata.MD         { return nil }
-func (*fakeRunEventStream) CloseSend() error             { return nil }
-func (*fakeRunEventStream) Context() context.Context     { return context.Background() }
-func (*fakeRunEventStream) SendMsg(any) error            { return nil }
-func (*fakeRunEventStream) RecvMsg(any) error            { return nil }
-
-func TestWaitForRunJob(t *testing.T) {
-	// statusReturner returns the supplied statuses in order across calls, repeating the last.
-	statusReturner := func(statuses ...pb.PlanStatus) func(context.Context) (pb.PlanStatus, error) {
-		i := 0
-		return func(context.Context) (pb.PlanStatus, error) {
-			s := statuses[i]
-			if i < len(statuses)-1 {
-				i++
-			}
-			return s, nil
-		}
-	}
-
-	newManager := func(t *testing.T) (*Manager, *mocks.RunsClient) {
-		runs := mocks.NewRunsClient(t)
-		return &Manager{
-			grpcClient: &client.GRPCClient{RunsClient: runs},
-			logger:     hclog.NewNullLogger(),
-			ui:         terminal.NewNoopUI(),
-		}, runs
-	}
-
-	t.Run("returns when initial status already shows a job", func(t *testing.T) {
-		mgr, _ := newManager(t) // SubscribeToRunEvents must not be called
-		err := waitForRunJob(context.Background(), mgr, "ws-1", "run-1",
-			statusReturner(pb.PlanStatus_QUEUED), planJobReady)
-		require.NoError(t, err)
-	})
-
-	t.Run("returns error when initial status is a final state without a job", func(t *testing.T) {
-		mgr, _ := newManager(t)
-		err := waitForRunJob(context.Background(), mgr, "ws-1", "run-1",
-			statusReturner(pb.PlanStatus_CANCELED), planJobReady)
-		require.Error(t, err)
-	})
-
-	t.Run("propagates getStatus error", func(t *testing.T) {
-		mgr, _ := newManager(t)
-		err := waitForRunJob(context.Background(), mgr, "ws-1", "run-1",
-			func(context.Context) (pb.PlanStatus, error) {
-				return pb.PlanStatus_UNSPECIFIED, status.Error(codes.NotFound, "not found")
-			}, planJobReady)
-		require.Error(t, err)
-	})
-
-	t.Run("returns error when subscribe fails", func(t *testing.T) {
-		mgr, runs := newManager(t)
-		runs.On("SubscribeToRunEvents", mock.Anything, mock.Anything).
-			Return(nil, status.Error(codes.Unimplemented, "not supported"))
-		err := waitForRunJob(context.Background(), mgr, "ws-1", "run-1",
-			statusReturner(pb.PlanStatus_PENDING, pb.PlanStatus_QUEUED), planJobReady)
-		require.Error(t, err)
-	})
-
-	t.Run("waits for a run event then proceeds", func(t *testing.T) {
-		mgr, runs := newManager(t)
-		runs.On("SubscribeToRunEvents", mock.Anything, mock.Anything).
-			Return(&fakeRunEventStream{events: []*pb.RunEvent{{Run: &pb.Run{Status: pb.RunStatus_PLAN_QUEUED}}}}, nil)
-		err := waitForRunJob(context.Background(), mgr, "ws-1", "run-1",
-			statusReturner(pb.PlanStatus_PENDING, pb.PlanStatus_QUEUED), planJobReady)
-		require.NoError(t, err)
-	})
 }
 
 func TestProcessDirectoryPath(t *testing.T) {

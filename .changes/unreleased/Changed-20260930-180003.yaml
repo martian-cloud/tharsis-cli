@@ -1,0 +1,3 @@
+kind: Changed
+body: 'Plan approval in apply and destroy now takes ''yes'' to apply, ''no'' to discard the run, or Enter to leave it waiting (exit code 1); previously any answer other than ''yes'' exited 0 and left the run planned.'
+time: 2026-09-30T18:00:03.000000000-04:00
