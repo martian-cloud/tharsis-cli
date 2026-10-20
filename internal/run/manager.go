@@ -241,16 +241,16 @@ type FollowOptions struct {
 // when a stage blocks on a person. It wires the CLI's hooks (rendering, prompting and interrupt
 // handling) into the generic follower in pkg/run.
 //
-// ctx is canceled by the first interrupt, with a SignalError cause naming the signal, and cancelCtx
+// ctx is canceled by the first interrupt, with a SignalError cause naming the signal, and cleanupCtx
 // by the second. At an interactive terminal the first Ctrl-C asks whether to cancel a run that is
 // still doing work; the second abandons that question. Any other interrupt leaves the run going.
-func (m *Manager) FollowRun(ctx, cancelCtx context.Context, createdRun *pb.Run, opts *FollowOptions) (*runpkg.Outcome, error) {
+func (m *Manager) FollowRun(ctx, cleanupCtx context.Context, createdRun *pb.Run, opts *FollowOptions) (*runpkg.Outcome, error) {
 	prompter := NewPrompter(m.ui, opts.Input)
 	return runpkg.Follow(ctx, m.grpcClient, createdRun, &runpkg.Options{
 		Observer:       &renderer{ui: m.ui, runID: createdRun.Metadata.Id},
 		Decider:        &cliDecider{ui: m.ui, prompter: prompter},
-		Interrupter:    &cliInterrupter{ui: m.ui, prompter: prompter, stopCtx: ctx},
-		CleanupContext: cancelCtx,
+		Interrupter:    &cliInterrupter{ui: m.ui, prompter: prompter, followCtx: ctx},
+		CleanupContext: cleanupCtx,
 		WaitTimeout:    opts.WaitTimeout,
 		PollInterval:   pollInterval,
 		RetryDelay:     readRetryDelay,

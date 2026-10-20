@@ -91,7 +91,7 @@ func (s *taskStage) sync(ctx context.Context, run *pb.Run) (stageStatus, error) 
 		s.f.waiting(s.stage, waitReason(run.Status), "")
 		return stageWaiting, nil
 	case pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_COMPLETED:
-		if s.f.skipping() && !s.announced {
+		if s.f.shouldSkipFinished() && !s.announced {
 			s.settledBeforeFollow = true
 		}
 		if s.settledBeforeFollow {
@@ -137,8 +137,9 @@ func (s *taskStage) sync(ctx context.Context, run *pb.Run) (stageStatus, error) 
 // syncBlocked handles a stage blocked on its gates: it asks for a decision on any the caller may
 // still act on, or waits for them to be decided elsewhere.
 func (s *taskStage) syncBlocked(ctx context.Context) (stageStatus, error) {
-	if s.deferred || s.f.decider == nil {
+	if s.deferred || s.f.decider == nil || len(s.approved) > 0 {
 		// Keep the gates current, so the waiting line follows the approvals as they come in.
+		// That includes the caller's own, once the stage is only waiting on other approvers.
 		if err := s.refreshResults(ctx); err != nil {
 			return stageWaiting, err
 		}
@@ -244,7 +245,7 @@ func (s *taskStage) decide(ctx context.Context, run *pb.Run) (decisionResult, er
 			CanOverride: len(overridable) > 0,
 		}
 
-		decision, how, err := decide(ctx, s.f, stillBlocked,
+		decision, how, err := decide(ctx, s.f, run, stillBlocked,
 			func(ctx context.Context) (GateDecision, error) { return s.f.decider.DecideGates(ctx, req) })
 		if err != nil {
 			return decisionActed, err

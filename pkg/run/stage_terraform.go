@@ -74,7 +74,7 @@ func (s *terraformStage) sync(ctx context.Context, run *pb.Run) (stageStatus, er
 		return stageWaiting, nil
 	}
 
-	if state == nodeFinished && s.f.skipping() {
+	if state == nodeFinished && s.f.shouldSkipFinished() {
 		// Finished before following began: don't show it, but remember its job so a retry is shown.
 		s.announced = true
 		if jobID != nil {
@@ -124,8 +124,8 @@ func planState(s pb.PlanStatus) nodeState {
 	case pb.PlanStatus_ERRORED, pb.PlanStatus_CANCELED:
 		return nodeFailed
 	default:
-		// created, and skipped (which the wire enum doesn't carry, so it arrives as unspecified). A
-		// skipped plan only happens on a run that ended, which the driver handles.
+		// CREATED, and UNSPECIFIED. A skipped plan has no wire value yet (the server maps it to
+		// UNSPECIFIED); it only happens on a run that ended, which the driver handles.
 		return nodeNotStarted
 	}
 }

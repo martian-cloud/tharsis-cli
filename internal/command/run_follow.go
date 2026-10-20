@@ -23,13 +23,13 @@ const (
 	terminatedExitCode  = 143 // SIGTERM
 )
 
-// interruptContexts listens for Ctrl-C (SIGINT) and SIGTERM: stopCtx is canceled by the first
-// signal, which stops following the run, and cancelCtx by the second, which abandons any question
+// interruptContexts listens for Ctrl-C (SIGINT) and SIGTERM: followCtx is canceled by the first
+// signal, which stops following the run, and cleanupCtx by the second, which abandons any question
 // asked about the run. Each is canceled with a run.SignalError cause naming the signal, so the
 // interrupt handling can tell them apart. release stops listening.
-func interruptContexts(parent context.Context) (stopCtx, cancelCtx context.Context, release func()) {
-	stopCtx, stop := context.WithCancelCause(parent)
-	cancelCtx, cancel := context.WithCancelCause(parent)
+func interruptContexts(parent context.Context) (followCtx, cleanupCtx context.Context, release func()) {
+	followCtx, stop := context.WithCancelCause(parent)
+	cleanupCtx, cancel := context.WithCancelCause(parent)
 
 	signals := make(chan os.Signal, 2)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
@@ -46,7 +46,7 @@ func interruptContexts(parent context.Context) (stopCtx, cancelCtx context.Conte
 		}
 	}()
 
-	return stopCtx, cancelCtx, func() {
+	return followCtx, cleanupCtx, func() {
 		signal.Stop(signals)
 		close(done)
 		stop(nil)
@@ -54,17 +54,17 @@ func interruptContexts(parent context.Context) (stopCtx, cancelCtx context.Conte
 	}
 }
 
-// signalExitCode is the exit code for following a run stopped by the signal that canceled stopCtx.
-func signalExitCode(stopCtx context.Context) int {
-	if run.InterruptSignal(stopCtx) == syscall.SIGTERM {
+// signalExitCode is the exit code for following a run stopped by the signal that canceled followCtx.
+func signalExitCode(followCtx context.Context) int {
+	if run.InterruptSignal(followCtx) == syscall.SIGTERM {
 		return terminatedExitCode
 	}
 	return interruptedExitCode
 }
 
 // followRunAndReport follows a created run through its stages and maps how following ended to an exit code.
-func followRunAndReport(stopCtx, cancelCtx context.Context, ui terminal.UI, runMgr *run.Manager, createdRun *pb.Run, opts *run.FollowOptions) int {
-	outcome, err := runMgr.FollowRun(stopCtx, cancelCtx, createdRun, opts)
+func followRunAndReport(followCtx, cleanupCtx context.Context, ui terminal.UI, runMgr *run.Manager, createdRun *pb.Run, opts *run.FollowOptions) int {
+	outcome, err := runMgr.FollowRun(followCtx, cleanupCtx, createdRun, opts)
 	if err != nil {
 		ui.ErrorWithSummary(err, "failed to follow run %s", createdRun.Metadata.Id)
 		return 1
@@ -72,7 +72,7 @@ func followRunAndReport(stopCtx, cancelCtx context.Context, ui terminal.UI, runM
 
 	code := reportOutcome(ui, outcome, opts)
 	if code == interruptedExitCode {
-		code = signalExitCode(stopCtx)
+		code = signalExitCode(followCtx)
 	}
 	warnAdvisories(ui, outcome)
 	return code
@@ -198,6 +198,8 @@ func reportOutcome(ui terminal.UI, outcome *runpkg.Outcome, opts *run.FollowOpti
 			ui.Output("\nRun %s was canceled.", runID)
 		case outcome.RunDiscarded:
 			ui.Output("\nRun %s was discarded.", runID)
+		case runpkg.IsRunFinal(outcome.Run.Status):
+			ui.Output("\nStopped following run %s. The run already ended (%s).", runID, status)
 		default:
 			ui.Output("\nStopped following run %s (%s). The run continues in Tharsis.", runID, status)
 		}
