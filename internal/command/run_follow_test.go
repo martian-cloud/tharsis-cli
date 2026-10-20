@@ -17,32 +17,32 @@ import (
 	runpkg "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/pkg/run"
 )
 
-// TestInterruptContexts verifies the first signal cancels only stopCtx and the second cancelCtx.
+// TestInterruptContexts verifies the first signal cancels only followCtx and the second cleanupCtx.
 func TestInterruptContexts(t *testing.T) {
-	stopCtx, cancelCtx, release := interruptContexts(context.Background())
+	followCtx, cleanupCtx, release := interruptContexts(context.Background())
 	defer release()
 
 	// The handler is registered, so signaling ourselves is caught rather than killing the test.
 	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGINT))
-	waitDone(stopCtx, t)
-	assert.NoError(t, cancelCtx.Err(), "the first interrupt leaves cancelCtx alone")
+	waitDone(followCtx, t)
+	assert.NoError(t, cleanupCtx.Err(), "the first interrupt leaves cleanupCtx alone")
 
 	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGINT))
-	waitDone(cancelCtx, t)
-	assert.Equal(t, os.Interrupt, run.InterruptSignal(stopCtx), "the signal is recorded as the cause")
-	assert.Equal(t, interruptedExitCode, signalExitCode(stopCtx))
+	waitDone(cleanupCtx, t)
+	assert.Equal(t, os.Interrupt, run.InterruptSignal(followCtx), "the signal is recorded as the cause")
+	assert.Equal(t, interruptedExitCode, signalExitCode(followCtx))
 }
 
 // TestInterruptContexts_SIGTERM verifies SIGTERM is recorded as the cause and exits 143.
 func TestInterruptContexts_SIGTERM(t *testing.T) {
-	stopCtx, _, release := interruptContexts(context.Background())
+	followCtx, _, release := interruptContexts(context.Background())
 	defer release()
 
 	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGTERM))
-	waitDone(stopCtx, t)
+	waitDone(followCtx, t)
 
-	assert.Equal(t, syscall.SIGTERM, run.InterruptSignal(stopCtx))
-	assert.Equal(t, terminatedExitCode, signalExitCode(stopCtx))
+	assert.Equal(t, syscall.SIGTERM, run.InterruptSignal(followCtx))
+	assert.Equal(t, terminatedExitCode, signalExitCode(followCtx))
 }
 
 // TestWaitTimeoutFlag verifies -wait-timeout defaults to DefaultWaitTimeout and rejects non-positive values.
@@ -73,11 +73,11 @@ func TestWaitTimeoutFlag(t *testing.T) {
 
 // TestInterruptContexts_Release verifies release cancels both contexts.
 func TestInterruptContexts_Release(t *testing.T) {
-	stopCtx, cancelCtx, release := interruptContexts(context.Background())
+	followCtx, cleanupCtx, release := interruptContexts(context.Background())
 	release()
 
-	assert.Error(t, stopCtx.Err())
-	assert.Error(t, cancelCtx.Err())
+	assert.Error(t, followCtx.Err())
+	assert.Error(t, cleanupCtx.Err())
 }
 
 func waitDone(ctx context.Context, t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
@@ -502,7 +503,7 @@ func TestFollow_Interrupt(t *testing.T) {
 	t.Run("cancel cancels a run doing work", func(t *testing.T) {
 		h := newHarness(queued())
 		opts := h.options(nil)
-		opts.Interrupter = always(InterruptCancel)
+		opts.Interrupter = always(InterruptCancelRunIfInProgress)
 
 		outcome := interrupt(t, h, opts)
 
@@ -513,12 +514,15 @@ func TestFollow_Interrupt(t *testing.T) {
 	t.Run("cancel leaves a run waiting on a decision", func(t *testing.T) {
 		h := newHarness(planned())
 		opts := h.options(nil)
-		opts.Interrupter = always(InterruptCancel)
+		opts.Interrupter = always(InterruptCancelRunIfInProgress)
 
 		outcome := interrupt(t, h, opts)
 
 		assert.False(t, outcome.RunCanceled)
 		assert.False(t, outcome.RunDiscarded)
+		failed := find[InterruptFailed](h.rec)
+		require.Len(t, failed, 1, "the interrupter is told the run was not canceled")
+		assert.ErrorIs(t, failed[0].Err, errRunNotCancelable)
 	})
 
 	t.Run("end discards a run waiting on a decision", func(t *testing.T) {
@@ -547,11 +551,45 @@ func TestFollow_Interrupt(t *testing.T) {
 		assert.True(t, outcome.RunCanceled)
 	})
 
+	t.Run("end reports nothing when the run ended as it was interrupted", func(t *testing.T) {
+		h := newHarness(planned())
+		h.runs.DiscardErr = status.Error(codes.AlreadyExists, "run is no longer planned")
+		h.runs.OnDiscard = func(f *runtest.Runs) {
+			f.Set(runtest.AppliedRun())
+		}
+		opts := h.options(nil)
+		opts.Interrupter = always(InterruptEnd)
+
+		outcome := interrupt(t, h, opts)
+
+		assert.False(t, outcome.RunDiscarded)
+		assert.False(t, outcome.RunCanceled)
+		assert.Empty(t, find[InterruptFailed](h.rec))
+	})
+
+	t.Run("cancel leaves a run that moved to a decision while the interrupter decided", func(t *testing.T) {
+		h := newHarness(queued())
+		opts := h.options(nil)
+		opts.Interrupter = interrupterFunc(func(context.Context, *pb.Run) InterruptAction {
+			h.runs.Set(planned()) // the plan finished while the user was being asked
+			return InterruptCancelRunIfInProgress
+		})
+
+		outcome := interrupt(t, h, opts)
+
+		assert.False(t, outcome.RunCanceled)
+		assert.Equal(t, 0, h.runs.Count(&h.runs.Canceled))
+		assert.Equal(t, pb.RunStatus_PLANNED, outcome.Run.Status)
+		failed := find[InterruptFailed](h.rec)
+		require.Len(t, failed, 1)
+		assert.ErrorIs(t, failed[0].Err, errRunNotCancelable)
+	})
+
 	t.Run("a failed cancel is reported", func(t *testing.T) {
 		h := newHarness(queued())
 		h.runs.CancelErr = status.Error(codes.Internal, "boom")
 		opts := h.options(nil)
-		opts.Interrupter = always(InterruptCancel)
+		opts.Interrupter = always(InterruptCancelRunIfInProgress)
 
 		outcome := interrupt(t, h, opts)
 
@@ -568,7 +606,7 @@ func TestFollow_Interrupt(t *testing.T) {
 		opts.CleanupContext = cleanup
 		opts.Interrupter = interrupterFunc(func(context.Context, *pb.Run) InterruptAction {
 			cancel() // a second interrupt while deciding
-			return InterruptCancel
+			return InterruptCancelRunIfInProgress
 		})
 
 		outcome := interrupt(t, h, opts)
@@ -583,7 +621,7 @@ func TestFollow_Interrupt(t *testing.T) {
 		opts := h.options(nil)
 		opts.Interrupter = interrupterFunc(func(context.Context, *pb.Run) InterruptAction {
 			called = true
-			return InterruptEnd
+			return InterruptCancelRunIfInProgress
 		})
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -690,4 +728,93 @@ func TestRunStatusHelpers(t *testing.T) {
 	assert.False(t, IsRunCancelable(pb.RunStatus_PLANNED), "a run waiting on a person is discarded instead")
 	assert.True(t, IsRunCancelable(pb.RunStatus_APPLYING))
 	assert.False(t, IsRunCancelable(pb.RunStatus_APPLIED))
+}
+
+func TestFollower_RefreshRun(t *testing.T) {
+	withVersion := func(v int64) *pb.Run {
+		r := runtest.NewRun(pb.RunStatus_PLANNED)
+		r.Metadata.Version = v
+		return r
+	}
+	newFollower := func(queue ...*pb.Run) (*follower, *runtest.Runs) {
+		runs := runtest.NewRuns(queue...)
+		return &follower{
+			client: runtest.Client(runs, &runtest.Jobs{}),
+			opts:   &Options{},
+			logger: hclog.NewNullLogger(),
+		}, runs
+	}
+	refresh := func(t *testing.T, f *follower, since *pb.Run, forceRead bool) int64 {
+		t.Helper()
+		got, err := f.refreshRun(context.Background(), since, forceRead)
+		require.NoError(t, err)
+		return got.Metadata.Version
+	}
+
+	t.Run("uses an event's run that is newer without reading the run", func(t *testing.T) {
+		f, runs := newFollower(withVersion(1))
+		f.newestRunCache.offer(withVersion(2))
+
+		assert.Equal(t, int64(2), refresh(t, f, withVersion(1), false))
+		assert.Zero(t, runs.Count(&runs.Gets))
+	})
+
+	t.Run("reads the run when the event's run is not newer", func(t *testing.T) {
+		f, runs := newFollower(withVersion(3))
+		f.newestRunCache.offer(withVersion(2))
+
+		assert.Equal(t, int64(3), refresh(t, f, withVersion(2), false))
+		assert.Equal(t, 1, runs.Count(&runs.Gets))
+	})
+
+	t.Run("reads the run when no event delivered one", func(t *testing.T) {
+		f, runs := newFollower(withVersion(2))
+		f.newestRunCache.offer(nil)
+		f.newestRunCache.offer(&pb.Run{})
+
+		assert.Equal(t, int64(2), refresh(t, f, withVersion(1), false))
+		assert.Equal(t, 1, runs.Count(&runs.Gets))
+	})
+
+	t.Run("reads the run when a read is forced", func(t *testing.T) {
+		f, runs := newFollower(withVersion(4))
+		f.newestRunCache.offer(withVersion(3))
+
+		assert.Equal(t, int64(4), refresh(t, f, withVersion(1), true))
+		assert.Equal(t, 1, runs.Count(&runs.Gets))
+	})
+
+	t.Run("returns an event's run newer than the read", func(t *testing.T) {
+		f, _ := newFollower(withVersion(2))
+		f.newestRunCache.offer(withVersion(5))
+
+		assert.Equal(t, int64(5), refresh(t, f, withVersion(1), true))
+	})
+
+	t.Run("keeps the newest of several events", func(t *testing.T) {
+		f, runs := newFollower(withVersion(1))
+		f.newestRunCache.offer(withVersion(3))
+		f.newestRunCache.offer(withVersion(2))
+
+		assert.Equal(t, int64(3), refresh(t, f, withVersion(1), false))
+		assert.Zero(t, runs.Count(&runs.Gets))
+	})
+
+	t.Run("callers don't take an event's run from each other", func(t *testing.T) {
+		f, runs := newFollower(withVersion(1))
+		f.newestRunCache.offer(withVersion(3))
+
+		assert.Equal(t, int64(3), refresh(t, f, withVersion(1), false), "the decision goroutine sees it")
+		assert.Equal(t, int64(3), refresh(t, f, withVersion(2), false), "and so does the driver")
+		assert.Zero(t, runs.Count(&runs.Gets))
+	})
+
+	t.Run("forgets an event's run when the subscription is re-established", func(t *testing.T) {
+		f, runs := newFollower(withVersion(5))
+		f.newestRunCache.offer(withVersion(2))
+		f.newestRunCache.clear()
+
+		assert.Equal(t, int64(5), refresh(t, f, withVersion(1), false))
+		assert.Equal(t, 1, runs.Count(&runs.Gets))
+	})
 }

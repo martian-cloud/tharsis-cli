@@ -417,26 +417,25 @@ func TestFollowRun_Interrupt(t *testing.T) {
 		return newTestRun(pb.RunStatus_PLAN_QUEUED, withPlan(pb.PlanStatus_QUEUED, ""))
 	}
 
-	// interruptWith follows the run with stopCtx canceled by sig after a moment, as interruptContexts
+	// interruptWith follows the run with followCtx canceled by sig after a moment, as interruptContexts
 	// does on the first signal.
-	interruptWith := func(h *harness, sig os.Signal, cancelCtx context.Context, opts *FollowOptions) *runpkg.Outcome {
-		stopCtx, stop := context.WithCancelCause(context.Background())
+	interruptWith := func(h *harness, sig os.Signal, cleanupCtx context.Context, opts *FollowOptions) *runpkg.Outcome {
+		followCtx, stop := context.WithCancelCause(context.Background())
 		timer := time.AfterFunc(50*time.Millisecond, func() { stop(&SignalError{Signal: sig}) })
 		defer timer.Stop()
 		defer stop(nil)
-		outcome, err := h.mgr.FollowRun(stopCtx, cancelCtx, created, opts)
+		outcome, err := h.mgr.FollowRun(followCtx, cleanupCtx, created, opts)
 		require.NoError(t, err)
 		require.Equal(t, OutcomeInterrupted, outcome.Kind)
 		return outcome
 	}
-	interrupt := func(h *harness, cancelCtx context.Context, opts *FollowOptions) *runpkg.Outcome {
-		return interruptWith(h, os.Interrupt, cancelCtx, opts)
+	interrupt := func(h *harness, cleanupCtx context.Context, opts *FollowOptions) *runpkg.Outcome {
+		return interruptWith(h, os.Interrupt, cleanupCtx, opts)
 	}
 	// assertLeftGoing checks the run was neither canceled nor discarded, and nothing was asked.
 	assertLeftGoing := func(t *testing.T, h *harness, outcome *runpkg.Outcome) {
 		t.Helper()
 		assert.False(t, outcome.RunCanceled)
-		assert.False(t, outcome.RunDiscarded)
 		assert.Equal(t, 0, h.runs.Count(&h.runs.Canceled))
 		assert.Equal(t, 0, h.runs.Count(&h.runs.Discarded))
 		assert.NotContains(t, h.ui.output(), "Do you want to cancel")
@@ -465,10 +464,10 @@ func TestFollowRun_Interrupt(t *testing.T) {
 	t.Run("a second interrupt exits without canceling", func(t *testing.T) {
 		// No answer is ever typed; the second interrupt arrives while the question is showing.
 		h := newHarness(t, newFakeUI(true), planning())
-		cancelCtx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 		defer cancel()
 
-		outcome := interrupt(h, cancelCtx, &FollowOptions{Input: true})
+		outcome := interrupt(h, cleanupCtx, &FollowOptions{Input: true})
 
 		assert.False(t, outcome.RunCanceled)
 		assert.Equal(t, 0, h.runs.Count(&h.runs.Canceled))
@@ -587,7 +586,8 @@ func TestFollowRun_PolicyStages(t *testing.T) {
 		h.runs.Results["c1"] = softFailedResults("c1", 2, 0)
 		h.runs.OnApprove = func(f *runtest.Runs) *pb.RunGate {
 			f.Set(awaiting("check-job"), awaiting("check-job"), cleared("check-job", pb.PolicyCheckStatus_POLICY_CHECK_STATUS_OVERRIDDEN))
-			return softFailedResults("c1", 2, 1).RunGate
+			f.Results["c1"] = softFailedResults("c1", 2, 1) // the approval shows in the results
+			return f.Results["c1"].RunGate
 		}
 
 		outcome := h.follow(t, created, &FollowOptions{Input: true})

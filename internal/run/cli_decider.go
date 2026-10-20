@@ -81,7 +81,12 @@ func (d *cliDecider) DecideGates(ctx context.Context, req *runpkg.GateRequest) (
 	prompt := gatePrompt(req.CanApprove, req.CanOverride)
 	for {
 		answer, err := d.prompter.Ask(ctx, prompt)
-		if err != nil {
+		switch {
+		case errors.Is(err, io.EOF):
+			return runpkg.GateDecision{Action: runpkg.GateWaitElsewhere, Reason: "no answer could be read from stdin"}, nil
+		case errors.Is(err, terminal.ErrNonInteractive):
+			return runpkg.GateDecision{Action: runpkg.GateWaitElsewhere, Reason: "the terminal is not interactive"}, nil
+		case err != nil:
 			return runpkg.GateDecision{}, err
 		}
 
@@ -132,8 +137,8 @@ func gatePrompt(canApprove, canOverride bool) string {
 type cliInterrupter struct {
 	ui       outputUI
 	prompter *Prompter
-	// stopCtx is the context the interrupt canceled; its cause says which signal it was.
-	stopCtx context.Context
+	// followCtx is the context the interrupt canceled; its cause says which signal it was.
+	followCtx context.Context
 }
 
 var _ runpkg.Interrupter = (*cliInterrupter)(nil)
@@ -143,7 +148,7 @@ func (i *cliInterrupter) OnInterrupt(ctx context.Context, run *pb.Run) runpkg.In
 		return runpkg.InterruptLeave
 	}
 	switch {
-	case isTerminated(i.stopCtx):
+	case isTerminated(i.followCtx):
 		i.ui.Output("Not canceling the run since the CLI was terminated (SIGTERM).")
 		return runpkg.InterruptLeave
 	case !i.prompter.Terminal():
@@ -162,9 +167,9 @@ func (i *cliInterrupter) OnInterrupt(ctx context.Context, run *pb.Run) runpkg.In
 		}
 		return runpkg.InterruptLeave
 	}
-	if answer != "yes" {
+	if strings.ToLower(strings.TrimSpace(answer)) != "yes" {
 		i.ui.Output("The run was not canceled.")
 		return runpkg.InterruptLeave
 	}
-	return runpkg.InterruptCancel
+	return runpkg.InterruptCancelRunIfInProgress
 }

@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"fmt"
+	"time"
 
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 )
@@ -37,7 +38,7 @@ func (s *planDecisionStage) sync(_ context.Context, run *pb.Run) (stageStatus, e
 	}
 
 	if applyPhaseStarted(run) {
-		if run.AutoApply && !s.reportedAutoApply && !s.f.skipping() {
+		if run.AutoApply && !s.reportedAutoApply && !s.f.shouldSkipFinished() {
 			s.f.emit(AutoApproving{})
 		}
 		s.reportedAutoApply = true
@@ -46,10 +47,16 @@ func (s *planDecisionStage) sync(_ context.Context, run *pb.Run) (stageStatus, e
 
 	switch run.Status {
 	case pb.RunStatus_PLANNED:
-		if run.AutoApply || s.applyRequested {
-			// The server starts the apply of an auto-apply run itself, and the run was already applied.
+		if run.AutoApply {
+			// The server starts the apply of an auto-apply run itself.
 			s.f.waiting(s.stage, WaitApplyStart, "")
 			return stageWaiting, nil
+		}
+		if s.applyRequested {
+			// The run was already applied. If it stays planned, though (the apply conflicted for another
+			// reason), the wait timeout bounds the wait.
+			s.f.waiting(s.stage, WaitApplyStart, "")
+			return stageWaitingOnDecision, nil
 		}
 		if s.f.decider == nil && !s.deferred {
 			s.deferred = true
@@ -79,7 +86,7 @@ func (s *planDecisionStage) sync(_ context.Context, run *pb.Run) (stageStatus, e
 
 func (s *planDecisionStage) decide(ctx context.Context, run *pb.Run) (decisionResult, error) {
 	req := &PlanRequest{Run: run, IsDestroy: run.IsDestroy}
-	decision, how, err := decide(ctx, s.f,
+	decision, how, err := decide(ctx, s.f, run,
 		func(latest *pb.Run) bool { return latest.Status == pb.RunStatus_PLANNED },
 		func(ctx context.Context) (PlanDecision, error) { return s.f.decider.DecidePlan(ctx, req) },
 	)
@@ -119,6 +126,8 @@ func (s *planDecisionStage) apply(ctx context.Context, run *pb.Run) (decisionRes
 		// at the same moment; re-read the run.
 	}
 	s.applyRequested = true
+	// The wait for the apply to start is timed afresh, not from when the decision was first asked.
+	s.f.blockedSince = time.Now()
 	return decisionActed, nil
 }
 

@@ -33,6 +33,10 @@ var (
 	errDecisionTimedOut  = errors.New("timed out waiting for a decision")
 )
 
+// errRunNotCancelable is reported when a run can't be canceled on an interrupt because it is no longer
+// doing work.
+var errRunNotCancelable = errors.New("the run is no longer in progress, so it was not canceled")
+
 // follower holds what the stages share while a run is followed.
 type follower struct {
 	client  *client.GRPCClient
@@ -44,6 +48,9 @@ type follower struct {
 	// changed is signaled (holding at most one pending notification) whenever the run may have
 	// changed: on each run event and each (re)subscription.
 	changed chan struct{}
+
+	// newestRunCache holds the newest run delivered by a run event, which saves reading the run back.
+	newestRunCache runCache
 
 	// lastWaiting is the last Waiting event sent, while nothing else has been reported since.
 	lastWaiting *Waiting
@@ -101,8 +108,16 @@ func Follow(ctx context.Context, grpcClient *client.GRPCClient, run *pb.Run, opt
 	stages := buildPipeline(f, run)
 
 	watchCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	go f.watch(watchCtx, run.WorkspaceId)
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		f.watch(watchCtx, run.WorkspaceId)
+	}()
+	// Stop watching before returning, so nothing runs after Follow has returned.
+	defer func() {
+		cancel()
+		<-watchDone
+	}()
 
 	pollInterval := opts.PollInterval
 	if pollInterval <= 0 {
@@ -111,8 +126,11 @@ func Follow(ctx context.Context, grpcClient *client.GRPCClient, run *pb.Run, opt
 
 	lastRun := run
 	f.firstStep = true
+	// forceRead is set when the last snapshot is known to be behind: a stage reported it stale, or a
+	// decision was acted on. A snapshot from an event sent before then may not show the change.
+	forceRead := false
 	for {
-		current, err := f.getRun(ctx)
+		current, err := f.refreshRun(ctx, lastRun, forceRead)
 		if err != nil {
 			if ctx.Err() != nil {
 				return f.interrupted(ctx, lastRun), nil
@@ -137,6 +155,7 @@ func Follow(ctx context.Context, grpcClient *client.GRPCClient, run *pb.Run, opt
 		} else if f.blockedSince.IsZero() {
 			f.blockedSince = time.Now()
 		}
+		forceRead = !wait.wait
 		if !wait.wait {
 			continue
 		}
@@ -238,9 +257,9 @@ func finalOutcome(run *pb.Run, stage StageRef) *Outcome {
 	return &Outcome{Kind: OutcomeCompleted, Run: run}
 }
 
-// skipping reports whether stages that already finished should be passed over silently: the
+// shouldSkipFinished reports whether stages that already finished should be passed over silently: the
 // caller asked for it, and this is the first snapshot.
-func (f *follower) skipping() bool {
+func (f *follower) shouldSkipFinished() bool {
 	return f.opts.SkipFinished && f.firstStep
 }
 
@@ -257,10 +276,11 @@ const (
 
 // decide runs ask with a context that is canceled once the decision is no longer needed, or when the
 // wait timeout passes: whenever the run may have changed, it is re-read, and stillNeeded is asked
-// whether the decision is still needed.
+// whether the decision is still needed. run is the snapshot the decision is being asked on.
 func decide[T any](
 	ctx context.Context,
 	f *follower,
+	run *pb.Run,
 	stillNeeded func(*pb.Run) bool,
 	ask func(context.Context) (T, error),
 ) (result T, how decideOutcome, err error) {
@@ -272,6 +292,7 @@ func decide[T any](
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Go(func() {
+		latest := run
 		for {
 			select {
 			case <-done:
@@ -280,7 +301,8 @@ func decide[T any](
 				return
 			case <-f.changed:
 			}
-			latest, err := f.getRun(askCtx)
+			var err error
+			latest, err = f.refreshRun(askCtx, latest, false)
 			if err != nil {
 				if askCtx.Err() == nil {
 					f.logger.Debug("failed to read run while waiting for a decision", "error", err)
@@ -393,6 +415,18 @@ func (f *follower) interrupted(ctx context.Context, lastRun *pb.Run) *Outcome {
 		// Interrupted again; leave the run going.
 		return outcome
 	}
+	if action == InterruptLeave {
+		return outcome
+	}
+
+	// The interrupter may have taken a while (asking the user, say), so act on the run as it is now:
+	// a run that has since moved to a decision mustn't be canceled, nor one now doing work discarded.
+	if latest, err := f.getRun(cleanupCtx); err == nil {
+		run = latest
+		outcome.Run = latest
+	} else if cleanupCtx.Err() == nil {
+		f.logger.Debug("failed to re-read run after interrupt decision", "error", err)
+	}
 
 	switch action {
 	case InterruptEnd:
@@ -413,27 +447,38 @@ func (f *follower) interrupted(ctx context.Context, lastRun *pb.Run) *Outcome {
 			}
 			outcome.Run = run
 		}
-		f.cancelRun(cleanupCtx, outcome)
-	case InterruptCancel:
-		f.cancelRun(cleanupCtx, outcome)
+		// The run may have ended in the meantime, which is nothing to report on an end.
+		f.cancelRun(cleanupCtx, outcome, false)
+	case InterruptCancelRunIfInProgress:
+		f.cancelRun(cleanupCtx, outcome, true)
 	}
 	return outcome
 }
 
-// cancelRun cancels the outcome's run if it is doing work.
-func (f *follower) cancelRun(ctx context.Context, outcome *Outcome) {
+// cancelRun cancels the outcome's run if it is doing work. When reportNotCancelable is set, a run
+// that is no longer doing work is reported, rather than leaving a request to cancel it unanswered.
+func (f *follower) cancelRun(ctx context.Context, outcome *Outcome, reportNotCancelable bool) {
 	if !IsRunCancelable(outcome.Run.Status) {
+		if reportNotCancelable {
+			f.emit(InterruptFailed{Action: "cancel", Err: errRunNotCancelable})
+		}
 		return
 	}
 	if _, err := f.client.RunsClient.CancelRun(ctx, &pb.CancelRunRequest{Id: f.runID}); err != nil {
+		if isStateConflict(err) {
+			if !reportNotCancelable {
+				return
+			}
+			err = errRunNotCancelable
+		}
 		f.emit(InterruptFailed{Action: "cancel", Err: err})
 		return
 	}
 	outcome.RunCanceled = true
 }
 
-// watch keeps a run event subscription open for as long as ctx lives, signaling changed on every
-// event and every (re)subscription. It doesn't use the event payloads: the driver re-reads the run.
+// watch keeps a run event subscription open for as long as ctx lives, keeping each event's run and
+// signaling changed on every event and every (re)subscription.
 func (f *follower) watch(ctx context.Context, workspaceID string) {
 	for ctx.Err() == nil {
 		err := client.StreamWithReconnect(ctx,
@@ -443,12 +488,15 @@ func (f *follower) watch(ctx context.Context, workspaceID string) {
 					RunId:       &f.runID,
 				})
 				if err == nil {
-					// Events sent while we were not subscribed aren't replayed; re-read the run.
+					// Events sent while we were not subscribed aren't replayed, so the run delivered before
+					// may be behind: forget it, so the run is read back.
+					f.newestRunCache.clear()
 					f.notify()
 				}
 				return stream, err
 			},
-			func(_ *pb.RunEvent) (bool, error) {
+			func(event *pb.RunEvent) (bool, error) {
+				f.newestRunCache.offer(event.GetRun())
 				f.notify()
 				return false, nil
 			},
@@ -467,6 +515,74 @@ func (f *follower) watch(ctx context.Context, workspaceID string) {
 		case <-time.After(resubscribeDelay):
 		}
 	}
+}
+
+// versionOf is a run's version, or zero if it has none.
+func versionOf(run *pb.Run) int64 {
+	if run == nil || run.Metadata == nil {
+		return 0
+	}
+	return run.Metadata.Version
+}
+
+// runCache holds the newest run delivered by a run event. The server bumps a run's version on every
+// change, its plan, apply and task stages included, so versions alone say which of two snapshots is
+// newer, and a snapshot no newer than one already seen has nothing new.
+//
+// Only events are offered, and both offer and clear are called from the watch goroutine in the order
+// the stream delivers events, so a run from before a resubscribe can't be offered after the clear.
+type runCache struct {
+	mu  sync.Mutex
+	run *pb.Run
+}
+
+// offer keeps run if it is newer than the one held.
+func (c *runCache) offer(run *pb.Run) {
+	if run == nil || run.Metadata == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if versionOf(run) > versionOf(c.run) {
+		c.run = run
+	}
+}
+
+// clear forgets the run held.
+func (c *runCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.run = nil
+}
+
+// newerThan returns the run held if it is newer than since, or nil.
+func (c *runCache) newerThan(since *pb.Run) *pb.Run {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if versionOf(c.run) > versionOf(since) {
+		return c.run
+	}
+	return nil
+}
+
+// refreshRun returns the run as it is now: the run delivered by an event if it is newer than since,
+// the snapshot the caller last used, and otherwise (or when forceRead is set) the newer of a read and
+// the run delivered by an event.
+func (f *follower) refreshRun(ctx context.Context, since *pb.Run, forceRead bool) (*pb.Run, error) {
+	if !forceRead {
+		if run := f.newestRunCache.newerThan(since); run != nil {
+			return run, nil
+		}
+	}
+	run, err := f.getRun(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// An event may have delivered a newer run while the read was in flight.
+	if newer := f.newestRunCache.newerThan(run); newer != nil {
+		return newer, nil
+	}
+	return run, nil
 }
 
 // notify signals that the run may have changed, without blocking.

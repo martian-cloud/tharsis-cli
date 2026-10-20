@@ -75,7 +75,7 @@ func (c *planCommand) Run(args []string) int {
 	defer tokenResolver.Close()
 
 	// The first Ctrl-C stops following and offers to cancel the run; a second exits immediately.
-	ctx, cancelCtx, release := interruptContexts(c.Context)
+	ctx, cleanupCtx, release := interruptContexts(c.Context)
 	defer release()
 
 	runMgr, err := run.NewManager(c.grpcClient, tokenResolver, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
@@ -107,7 +107,7 @@ func (c *planCommand) Run(args []string) int {
 		return 1
 	}
 
-	return followRunAndReport(ctx, cancelCtx, c.UI, runMgr, createdRun, &run.FollowOptions{
+	return followRunAndReport(ctx, cleanupCtx, c.UI, runMgr, createdRun, &run.FollowOptions{
 		Input:       *c.input,
 		WaitTimeout: *c.waitTimeout,
 	})

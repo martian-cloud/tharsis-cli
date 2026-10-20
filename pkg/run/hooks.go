@@ -62,8 +62,9 @@ type InterruptAction int
 const (
 	// InterruptLeave leaves the run going.
 	InterruptLeave InterruptAction = iota
-	// InterruptCancel cancels the run if it is doing work, and otherwise leaves it.
-	InterruptCancel
+	// InterruptCancelRunIfInProgress cancels the run if it is in progress, and otherwise leaves it:
+	// one waiting on a decision or already over is not canceled.
+	InterruptCancelRunIfInProgress
 	// InterruptEnd ends the run: a run waiting on a decision is discarded, and a run doing work is
 	// canceled. Use it when nobody will be left to look after the run, as when a CI job is canceled.
 	InterruptEnd
