@@ -166,6 +166,43 @@ func (_m *RunsClient) CreateRun(ctx context.Context, in *gen.CreateRunRequest, o
 	return r0, r1
 }
 
+// DiscardRun provides a mock function with given fields: ctx, in, opts
+func (_m *RunsClient) DiscardRun(ctx context.Context, in *gen.DiscardRunRequest, opts ...grpc.CallOption) (*gen.Run, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DiscardRun")
+	}
+
+	var r0 *gen.Run
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.DiscardRunRequest, ...grpc.CallOption) (*gen.Run, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.DiscardRunRequest, ...grpc.CallOption) *gen.Run); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gen.Run)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.DiscardRunRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetApplyByID provides a mock function with given fields: ctx, in, opts
 func (_m *RunsClient) GetApplyByID(ctx context.Context, in *gen.GetApplyByIDRequest, opts ...grpc.CallOption) (*gen.Apply, error) {
 	_va := make([]interface{}, len(opts))
@@ -232,6 +269,43 @@ func (_m *RunsClient) GetPlanByID(ctx context.Context, in *gen.GetPlanByIDReques
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, *gen.GetPlanByIDRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetPolicyCheckResults provides a mock function with given fields: ctx, in, opts
+func (_m *RunsClient) GetPolicyCheckResults(ctx context.Context, in *gen.GetPolicyCheckResultsRequest, opts ...grpc.CallOption) (*gen.PolicyCheckResults, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPolicyCheckResults")
+	}
+
+	var r0 *gen.PolicyCheckResults
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.GetPolicyCheckResultsRequest, ...grpc.CallOption) (*gen.PolicyCheckResults, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.GetPolicyCheckResultsRequest, ...grpc.CallOption) *gen.PolicyCheckResults); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gen.PolicyCheckResults)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.GetPolicyCheckResultsRequest, ...grpc.CallOption) error); ok {
 		r1 = rf(ctx, in, opts...)
 	} else {
 		r1 = ret.Error(1)
@@ -454,6 +528,43 @@ func (_m *RunsClient) SubscribeToRunEvents(ctx context.Context, in *gen.Subscrib
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, *gen.SubscribeToRunEventsRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// UndiscardRun provides a mock function with given fields: ctx, in, opts
+func (_m *RunsClient) UndiscardRun(ctx context.Context, in *gen.UndiscardRunRequest, opts ...grpc.CallOption) (*gen.Run, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UndiscardRun")
+	}
+
+	var r0 *gen.Run
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.UndiscardRunRequest, ...grpc.CallOption) (*gen.Run, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.UndiscardRunRequest, ...grpc.CallOption) *gen.Run); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gen.Run)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.UndiscardRunRequest, ...grpc.CallOption) error); ok {
 		r1 = rf(ctx, in, opts...)
 	} else {
 		r1 = ret.Error(1)
