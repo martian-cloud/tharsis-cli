@@ -150,6 +150,32 @@ Creates and applies a Terraform run. First creates a
 plan, then applies after approval. Supports run-scoped
 Terraform and environment variables.
 
+Each stage of the run is shown as it runs, including any
+pre-plan, post-plan, pre-apply and post-apply policy
+stages with their policy findings.
+
+Plan approval: enter 'yes' to apply, 'no' to discard the
+run, or press Enter to leave it waiting. Approval is also
+read from piped stdin, so 'yes | tharsis apply' approves.
+
+Policy gates: when a policy soft-fails, the run waits for
+approval. Approve it (or override it, when it has no
+eligible approvers), discard the run, or press Enter to
+leave it waiting. Gates are only asked about at an
+interactive terminal.
+
+With -input=false, or when the CLI can't ask, it keeps
+following the run and waits for the decision to be made
+in the Tharsis UI. A decision is waited on for at most
+-wait-timeout, after which the run is left waiting.
+
+Ctrl-C at an interactive terminal asks whether to cancel
+the run if it is still running. Otherwise, including on
+SIGTERM, without a terminal and with -input=false, the
+CLI stops following and leaves the run going; cancel it
+in the Tharsis UI if needed. A second interrupt exits
+immediately.
+
 Terraform variables may be passed in via supported
 options or from the environment with a 'TF_VAR_' prefix.
   
@@ -188,7 +214,7 @@ When module-version is empty or a constraint range, allow prerelease module vers
 
 #### input
 
-Ask for input for variables if not directly set.\
+Ask for plan approval and policy gate decisions. When false, wait for them to be made in the Tharsis UI.\
 **Default:** `true`
 
 #### module-source
@@ -225,6 +251,11 @@ A terraform variable as a key=value pair.
 #### tf-var-file <span style={{color:'green'}}>...</span>
 
 The path to a .tfvars variables file.
+
+#### wait-timeout
+
+How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting. Must be positive.\
+**Default:** `1h0m0s`
 
 
 ---
@@ -311,6 +342,32 @@ tharsis configure list
 Destroys all resources in a workspace. Creates a
 destroy plan, then applies after approval.
 
+Each stage of the run is shown as it runs, including any
+pre-plan, post-plan, pre-apply and post-apply policy
+stages with their policy findings.
+
+Plan approval: enter 'yes' to apply, 'no' to discard the
+run, or press Enter to leave it waiting. Approval is also
+read from piped stdin, so 'yes | tharsis destroy' approves.
+
+Policy gates: when a policy soft-fails, the run waits for
+approval. Approve it (or override it, when it has no
+eligible approvers), discard the run, or press Enter to
+leave it waiting. Gates are only asked about at an
+interactive terminal.
+
+With -input=false, or when the CLI can't ask, it keeps
+following the run and waits for the decision to be made
+in the Tharsis UI. A decision is waited on for at most
+-wait-timeout, after which the run is left waiting.
+
+Ctrl-C at an interactive terminal asks whether to cancel
+the run if it is still running. Otherwise, including on
+SIGTERM, without a terminal and with -input=false, the
+CLI stops following and leaves the run going; cancel it
+in the Tharsis UI if needed. A second interrupt exits
+immediately.
+
 Terraform variables may be passed in via supported
 options or from the environment with a 'TF_VAR_' prefix.
   
@@ -349,7 +406,7 @@ When module-version is empty or a constraint range, allow prerelease module vers
 
 #### input
 
-Ask for input for variables if not directly set.\
+Ask for plan approval and policy gate decisions. When false, wait for them to be made in the Tharsis UI.\
 **Default:** `true`
 
 #### module-source
@@ -381,6 +438,11 @@ A terraform variable as a key=value pair.
 #### tf-var-file <span style={{color:'green'}}>...</span>
 
 The path to a .tfvars variables file.
+
+#### wait-timeout
+
+How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting. Must be positive.\
+**Default:** `1h0m0s`
 
 
 ---
@@ -2155,6 +2217,28 @@ Creates a speculative plan to preview infrastructure
 changes without applying them. Supports run-scoped
 Terraform and environment variables.
 
+Each stage of the run is shown as it runs, including any
+pre-plan and post-plan policy stages with their policy
+findings.
+
+Policy gates: when a policy soft-fails, the run waits for
+approval. Approve it (or override it, when it has no
+eligible approvers), discard the run, or press Enter to
+leave it waiting. Gates are only asked about at an
+interactive terminal.
+
+With -input=false, or when the CLI can't ask, it keeps
+following the run and waits for the decision to be made
+in the Tharsis UI. A decision is waited on for at most
+-wait-timeout, after which the run is left waiting.
+
+Ctrl-C at an interactive terminal asks whether to cancel
+the run if it is still running. Otherwise, including on
+SIGTERM, without a terminal and with -input=false, the
+CLI stops following and leaves the run going; cancel it
+in the Tharsis UI if needed. A second interrupt exits
+immediately.
+
 Terraform variables may be passed in via supported
 options or from the environment with a 'TF_VAR_'
 prefix.
@@ -2202,6 +2286,11 @@ The path to an environment variables file.
 When module-version is empty or a constraint range, allow prerelease module versions to be selected as latest.\
 **Default:** `false`
 
+#### input
+
+Ask for plan approval and policy gate decisions. When false, wait for them to be made in the Tharsis UI.\
+**Default:** `true`
+
 #### module-source
 
 Remote module source specification.\
@@ -2236,6 +2325,11 @@ A terraform variable as a key=value pair.
 #### tf-var-file <span style={{color:'green'}}>...</span>
 
 The path to a .tfvars variables file.
+
+#### wait-timeout
+
+How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting. Must be positive.\
+**Default:** `1h0m0s`
 
 
 ---

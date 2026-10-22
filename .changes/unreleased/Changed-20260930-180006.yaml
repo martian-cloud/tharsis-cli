@@ -1,0 +1,3 @@
+kind: Changed
+body: Ctrl-C during plan, apply and destroy asks at an interactive terminal whether to cancel a run that is still running. On SIGTERM, without a terminal, or with -input=false, the CLI stops following and leaves the run going (exit 130, or 143 for SIGTERM); it never cancels or discards a run without being asked. A second interrupt exits immediately.
+time: 2026-09-30T18:00:06.000000000-04:00
