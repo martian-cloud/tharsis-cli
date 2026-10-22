@@ -2,6 +2,7 @@ package command
 
 import (
 	"errors"
+	"time"
 
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-cli/internal/flag"
@@ -22,6 +23,8 @@ type planCommand struct {
 	targetAddresses          []string
 	annotations              []string
 	destroy                  *bool
+	input                    *bool
+	waitTimeout              *time.Duration
 	refresh                  *bool
 	refreshOnly              *bool
 	includeModulePrereleases *bool
@@ -71,13 +74,17 @@ func (c *planCommand) Run(args []string) int {
 
 	defer tokenResolver.Close()
 
+	// The first Ctrl-C stops following and offers to cancel the run; a second exits immediately.
+	ctx, cleanupCtx, release := interruptContexts(c.Context)
+	defer release()
+
 	runMgr, err := run.NewManager(c.grpcClient, tokenResolver, c.HTTPClient, curSettings.CurrentProfile.Endpoint, c.Logger, c.UI)
 	if err != nil {
 		c.UI.ErrorWithSummary(err, "failed to create run manager")
 		return 1
 	}
 
-	runResult, err := runMgr.CreateRun(c.Context, &run.CreateRunInput{
+	createdRun, err := runMgr.CreateRun(ctx, &run.CreateRunInput{
 		WorkspaceID:              trn.TypeWorkspace.Normalize(c.arguments[0]),
 		DirectoryPath:            c.directoryPath,
 		ModuleSource:             c.moduleSource,
@@ -100,9 +107,10 @@ func (c *planCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.Logger.Debug("plan completed", "run_id", runResult.Metadata.Id, "status", runResult.Status.String())
-
-	return 0
+	return followRunAndReport(ctx, cleanupCtx, c.UI, runMgr, createdRun, &run.FollowOptions{
+		Input:       *c.input,
+		WaitTimeout: *c.waitTimeout,
+	})
 }
 
 func (*planCommand) Synopsis() string {
@@ -115,6 +123,7 @@ func (*planCommand) Description() string {
    changes without applying them. Supports run-scoped
    Terraform and environment variables.
 
+` + followHelp("plan", false) + `
    Terraform variables may be passed in via supported
    options or from the environment with a 'TF_VAR_'
    prefix.
@@ -163,6 +172,7 @@ func (c *planCommand) Flags() *flag.Set {
 		"terraform-version",
 		"The Terraform CLI version to use for the run.",
 	)
+	addFollowFlags(f, &c.input, &c.waitTimeout)
 	f.BoolVar(
 		&c.destroy,
 		"destroy",

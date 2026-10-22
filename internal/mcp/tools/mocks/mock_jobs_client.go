@@ -55,6 +55,43 @@ func (_m *JobsClient) ClaimJob(ctx context.Context, in *gen.ClaimJobRequest, opt
 	return r0, r1
 }
 
+// ClaimJobsForCleanup provides a mock function with given fields: ctx, in, opts
+func (_m *JobsClient) ClaimJobsForCleanup(ctx context.Context, in *gen.ClaimJobsForCleanupRequest, opts ...grpc.CallOption) (*gen.ClaimJobsForCleanupResponse, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ClaimJobsForCleanup")
+	}
+
+	var r0 *gen.ClaimJobsForCleanupResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.ClaimJobsForCleanupRequest, ...grpc.CallOption) (*gen.ClaimJobsForCleanupResponse, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.ClaimJobsForCleanupRequest, ...grpc.CallOption) *gen.ClaimJobsForCleanupResponse); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gen.ClaimJobsForCleanupResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.ClaimJobsForCleanupRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetJobByID provides a mock function with given fields: ctx, in, opts
 func (_m *JobsClient) GetJobByID(ctx context.Context, in *gen.GetJobByIDRequest, opts ...grpc.CallOption) (*gen.Job, error) {
 	_va := make([]interface{}, len(opts))
@@ -203,6 +240,80 @@ func (_m *JobsClient) GetLatestJobForPlan(ctx context.Context, in *gen.GetLatest
 	return r0, r1
 }
 
+// JobDispatched provides a mock function with given fields: ctx, in, opts
+func (_m *JobsClient) JobDispatched(ctx context.Context, in *gen.JobDispatchedRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for JobDispatched")
+	}
+
+	var r0 *emptypb.Empty
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.JobDispatchedRequest, ...grpc.CallOption) (*emptypb.Empty, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.JobDispatchedRequest, ...grpc.CallOption) *emptypb.Empty); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*emptypb.Empty)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.JobDispatchedRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MarkJobsCleanedUp provides a mock function with given fields: ctx, in, opts
+func (_m *JobsClient) MarkJobsCleanedUp(ctx context.Context, in *gen.MarkJobsCleanedUpRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MarkJobsCleanedUp")
+	}
+
+	var r0 *emptypb.Empty
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.MarkJobsCleanedUpRequest, ...grpc.CallOption) (*emptypb.Empty, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.MarkJobsCleanedUpRequest, ...grpc.CallOption) *emptypb.Empty); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*emptypb.Empty)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.MarkJobsCleanedUpRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // SaveJobLogs provides a mock function with given fields: ctx, in, opts
 func (_m *JobsClient) SaveJobLogs(ctx context.Context, in *gen.SaveJobLogsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	_va := make([]interface{}, len(opts))
@@ -232,6 +343,43 @@ func (_m *JobsClient) SaveJobLogs(ctx context.Context, in *gen.SaveJobLogsReques
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, *gen.SaveJobLogsRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// SaveJobResourceUsage provides a mock function with given fields: ctx, in, opts
+func (_m *JobsClient) SaveJobResourceUsage(ctx context.Context, in *gen.SaveJobResourceUsageInput, opts ...grpc.CallOption) (*gen.Job, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SaveJobResourceUsage")
+	}
+
+	var r0 *gen.Job
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.SaveJobResourceUsageInput, ...grpc.CallOption) (*gen.Job, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *gen.SaveJobResourceUsageInput, ...grpc.CallOption) *gen.Job); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gen.Job)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *gen.SaveJobResourceUsageInput, ...grpc.CallOption) error); ok {
 		r1 = rf(ctx, in, opts...)
 	} else {
 		r1 = ret.Error(1)
