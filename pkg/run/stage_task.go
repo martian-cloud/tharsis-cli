@@ -147,7 +147,11 @@ func (s *taskStage) syncBlocked(ctx context.Context) (stageStatus, error) {
 
 	pending := s.pendingGates()
 	if len(pending) == 0 {
-		// Blocked on something that can't be shown or acted on, such as an unsupported check.
+		// Blocked on something that can't be shown or acted on, such as an unsupported check. The
+		// decider is still asked, so it can choose to leave the run waiting rather than wait here.
+		if s.f.decider != nil && !s.deferred && s.blockedOnUnshowable() {
+			return stageNeedsDecision, nil
+		}
 		s.f.waiting(s.stage, WaitUnsupportedTask, "")
 		return stageWaitingOnDecision, nil
 	}
@@ -216,12 +220,14 @@ func (s *taskStage) decide(ctx context.Context, run *pb.Run) (decisionResult, er
 	}
 
 	pending := s.pendingGates()
-	if len(pending) == 0 {
-		// The gates cleared since the findings were reported, or the stage is blocked on something that
-		// can't be acted on. Re-read the run; sync waits if the stage is still blocked.
+	if len(pending) == 0 && !s.blockedOnUnshowable() {
+		// The gates cleared since the findings were reported. Re-read the run; sync waits if the stage
+		// is still blocked.
 		return decisionActed, nil
 	}
-	s.f.emit(GatesPending{Stage: s.stage, Gates: s.gateInfos(pending)})
+	if len(pending) > 0 {
+		s.f.emit(GatesPending{Stage: s.stage, Gates: s.gateInfos(pending)})
+	}
 
 	stillBlocked := func(latest *pb.Run) bool {
 		stage := findTaskStage(latest, s.stageName)
@@ -297,6 +303,20 @@ func (s *taskStage) decide(ctx context.Context, run *pb.Run) (decisionResult, er
 			return decisionActed, fmt.Errorf("unknown gate decision %d", decision.Action)
 		}
 	}
+}
+
+// blockedOnUnshowable reports whether the stage holds work that can't be shown, and so may be what
+// it is blocked on: a check of an unsupported type, or no visible checks at all.
+func (s *taskStage) blockedOnUnshowable() bool {
+	if len(s.checkOrder) == 0 {
+		return true
+	}
+	for _, checkID := range s.checkOrder {
+		if s.unsupported[checkID] {
+			return true
+		}
+	}
+	return false
 }
 
 // gateInfos pairs each gate with its check's results.

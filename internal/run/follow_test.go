@@ -899,11 +899,14 @@ func TestFollowRun_UnsupportedTasks(t *testing.T) {
 		assert.Contains(t, out, "Unsupported policy check type (99); waiting for it to finish.")
 	})
 
-	for _, interactive := range []bool{true, false} {
-		t.Run(fmt.Sprintf("a stage blocked on an unsupported check waits instead of prompting (interactive=%v)", interactive), func(t *testing.T) {
-			h := newHarness(t, newFakeUI(interactive), awaiting, awaiting, awaiting, cleared)
+	for _, c := range []struct {
+		interactive, wait bool
+	}{{true, false}, {false, true}} {
+		t.Run(fmt.Sprintf("a stage blocked on an unsupported check waits instead of prompting (interactive=%v, wait=%v)", c.interactive, c.wait), func(t *testing.T) {
+			h := newHarness(t, newFakeUI(c.interactive), awaiting, awaiting, cleared)
+			h.runs.HoldUntil = func() bool { return strings.Contains(h.ui.output(), "Waiting for the run to continue") }
 
-			outcome := h.follow(t, created, &FollowOptions{Input: true})
+			outcome := h.follow(t, created, &FollowOptions{Input: true, Wait: c.wait})
 
 			assert.Equal(t, OutcomeCompleted, outcome.Kind)
 			assert.Equal(t, 0, h.ui.inputCount(), "there is nothing this CLI can ask about")
@@ -912,6 +915,30 @@ func TestFollowRun_UnsupportedTasks(t *testing.T) {
 			assert.Contains(t, out, "Waiting for the run to continue; it is blocked on a task this version of the CLI can't show")
 		})
 	}
+
+	t.Run("without a terminal or -wait a stage blocked on an unsupported check is left waiting", func(t *testing.T) {
+		h := newHarness(t, newFakeUI(false), awaiting)
+
+		outcome := h.follow(t, created, &FollowOptions{Input: true})
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.False(t, outcome.TimedOut, "it stops without waiting")
+		assert.Equal(t, preApply, outcome.Stage.TaskStage)
+		assert.Equal(t, "the terminal is not interactive", outcome.LeaveReason)
+		assert.Equal(t, 0, h.ui.inputCount())
+	})
+
+	t.Run("with -input=false a stage with no checks this CLI can see is left waiting", func(t *testing.T) {
+		blocked := newTestRun(pb.RunStatus_PRE_APPLY_AWAITING_DECISION, withAutoApply(), withPlan(pb.PlanStatus_FINISHED, "plan-job"),
+			withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_AWAITING_OVERRIDE))
+		h := newHarness(t, newFakeUI(true), blocked)
+
+		outcome := h.follow(t, newTestRun(pb.RunStatus_PENDING, withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_CREATED)),
+			&FollowOptions{Input: false})
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.Equal(t, "-input was false", outcome.LeaveReason)
+	})
 
 	t.Run("a stage with no checks this CLI can see waits for it to finish", func(t *testing.T) {
 		// A stage holding only other kinds of tasks, which this CLI's API version doesn't carry.

@@ -45,8 +45,9 @@ type Decider interface {
 	// DecidePlan is asked when the run's plan is waiting for approval. ctx also expires when
 	// Options.WaitTimeout passes.
 	DecidePlan(ctx context.Context, req *PlanRequest) (PlanDecision, error)
-	// DecideGates is asked when a policy stage is blocked on gates this caller may still act on.
-	// It is asked again, with an updated request, if the decision didn't clear any gate (for
+	// DecideGates is asked when a policy stage is blocked on gates this caller may still act on, or
+	// on work that can't be shown (an unsupported check), in which case the request has no pending
+	// gates. It is asked again, with an updated request, if the decision didn't clear any gate (for
 	// example, the caller wasn't allowed to approve it).
 	DecideGates(ctx context.Context, req *GateRequest) (GateDecision, error)
 }
@@ -209,7 +210,9 @@ type GateInfo struct {
 type GateRequest struct {
 	Run   *pb.Run
 	Stage StageRef
-	// Pending is every pending gate in the stage.
+	// Pending is every pending gate in the stage. It is empty when the stage is blocked only on work
+	// that can't be shown, such as a check of an unsupported type (reported in UnsupportedPolicyCheck);
+	// then only GateDiscard, GateLeave and GateWaitElsewhere apply.
 	Pending []GateInfo
 	// CanApprove and CanOverride say whether GateApprove and GateOverride would act on any gate:
 	// there is a pending gate of that kind that this caller hasn't already approved and hasn't

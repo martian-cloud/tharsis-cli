@@ -75,10 +75,15 @@ func (d *cliDecider) DecidePlan(ctx context.Context, req *runpkg.PlanRequest) (r
 }
 
 // DecideGates asks what to do at a blocked policy stage. Gates are only asked about at an
-// interactive terminal.
+// interactive terminal, and only when there are gates this CLI can show.
 func (d *cliDecider) DecideGates(ctx context.Context, req *runpkg.GateRequest) (runpkg.GateDecision, error) {
 	if !d.prompter.Interactive() {
 		return d.cannotAskGates(d.prompter.cannotAskReason()), nil
+	}
+	if len(req.Pending) == 0 {
+		// Blocked on work this CLI can't show, so there is nothing to ask about: keep waiting while
+		// it is decided in the Tharsis UI. The user is at the terminal and can stop with Ctrl-C.
+		return runpkg.GateDecision{Action: runpkg.GateWaitElsewhere}, nil
 	}
 
 	d.ui.Output("")
