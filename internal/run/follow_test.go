@@ -970,11 +970,13 @@ func TestFollowRun_UnsupportedTasks(t *testing.T) {
 		h.runs.OnApprove = func(f *runtest.Runs) *pb.RunGate {
 			// The supported gate clears, but the unsupported check still blocks the stage for a while.
 			f.Results["c2"].RunGate.Status = pb.RunGateStatus_RUN_GATE_STATUS_APPROVED
-			f.Set(mixed, mixed, appliedRun(withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_COMPLETED)))
+			f.Set(mixed, appliedRun(withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_COMPLETED)))
 			g := softFailedResults("c2", 1, 1).RunGate
 			g.Status = pb.RunGateStatus_RUN_GATE_STATUS_APPROVED
 			return g
 		}
+		// Stay blocked until the CLI is waiting, however many reads asking about the stage takes.
+		h.runs.HoldUntil = func() bool { return strings.Contains(h.ui.output(), "Waiting for the run to continue") }
 
 		outcome := h.follow(t, created, &FollowOptions{Input: true})
 
