@@ -62,8 +62,9 @@ type follower struct {
 	// being asked or the decision is being made elsewhere.
 	blockedSince time.Time
 
-	// leaveReason is the Reason of the decision a stage just returned decisionDetach for, carried
-	// into Outcome.LeaveReason.
+	// leaveChosen and leaveReason are the Chosen and Reason of the decision a stage just
+	// returned decisionDetach for, carried into the Outcome.
+	leaveChosen bool
 	leaveReason string
 
 	// firstStep is true while the stages are synced against the first snapshot, for SkipFinished.
@@ -76,7 +77,7 @@ type follower struct {
 }
 
 // Follow follows a run through each of its stages in order, reporting each stage's progress to
-// opts.Observer and asking opts.Decider when a stage blocks on a person. Stages decide where they
+// opts.Observer and asking opts.Decider when a stage blocks on a decision. Stages decide where they
 // stand from fresh run snapshots rather than from individual events, so a missed event can't cause
 // a stage to be skipped, and a run that moves backward (a retry or an undiscard) is followed back.
 //
@@ -234,7 +235,7 @@ func (f *follower) step(ctx context.Context, stages []stage, run *pb.Run) (*Outc
 			ref := st.ref()
 			switch result {
 			case decisionDetach:
-				return &Outcome{Kind: OutcomeDetached, Run: run, Stage: ref, LeaveReason: f.leaveReason}, waitState{}, nil
+				return &Outcome{Kind: OutcomeDetached, Run: run, Stage: ref, LeaveChosen: f.leaveChosen, LeaveReason: f.leaveReason}, waitState{}, nil
 			case decisionDiscarded:
 				return &Outcome{Kind: OutcomeDiscarded, Run: run}, waitState{}, nil
 			case decisionTimedOut:

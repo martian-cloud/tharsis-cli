@@ -14,7 +14,7 @@ const (
 	stageWaiting stageStatus = iota
 	// stageDone means the stage cleared or was skipped; the driver moves to the next stage.
 	stageDone
-	// stageNeedsDecision means the stage is blocked on a person; the driver calls decide.
+	// stageNeedsDecision means the stage is blocked on a decision; the driver calls decide.
 	stageNeedsDecision
 	// stageFailed means the stage's node errored or was canceled, so the run won't continue.
 	stageFailed
@@ -52,7 +52,7 @@ const (
 	decisionTimedOut
 )
 
-// decidingStage is implemented by the stages that can block on a person.
+// decidingStage is implemented by the stages that can block on a decision.
 type decidingStage interface {
 	decide(ctx context.Context, run *pb.Run) (decisionResult, error)
 }

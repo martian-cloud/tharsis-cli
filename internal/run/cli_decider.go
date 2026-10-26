@@ -67,7 +67,7 @@ func (d *cliDecider) DecidePlan(ctx context.Context, req *runpkg.PlanRequest) (r
 			}
 			return runpkg.PlanDecision{Action: runpkg.PlanDiscard}, nil
 		case "":
-			return runpkg.PlanDecision{Action: runpkg.PlanLeave}, nil
+			return runpkg.PlanDecision{Action: runpkg.PlanLeave, Chosen: true}, nil
 		default:
 			d.ui.Output("  %q isn't one of the choices.", answer)
 		}
@@ -75,7 +75,9 @@ func (d *cliDecider) DecidePlan(ctx context.Context, req *runpkg.PlanRequest) (r
 }
 
 // DecideGates asks what to do at a blocked policy stage. Gates are only asked about at an
-// interactive terminal, and only when there are gates this CLI can show.
+// interactive terminal, and only when there are gates this CLI can show. A stage blocked only on
+// work this CLI can't show is waited on at an interactive terminal whatever -wait says, since -wait
+// only covers decisions that can't be asked for.
 func (d *cliDecider) DecideGates(ctx context.Context, req *runpkg.GateRequest) (runpkg.GateDecision, error) {
 	if !d.prompter.Interactive() {
 		return d.cannotAskGates(d.prompter.cannotAskReason()), nil
@@ -113,7 +115,7 @@ func (d *cliDecider) DecideGates(ctx context.Context, req *runpkg.GateRequest) (
 		case "discard":
 			return runpkg.GateDecision{Action: runpkg.GateDiscard}, nil
 		case "":
-			return runpkg.GateDecision{Action: runpkg.GateLeave}, nil
+			return runpkg.GateDecision{Action: runpkg.GateLeave, Chosen: true}, nil
 		default:
 			d.ui.Output("  %q isn't one of the choices.", answer)
 		}
@@ -155,7 +157,7 @@ func gatePrompt(canApprove, canOverride bool) string {
 // cliInterrupter decides what happens to the run on Ctrl-C.
 //
 // At an interactive terminal the user is asked whether to cancel a run that is still doing work; a
-// run waiting on a person (plan approval or a policy gate) is left for them to decide on.
+// run waiting on a decision (plan approval or a policy gate) is left to be decided.
 //
 // Otherwise the run is always left going: the CLI never cancels or discards a run without being told
 // to. SIGTERM in particular is sent for many reasons that aren't a wish to stop the run (a CI job's

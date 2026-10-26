@@ -335,6 +335,7 @@ func TestFollow_TaskStages(t *testing.T) {
 		outcome := h.follow(t, h.options(d))
 
 		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.False(t, outcome.LeaveChosen)
 		assert.Equal(t, "nobody is there", outcome.LeaveReason)
 		require.Len(t, d.gateReqs, 1)
 		assert.Empty(t, d.gateReqs[0].Pending)

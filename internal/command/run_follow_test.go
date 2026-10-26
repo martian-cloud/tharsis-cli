@@ -150,15 +150,22 @@ func TestReportOutcome(t *testing.T) {
 		},
 		{
 			name:        "left waiting at plan approval",
-			outcome:     runpkg.Outcome{Kind: runpkg.OutcomeDetached, Run: runWith(pb.RunStatus_PLANNED), Stage: planApproval},
+			outcome:     runpkg.Outcome{Kind: runpkg.OutcomeDetached, Run: runWith(pb.RunStatus_PLANNED), Stage: planApproval, LeaveChosen: true},
 			wantCode:    0,
 			wantWarning: "\nRun run-1 is waiting for its plan to be approved. Apply or discard it in the Tharsis UI.",
 		},
 		{
 			name:        "left waiting at a gate",
-			outcome:     runpkg.Outcome{Kind: runpkg.OutcomeDetached, Run: runWith(pb.RunStatus_PRE_APPLY_AWAITING_DECISION), Stage: preApply},
+			outcome:     runpkg.Outcome{Kind: runpkg.OutcomeDetached, Run: runWith(pb.RunStatus_PRE_APPLY_AWAITING_DECISION), Stage: preApply, LeaveChosen: true},
 			wantCode:    0,
 			wantWarning: "\nRun run-1 is waiting for a decision on its pre-apply stage. Approve, override or discard it in the Tharsis UI.",
+		},
+		{
+			name:        "left waiting at a gate by the CLI without saying why",
+			outcome:     runpkg.Outcome{Kind: runpkg.OutcomeDetached, Run: runWith(pb.RunStatus_PRE_APPLY_AWAITING_DECISION), Stage: preApply},
+			wantCode:    1,
+			wantOutput:  "\nNot waiting for a decision; pass -wait to wait for it.",
+			wantWarning: "\nRun run-1 is waiting for a decision on its pre-apply stage.",
 		},
 		{
 			name:        "left waiting at plan approval without -wait",

@@ -162,7 +162,10 @@ Policy gates: when a policy soft-fails, the run waits for
 approval. Approve it (or override it, when it has no
 eligible approvers), discard the run, or press Enter to
 leave it waiting. Gates are only asked about at an
-interactive terminal.
+interactive terminal. When a stage is blocked on a check
+this CLI can't show, there is nothing to ask; at an
+interactive terminal the CLI waits for it to be decided
+in the Tharsis UI, for up to -wait-timeout.
 
 With -input=false, or when the CLI can't ask, it leaves
 the run waiting for the decision to be made in the
@@ -362,7 +365,10 @@ Policy gates: when a policy soft-fails, the run waits for
 approval. Approve it (or override it, when it has no
 eligible approvers), discard the run, or press Enter to
 leave it waiting. Gates are only asked about at an
-interactive terminal.
+interactive terminal. When a stage is blocked on a check
+this CLI can't show, there is nothing to ask; at an
+interactive terminal the CLI waits for it to be decided
+in the Tharsis UI, for up to -wait-timeout.
 
 With -input=false, or when the CLI can't ask, it leaves
 the run waiting for the decision to be made in the
@@ -2241,7 +2247,10 @@ Policy gates: when a policy soft-fails, the run waits for
 approval. Approve it (or override it, when it has no
 eligible approvers), discard the run, or press Enter to
 leave it waiting. Gates are only asked about at an
-interactive terminal.
+interactive terminal. When a stage is blocked on a check
+this CLI can't show, there is nothing to ask; at an
+interactive terminal the CLI waits for it to be decided
+in the Tharsis UI, for up to -wait-timeout.
 
 With -input=false, or when the CLI can't ask, it leaves
 the run waiting at the policy gate for the decision to

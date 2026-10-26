@@ -285,7 +285,8 @@ func TestFollowRun_TerraformStages(t *testing.T) {
 
 		assert.Equal(t, OutcomeDetached, outcome.Kind)
 		assert.Equal(t, "Plan approval", outcome.Stage.Name)
-		assert.Empty(t, outcome.LeaveReason, "the user chose to leave it")
+		assert.True(t, outcome.LeaveChosen, "the user chose to leave it")
+		assert.Empty(t, outcome.LeaveReason)
 		assert.Equal(t, 0, h.runs.Applied)
 		assert.Equal(t, 0, h.runs.Discarded)
 	})

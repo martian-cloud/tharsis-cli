@@ -7,7 +7,7 @@
 // left to hooks that the caller supplies:
 //
 //   - an Observer is told everything worth showing, as typed events and job log chunks;
-//   - a Decider is asked when a stage is blocked on a person;
+//   - a Decider is asked when a stage is blocked on a decision;
 //   - an Interrupter decides what happens to the run when following is interrupted.
 //
 // Hooks describe and decide; they never call the API themselves, so conflict handling, retries and
@@ -36,11 +36,13 @@ type Observer interface {
 	Logs(stage StageRef, chunk string) error
 }
 
-// Decider is asked when a stage is blocked on a person. The ctx passed to each method is canceled
+// Decider is asked when a stage is blocked on a decision. The ctx passed to each method is canceled
 // as soon as the decision is no longer needed (the run moved on, or following was interrupted), so
 // an implementation that waits for an answer only has to watch ctx. When ctx ends before an answer,
 // an implementation should return ctx.Err() (or an error wrapping it); any other error is treated as
-// the decision failing.
+// the decision failing. A decision chosen by whoever the decider asked (a user, an agent, a service
+// account) should set Chosen, so that leaving the run waiting by choice isn't mistaken for the
+// decider leaving it because it couldn't decide.
 type Decider interface {
 	// DecidePlan is asked when the run's plan is waiting for approval. ctx also expires when
 	// Options.WaitTimeout passes.
@@ -160,8 +162,11 @@ type Outcome struct {
 	RunDiscarded bool
 	// TimedOut is true when following stopped because Options.WaitTimeout passed.
 	TimedOut bool
-	// LeaveReason is the decider's Reason for leaving the run waiting, when it chose PlanLeave or
-	// GateLeave and gave one. An empty reason means a person chose to leave it.
+	// LeaveChosen is true when following stopped on a PlanLeave or GateLeave decision that was
+	// chosen (Chosen set). It is false when the decider left the run waiting on its own, such as when
+	// no one could be asked (see LeaveReason), and when following timed out.
+	LeaveChosen bool
+	// LeaveReason is the decider's Reason for leaving the run waiting on its own, when it gave one.
 	LeaveReason string
 	// Advisories names each policy that failed at the advisory level in the checks shown, in the
 	// order they were shown, each once. A failed advisory policy doesn't block the run.
@@ -192,9 +197,13 @@ const (
 // PlanDecision is a decision on a plan waiting for approval.
 type PlanDecision struct {
 	Action PlanAction
+	// Chosen is true when whoever the decider asked chose this decision, and false when the decider
+	// made it on its own, such as when no one could be asked. For PlanLeave it is passed on in
+	// Outcome.LeaveChosen, so a caller can tell a choice to leave the run waiting from the decider
+	// giving up.
+	Chosen bool
 	// Reason says why the decision isn't being made here: for PlanWaitElsewhere it is passed on in
-	// the DecisionDeferred event, and for PlanLeave in Outcome.LeaveReason. It is empty when a person
-	// chose to leave the run waiting.
+	// the DecisionDeferred event, and for PlanLeave in Outcome.LeaveReason.
 	Reason string
 }
 
@@ -239,8 +248,12 @@ const (
 // GateDecision is a decision on a policy stage blocked on gates.
 type GateDecision struct {
 	Action GateAction
+	// Chosen is true when whoever the decider asked chose this decision, and false when the decider
+	// made it on its own, such as when no one could be asked. For GateLeave it is passed on in
+	// Outcome.LeaveChosen, so a caller can tell a choice to leave the run waiting from the decider
+	// giving up.
+	Chosen bool
 	// Reason says why the decision isn't being made here: for GateWaitElsewhere it is passed on in
-	// the DecisionDeferred event, and for GateLeave in Outcome.LeaveReason. It is empty when a person
-	// chose to leave the run waiting.
+	// the DecisionDeferred event, and for GateLeave in Outcome.LeaveReason.
 	Reason string
 }

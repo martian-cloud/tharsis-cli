@@ -241,7 +241,7 @@ type FollowOptions struct {
 }
 
 // FollowRun follows a created run through each of its stages at the terminal, asking for decisions
-// when a stage blocks on a person. It wires the CLI's hooks (rendering, prompting and interrupt
+// when a stage blocks on a decision. It wires the CLI's hooks (rendering, prompting and interrupt
 // handling) into the generic follower in pkg/run.
 //
 // ctx is canceled by the first interrupt, with a SignalError cause naming the signal, and cleanupCtx
