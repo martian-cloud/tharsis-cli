@@ -50,9 +50,10 @@ func TestInterruptContexts_SIGTERM(t *testing.T) {
 func TestWaitTimeoutFlag(t *testing.T) {
 	parse := func(args ...string) (*time.Duration, error) {
 		var input *bool
+		var wait *bool
 		var waitTimeout *time.Duration
 		f := flag.NewSet("test")
-		addFollowFlags(f, &input, &waitTimeout)
+		addFollowFlags(f, &input, &wait, &waitTimeout)
 		err := f.Parse(args)
 		return waitTimeout, err
 	}
@@ -70,6 +71,22 @@ func TestWaitTimeoutFlag(t *testing.T) {
 		_, err = parse("-wait-timeout", bad)
 		assert.Error(t, err, bad)
 	}
+}
+
+// TestWaitFlag verifies -wait defaults to false, so a decision that can't be asked for isn't waited on.
+func TestWaitFlag(t *testing.T) {
+	parse := func(args ...string) *bool {
+		var input, wait *bool
+		var waitTimeout *time.Duration
+		f := flag.NewSet("test")
+		addFollowFlags(f, &input, &wait, &waitTimeout)
+		require.NoError(t, f.Parse(args))
+		require.NotNil(t, wait)
+		return wait
+	}
+
+	assert.False(t, *parse())
+	assert.True(t, *parse("-wait"))
 }
 
 // TestInterruptContexts_Release verifies release cancels both contexts.
@@ -142,6 +159,20 @@ func TestReportOutcome(t *testing.T) {
 			outcome:     runpkg.Outcome{Kind: runpkg.OutcomeDetached, Run: runWith(pb.RunStatus_PRE_APPLY_AWAITING_DECISION), Stage: preApply},
 			wantCode:    0,
 			wantWarning: "\nRun run-1 is waiting for a decision on its pre-apply stage. Approve, override or discard it in the Tharsis UI.",
+		},
+		{
+			name:        "left waiting at plan approval without -wait",
+			outcome:     runpkg.Outcome{Kind: runpkg.OutcomeDetached, Run: runWith(pb.RunStatus_PLANNED), Stage: planApproval, LeaveReason: "-input was false"},
+			wantCode:    0,
+			wantOutput:  "\nNot waiting for a decision since -input was false; pass -wait to wait for it.",
+			wantWarning: "\nRun run-1 is waiting for its plan to be approved. Apply or discard it in the Tharsis UI.",
+		},
+		{
+			name:        "left waiting at a gate without -wait",
+			outcome:     runpkg.Outcome{Kind: runpkg.OutcomeDetached, Run: runWith(pb.RunStatus_PRE_APPLY_AWAITING_DECISION), Stage: preApply, LeaveReason: "the terminal is not interactive"},
+			wantCode:    1,
+			wantOutput:  "\nNot waiting for a decision since the terminal is not interactive; pass -wait to wait for it.",
+			wantWarning: "\nRun run-1 is waiting for a decision on its pre-apply stage.",
 		},
 		{
 			name:        "detached after the wait timed out",

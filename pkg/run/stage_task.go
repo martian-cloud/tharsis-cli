@@ -287,6 +287,7 @@ func (s *taskStage) decide(ctx context.Context, run *pb.Run) (decisionResult, er
 			}
 			return decisionDiscarded, nil
 		case GateLeave:
+			s.f.leaveReason = decision.Reason
 			return decisionDetach, nil
 		case GateWaitElsewhere:
 			s.deferred = true

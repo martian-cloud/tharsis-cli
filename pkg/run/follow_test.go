@@ -264,6 +264,18 @@ func TestFollow_PlanDecision(t *testing.T) {
 
 		assert.Equal(t, OutcomeDetached, outcome.Kind)
 		assert.Equal(t, StagePlanApproval, outcome.Stage.Kind)
+		assert.Empty(t, outcome.LeaveReason)
+	})
+
+	t.Run("a leave's reason is passed on in the outcome", func(t *testing.T) {
+		h := newHarness(planned())
+		d := &scriptedDecider{plans: []PlanDecision{{Action: PlanLeave, Reason: "nobody is there"}}}
+
+		outcome := h.follow(t, h.options(d))
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.False(t, outcome.TimedOut)
+		assert.Equal(t, "nobody is there", outcome.LeaveReason)
 	})
 
 	t.Run("wait elsewhere passes on the reason and isn't asked again", func(t *testing.T) {

@@ -62,6 +62,10 @@ type follower struct {
 	// being asked or the decision is being made elsewhere.
 	blockedSince time.Time
 
+	// leaveReason is the Reason of the decision a stage just returned decisionDetach for, carried
+	// into Outcome.LeaveReason.
+	leaveReason string
+
 	// firstStep is true while the stages are synced against the first snapshot, for SkipFinished.
 	firstStep bool
 
@@ -230,7 +234,7 @@ func (f *follower) step(ctx context.Context, stages []stage, run *pb.Run) (*Outc
 			ref := st.ref()
 			switch result {
 			case decisionDetach:
-				return &Outcome{Kind: OutcomeDetached, Run: run, Stage: ref}, waitState{}, nil
+				return &Outcome{Kind: OutcomeDetached, Run: run, Stage: ref, LeaveReason: f.leaveReason}, waitState{}, nil
 			case decisionDiscarded:
 				return &Outcome{Kind: OutcomeDiscarded, Run: run}, waitState{}, nil
 			case decisionTimedOut:

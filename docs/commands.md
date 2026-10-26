@@ -164,10 +164,13 @@ eligible approvers), discard the run, or press Enter to
 leave it waiting. Gates are only asked about at an
 interactive terminal.
 
-With -input=false, or when the CLI can't ask, it keeps
-following the run and waits for the decision to be made
-in the Tharsis UI. A decision is waited on for at most
--wait-timeout, after which the run is left waiting.
+With -input=false, or when the CLI can't ask, it leaves
+the run waiting for the decision to be made in the
+Tharsis UI and exits: 0 at plan approval, 1 at a policy
+gate. With -wait, it keeps following the run while the
+decision is made in the Tharsis UI instead. A decision is
+waited on for at most -wait-timeout, after which the run
+is left waiting and the CLI exits 1.
 
 Ctrl-C at an interactive terminal asks whether to cancel
 the run if it is still running. Otherwise, including on
@@ -214,7 +217,7 @@ When module-version is empty or a constraint range, allow prerelease module vers
 
 #### input
 
-Ask for plan approval and policy gate decisions. When false, wait for them to be made in the Tharsis UI.\
+Ask for plan approval and policy gate decisions. When false, they are left to be made in the Tharsis UI.\
 **Default:** `true`
 
 #### module-source
@@ -252,9 +255,14 @@ A terraform variable as a key=value pair.
 
 The path to a .tfvars variables file.
 
+#### wait
+
+When a plan approval or policy gate decision can't be asked for (-input=false or no terminal), keep following the run and wait for it to be made in the Tharsis UI, for up to -wait-timeout. Without it, the CLI leaves the run waiting and exits.\
+**Default:** `false`
+
 #### wait-timeout
 
-How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting. Must be positive.\
+How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or (with -wait) being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting 1. Must be positive.\
 **Default:** `1h0m0s`
 
 
@@ -356,10 +364,13 @@ eligible approvers), discard the run, or press Enter to
 leave it waiting. Gates are only asked about at an
 interactive terminal.
 
-With -input=false, or when the CLI can't ask, it keeps
-following the run and waits for the decision to be made
-in the Tharsis UI. A decision is waited on for at most
--wait-timeout, after which the run is left waiting.
+With -input=false, or when the CLI can't ask, it leaves
+the run waiting for the decision to be made in the
+Tharsis UI and exits: 0 at plan approval, 1 at a policy
+gate. With -wait, it keeps following the run while the
+decision is made in the Tharsis UI instead. A decision is
+waited on for at most -wait-timeout, after which the run
+is left waiting and the CLI exits 1.
 
 Ctrl-C at an interactive terminal asks whether to cancel
 the run if it is still running. Otherwise, including on
@@ -406,7 +417,7 @@ When module-version is empty or a constraint range, allow prerelease module vers
 
 #### input
 
-Ask for plan approval and policy gate decisions. When false, wait for them to be made in the Tharsis UI.\
+Ask for plan approval and policy gate decisions. When false, they are left to be made in the Tharsis UI.\
 **Default:** `true`
 
 #### module-source
@@ -439,9 +450,14 @@ A terraform variable as a key=value pair.
 
 The path to a .tfvars variables file.
 
+#### wait
+
+When a plan approval or policy gate decision can't be asked for (-input=false or no terminal), keep following the run and wait for it to be made in the Tharsis UI, for up to -wait-timeout. Without it, the CLI leaves the run waiting and exits.\
+**Default:** `false`
+
 #### wait-timeout
 
-How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting. Must be positive.\
+How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or (with -wait) being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting 1. Must be positive.\
 **Default:** `1h0m0s`
 
 
@@ -2227,10 +2243,13 @@ eligible approvers), discard the run, or press Enter to
 leave it waiting. Gates are only asked about at an
 interactive terminal.
 
-With -input=false, or when the CLI can't ask, it keeps
-following the run and waits for the decision to be made
-in the Tharsis UI. A decision is waited on for at most
--wait-timeout, after which the run is left waiting.
+With -input=false, or when the CLI can't ask, it leaves
+the run waiting at the policy gate for the decision to
+be made in the Tharsis UI and exits 1. With -wait, it
+keeps following the run while the decision is made in
+the Tharsis UI instead. A decision is waited on for at
+most -wait-timeout, after which the run is left waiting
+and the CLI exits 1.
 
 Ctrl-C at an interactive terminal asks whether to cancel
 the run if it is still running. Otherwise, including on
@@ -2288,7 +2307,7 @@ When module-version is empty or a constraint range, allow prerelease module vers
 
 #### input
 
-Ask for plan approval and policy gate decisions. When false, wait for them to be made in the Tharsis UI.\
+Ask for plan approval and policy gate decisions. When false, they are left to be made in the Tharsis UI.\
 **Default:** `true`
 
 #### module-source
@@ -2326,9 +2345,14 @@ A terraform variable as a key=value pair.
 
 The path to a .tfvars variables file.
 
+#### wait
+
+When a plan approval or policy gate decision can't be asked for (-input=false or no terminal), keep following the run and wait for it to be made in the Tharsis UI, for up to -wait-timeout. Without it, the CLI leaves the run waiting and exits.\
+**Default:** `false`
+
 #### wait-timeout
 
-How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting. Must be positive.\
+How long to wait on plan approval or a policy gate decision, whether asked for at the terminal or (with -wait) being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting 1. Must be positive.\
 **Default:** `1h0m0s`
 
 

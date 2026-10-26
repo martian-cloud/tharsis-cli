@@ -159,6 +159,9 @@ type Outcome struct {
 	RunDiscarded bool
 	// TimedOut is true when following stopped because Options.WaitTimeout passed.
 	TimedOut bool
+	// LeaveReason is the decider's Reason for leaving the run waiting, when it chose PlanLeave or
+	// GateLeave and gave one. An empty reason means a person chose to leave it.
+	LeaveReason string
 	// Advisories names each policy that failed at the advisory level in the checks shown, in the
 	// order they were shown, each once. A failed advisory policy doesn't block the run.
 	Advisories []string
@@ -188,8 +191,9 @@ const (
 // PlanDecision is a decision on a plan waiting for approval.
 type PlanDecision struct {
 	Action PlanAction
-	// Reason says why the decision is left to be made elsewhere, for PlanWaitElsewhere. It is passed
-	// on in the DecisionDeferred event.
+	// Reason says why the decision isn't being made here: for PlanWaitElsewhere it is passed on in
+	// the DecisionDeferred event, and for PlanLeave in Outcome.LeaveReason. It is empty when a person
+	// chose to leave the run waiting.
 	Reason string
 }
 
@@ -232,7 +236,8 @@ const (
 // GateDecision is a decision on a policy stage blocked on gates.
 type GateDecision struct {
 	Action GateAction
-	// Reason says why the decision is left to be made elsewhere, for GateWaitElsewhere. It is passed
-	// on in the DecisionDeferred event.
+	// Reason says why the decision isn't being made here: for GateWaitElsewhere it is passed on in
+	// the DecisionDeferred event, and for GateLeave in Outcome.LeaveReason. It is empty when a person
+	// chose to leave the run waiting.
 	Reason string
 }
