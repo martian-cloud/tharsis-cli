@@ -107,6 +107,7 @@ func (s *planDecisionStage) decide(ctx context.Context, run *pb.Run) (decisionRe
 	case PlanDiscard:
 		return s.discard(ctx, run)
 	case PlanLeave:
+		s.f.leaveChosen, s.f.leaveReason = decision.Chosen, decision.Reason
 		return decisionDetach, nil
 	case PlanWaitElsewhere:
 		s.deferred = true

@@ -24,6 +24,7 @@ type applyCommand struct {
 	annotations              []string
 	autoApprove              *bool
 	input                    *bool
+	wait                     *bool
 	waitTimeout              *time.Duration
 	refresh                  *bool
 	refreshOnly              *bool
@@ -110,6 +111,7 @@ func (c *applyCommand) Run(args []string) int {
 
 	return followRunAndReport(ctx, cleanupCtx, c.UI, runMgr, createdRun, &run.FollowOptions{
 		Input:       *c.input,
+		Wait:        *c.wait,
 		WaitTimeout: *c.waitTimeout,
 	})
 }
@@ -169,7 +171,7 @@ func (c *applyCommand) Flags() *flag.Set {
 		"Skip interactive approval of the plan.",
 		flag.Default(false),
 	)
-	addFollowFlags(f, &c.input, &c.waitTimeout)
+	addFollowFlags(f, &c.input, &c.wait, &c.waitTimeout)
 	f.BoolVar(
 		&c.refresh,
 		"refresh",

@@ -227,18 +227,21 @@ var (
 
 // FollowOptions controls how the CLI follows a run.
 type FollowOptions struct {
-	// Input is false when the user passed -input=false; the CLI then never prompts, and waits for
-	// decisions to be made elsewhere (the Tharsis UI). A non-interactive terminal is treated the
-	// same way for policy gates.
+	// Input is false when the user passed -input=false; the CLI then never prompts. A
+	// non-interactive terminal is treated the same way for policy gates.
 	Input bool
-	// WaitTimeout is how long to wait on a decision, whether asked for at the terminal or being made
-	// in the Tharsis UI, before leaving the run waiting and exiting. Zero uses
+	// Wait is true when the user passed -wait: when a decision can't be asked for, keep following
+	// the run while it is made elsewhere (the Tharsis UI). Otherwise following stops and the run is
+	// left waiting.
+	Wait bool
+	// WaitTimeout is how long to wait on a decision, whether asked for at the terminal or (with
+	// Wait) being made in the Tharsis UI, before leaving the run waiting and exiting. Zero uses
 	// runpkg.DefaultWaitTimeout; there is no way to wait forever.
 	WaitTimeout time.Duration
 }
 
 // FollowRun follows a created run through each of its stages at the terminal, asking for decisions
-// when a stage blocks on a person. It wires the CLI's hooks (rendering, prompting and interrupt
+// when a stage blocks on a decision. It wires the CLI's hooks (rendering, prompting and interrupt
 // handling) into the generic follower in pkg/run.
 //
 // ctx is canceled by the first interrupt, with a SignalError cause naming the signal, and cleanupCtx
@@ -248,7 +251,7 @@ func (m *Manager) FollowRun(ctx, cleanupCtx context.Context, createdRun *pb.Run,
 	prompter := NewPrompter(m.ui, opts.Input)
 	return runpkg.Follow(ctx, m.grpcClient, createdRun, &runpkg.Options{
 		Observer:       &renderer{ui: m.ui, runID: createdRun.Metadata.Id},
-		Decider:        &cliDecider{ui: m.ui, prompter: prompter},
+		Decider:        &cliDecider{ui: m.ui, prompter: prompter, wait: opts.Wait},
 		Interrupter:    &cliInterrupter{ui: m.ui, prompter: prompter, followCtx: ctx},
 		CleanupContext: cleanupCtx,
 		WaitTimeout:    opts.WaitTimeout,

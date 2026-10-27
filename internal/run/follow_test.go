@@ -183,13 +183,13 @@ func TestFollowRun_TerraformStages(t *testing.T) {
 		assert.Contains(t, h.ui.output(), "Do you approve to destroy the above resources?")
 	})
 
-	t.Run("without input the plan approval is waited on from the UI", func(t *testing.T) {
+	t.Run("with -wait and without input the plan approval is waited on from the UI", func(t *testing.T) {
 		planned := newTestRun(pb.RunStatus_PLANNED, withPlan(pb.PlanStatus_FINISHED, "plan-job"))
 		// The plan is approved in the UI after a while.
 		h := newHarness(t, newFakeUI(true), planned, planned, planned, appliedRun())
 		h.runs.HoldUntil = func() bool { return strings.Contains(h.ui.output(), "Not asking for approval") }
 
-		outcome := h.follow(t, created, &FollowOptions{Input: false})
+		outcome := h.follow(t, created, &FollowOptions{Input: false, Wait: true})
 
 		assert.Equal(t, OutcomeCompleted, outcome.Kind)
 		assert.Equal(t, 0, h.ui.inputCount())
@@ -198,6 +198,40 @@ func TestFollowRun_TerraformStages(t *testing.T) {
 		out := h.ui.output()
 		assert.Equal(t, 1, strings.Count(out, "Not asking for approval since -input was false."))
 		assert.Contains(t, out, "Waiting for the plan to be applied or the run discarded in the Tharsis UI")
+	})
+
+	t.Run("without input or -wait the run is left waiting at plan approval", func(t *testing.T) {
+		planned := newTestRun(pb.RunStatus_PLANNED, withPlan(pb.PlanStatus_FINISHED, "plan-job"))
+		h := newHarness(t, newFakeUI(true), planned)
+
+		outcome := h.follow(t, created, &FollowOptions{Input: false})
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.False(t, outcome.TimedOut, "it stops without waiting")
+		assert.Equal(t, "Plan approval", outcome.Stage.Name)
+		assert.Equal(t, "-input was false", outcome.LeaveReason)
+		assert.Equal(t, 0, h.ui.inputCount())
+		assert.Equal(t, 0, h.runs.Applied)
+		assert.Equal(t, 0, h.runs.Discarded)
+		assert.NotContains(t, h.ui.output(), "Waiting for the plan", "it doesn't wait in the UI")
+	})
+
+	t.Run("without -wait a UI that can't read leaves the run waiting", func(t *testing.T) {
+		for name, inputErr := range map[string]error{
+			"the terminal is not interactive":    terminal.ErrNonInteractive,
+			"no answer could be read from stdin": io.EOF,
+		} {
+			t.Run(name, func(t *testing.T) {
+				ui := newFakeUI(false)
+				ui.inputErr = inputErr
+				h := newHarness(t, ui, newTestRun(pb.RunStatus_PLANNED, withPlan(pb.PlanStatus_FINISHED, "plan-job")))
+
+				outcome := h.follow(t, created, &FollowOptions{Input: true})
+
+				assert.Equal(t, OutcomeDetached, outcome.Kind)
+				assert.Equal(t, name, outcome.LeaveReason)
+			})
+		}
 	})
 
 	t.Run("a piped approval applies the run", func(t *testing.T) {
@@ -211,7 +245,7 @@ func TestFollowRun_TerraformStages(t *testing.T) {
 		assert.Equal(t, 1, h.runs.Applied)
 	})
 
-	t.Run("a UI that can't read waits for the plan to be decided elsewhere", func(t *testing.T) {
+	t.Run("with -wait a UI that can't read waits for the plan to be decided elsewhere", func(t *testing.T) {
 		ui := newFakeUI(false)
 		ui.inputErr = terminal.ErrNonInteractive
 		planned := newTestRun(pb.RunStatus_PLANNED, withPlan(pb.PlanStatus_FINISHED, "plan-job"))
@@ -220,7 +254,7 @@ func TestFollowRun_TerraformStages(t *testing.T) {
 			newTestRun(pb.RunStatus_DISCARDED, withPlan(pb.PlanStatus_FINISHED, "plan-job")))
 		h.runs.HoldUntil = func() bool { return strings.Contains(ui.output(), "Not asking for approval") }
 
-		outcome := h.follow(t, created, &FollowOptions{Input: true})
+		outcome := h.follow(t, created, &FollowOptions{Input: true, Wait: true})
 
 		assert.Equal(t, OutcomeFailed, outcome.Kind)
 		assert.Equal(t, pb.RunStatus_DISCARDED, outcome.Run.Status)
@@ -229,14 +263,14 @@ func TestFollowRun_TerraformStages(t *testing.T) {
 		assert.Equal(t, 1, strings.Count(ui.output(), "Not asking for approval since the terminal is not interactive."))
 	})
 
-	t.Run("empty stdin waits for the plan to be decided elsewhere", func(t *testing.T) {
+	t.Run("with -wait empty stdin waits for the plan to be decided elsewhere", func(t *testing.T) {
 		ui := newFakeUI(false)
 		ui.inputErr = io.EOF
 		planned := newTestRun(pb.RunStatus_PLANNED, withPlan(pb.PlanStatus_FINISHED, "plan-job"))
 		h := newHarness(t, ui, planned, planned, planned, appliedRun())
 		h.runs.HoldUntil = func() bool { return strings.Contains(ui.output(), "Not asking for approval") }
 
-		outcome := h.follow(t, created, &FollowOptions{Input: true})
+		outcome := h.follow(t, created, &FollowOptions{Input: true, Wait: true})
 
 		assert.Equal(t, OutcomeCompleted, outcome.Kind)
 		assert.Equal(t, 0, h.runs.Applied)
@@ -251,6 +285,8 @@ func TestFollowRun_TerraformStages(t *testing.T) {
 
 		assert.Equal(t, OutcomeDetached, outcome.Kind)
 		assert.Equal(t, "Plan approval", outcome.Stage.Name)
+		assert.True(t, outcome.LeaveChosen, "the user chose to leave it")
+		assert.Empty(t, outcome.LeaveReason)
 		assert.Equal(t, 0, h.runs.Applied)
 		assert.Equal(t, 0, h.runs.Discarded)
 	})
@@ -305,7 +341,7 @@ func TestFollowRun_TerraformStages(t *testing.T) {
 	t.Run("the plan approval wait times out", func(t *testing.T) {
 		h := newHarness(t, newFakeUI(true), newTestRun(pb.RunStatus_PLANNED, withPlan(pb.PlanStatus_FINISHED, "plan-job")))
 
-		outcome := h.follow(t, created, &FollowOptions{Input: false, WaitTimeout: 30 * time.Millisecond})
+		outcome := h.follow(t, created, &FollowOptions{Input: false, Wait: true, WaitTimeout: 30 * time.Millisecond})
 
 		assert.Equal(t, OutcomeDetached, outcome.Kind)
 		assert.True(t, outcome.TimedOut)
@@ -531,7 +567,7 @@ func TestFollowRun_Interrupt(t *testing.T) {
 					}
 					h := newHarness(t, ui, r)
 
-					outcome := interruptWith(h, c.sig, context.Background(), &FollowOptions{Input: c.input})
+					outcome := interruptWith(h, c.sig, context.Background(), &FollowOptions{Input: c.input, Wait: true})
 
 					assertLeftGoing(t, h, outcome)
 				})
@@ -696,14 +732,14 @@ func TestFollowRun_PolicyStages(t *testing.T) {
 		assert.Equal(t, 1, h.runs.Discarded)
 	})
 
-	t.Run("without input the gate is waited on from the UI", func(t *testing.T) {
+	t.Run("with -wait and without input the gate is waited on from the UI", func(t *testing.T) {
 		// The gate is approved in the UI after a while.
 		h := newHarness(t, newFakeUI(true), awaiting("check-job"), awaiting("check-job"), awaiting("check-job"),
 			cleared("check-job", pb.PolicyCheckStatus_POLICY_CHECK_STATUS_OVERRIDDEN))
 		h.runs.Results["c1"] = softFailedResults("c1", 2, 1)
 		h.runs.HoldUntil = func() bool { return strings.Contains(h.ui.output(), "Not asking for a decision") }
 
-		outcome := h.follow(t, created, &FollowOptions{Input: false})
+		outcome := h.follow(t, created, &FollowOptions{Input: false, Wait: true})
 
 		assert.Equal(t, OutcomeCompleted, outcome.Kind)
 		assert.Equal(t, 0, h.ui.inputCount())
@@ -715,14 +751,29 @@ func TestFollowRun_PolicyStages(t *testing.T) {
 		assert.Contains(t, out, "Waiting for the gate to be approved, overridden or the run discarded in the Tharsis UI (1 of 2 approvals)")
 	})
 
-	t.Run("without a terminal a gate discarded in the UI fails the run", func(t *testing.T) {
+	t.Run("without input or -wait the run is left waiting at a gate", func(t *testing.T) {
+		h := newHarness(t, newFakeUI(true), awaiting("check-job"))
+		h.runs.Results["c1"] = softFailedResults("c1", 2, 1)
+
+		outcome := h.follow(t, created, &FollowOptions{Input: false})
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.False(t, outcome.TimedOut)
+		assert.Equal(t, preApply, outcome.Stage.TaskStage)
+		assert.Equal(t, "-input was false", outcome.LeaveReason)
+		assert.Equal(t, 0, h.ui.inputCount())
+		assert.Equal(t, 0, h.runs.Approved)
+		assert.Contains(t, h.ui.output(), "bucket must be encrypted", "findings are still shown")
+	})
+
+	t.Run("with -wait and without a terminal a gate discarded in the UI fails the run", func(t *testing.T) {
 		discarded := newTestRun(pb.RunStatus_DISCARDED, withPlan(pb.PlanStatus_FINISHED, "plan-job"),
 			withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_CANCELED,
 				newCheck("c1", pb.PolicyCheckStatus_POLICY_CHECK_STATUS_SOFT_FAILED, "check-job")))
 		h := newHarness(t, newFakeUI(false), awaiting("check-job"), awaiting("check-job"), discarded)
 		h.runs.Results["c1"] = softFailedResults("c1", 1, 0)
 
-		outcome := h.follow(t, created, &FollowOptions{Input: true})
+		outcome := h.follow(t, created, &FollowOptions{Input: true, Wait: true})
 
 		assert.Equal(t, OutcomeFailed, outcome.Kind)
 		assert.Equal(t, pb.RunStatus_DISCARDED, outcome.Run.Status)
@@ -759,7 +810,7 @@ func TestFollowRun_PolicyStages(t *testing.T) {
 		h.runs.Results["c1"] = softFailedResults("c1", 1, 0)
 		h.runs.HoldUntil = func() bool { return strings.Contains(h.ui.output(), "Not asking for a decision") }
 
-		outcome := h.follow(t, created, &FollowOptions{Input: false})
+		outcome := h.follow(t, created, &FollowOptions{Input: false, Wait: true})
 
 		assert.Equal(t, OutcomeCompleted, outcome.Kind)
 		out := h.ui.output()
@@ -849,11 +900,14 @@ func TestFollowRun_UnsupportedTasks(t *testing.T) {
 		assert.Contains(t, out, "Unsupported policy check type (99); waiting for it to finish.")
 	})
 
-	for _, interactive := range []bool{true, false} {
-		t.Run(fmt.Sprintf("a stage blocked on an unsupported check waits instead of prompting (interactive=%v)", interactive), func(t *testing.T) {
-			h := newHarness(t, newFakeUI(interactive), awaiting, awaiting, awaiting, cleared)
+	for _, c := range []struct {
+		interactive, wait bool
+	}{{true, false}, {false, true}} {
+		t.Run(fmt.Sprintf("a stage blocked on an unsupported check waits instead of prompting (interactive=%v, wait=%v)", c.interactive, c.wait), func(t *testing.T) {
+			h := newHarness(t, newFakeUI(c.interactive), awaiting, awaiting, cleared)
+			h.runs.HoldUntil = func() bool { return strings.Contains(h.ui.output(), "Waiting for the run to continue") }
 
-			outcome := h.follow(t, created, &FollowOptions{Input: true})
+			outcome := h.follow(t, created, &FollowOptions{Input: true, Wait: c.wait})
 
 			assert.Equal(t, OutcomeCompleted, outcome.Kind)
 			assert.Equal(t, 0, h.ui.inputCount(), "there is nothing this CLI can ask about")
@@ -862,6 +916,30 @@ func TestFollowRun_UnsupportedTasks(t *testing.T) {
 			assert.Contains(t, out, "Waiting for the run to continue; it is blocked on a task this version of the CLI can't show")
 		})
 	}
+
+	t.Run("without a terminal or -wait a stage blocked on an unsupported check is left waiting", func(t *testing.T) {
+		h := newHarness(t, newFakeUI(false), awaiting)
+
+		outcome := h.follow(t, created, &FollowOptions{Input: true})
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.False(t, outcome.TimedOut, "it stops without waiting")
+		assert.Equal(t, preApply, outcome.Stage.TaskStage)
+		assert.Equal(t, "the terminal is not interactive", outcome.LeaveReason)
+		assert.Equal(t, 0, h.ui.inputCount())
+	})
+
+	t.Run("with -input=false a stage with no checks this CLI can see is left waiting", func(t *testing.T) {
+		blocked := newTestRun(pb.RunStatus_PRE_APPLY_AWAITING_DECISION, withAutoApply(), withPlan(pb.PlanStatus_FINISHED, "plan-job"),
+			withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_AWAITING_OVERRIDE))
+		h := newHarness(t, newFakeUI(true), blocked)
+
+		outcome := h.follow(t, newTestRun(pb.RunStatus_PENDING, withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_CREATED)),
+			&FollowOptions{Input: false})
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.Equal(t, "-input was false", outcome.LeaveReason)
+	})
 
 	t.Run("a stage with no checks this CLI can see waits for it to finish", func(t *testing.T) {
 		// A stage holding only other kinds of tasks, which this CLI's API version doesn't carry.
@@ -893,11 +971,13 @@ func TestFollowRun_UnsupportedTasks(t *testing.T) {
 		h.runs.OnApprove = func(f *runtest.Runs) *pb.RunGate {
 			// The supported gate clears, but the unsupported check still blocks the stage for a while.
 			f.Results["c2"].RunGate.Status = pb.RunGateStatus_RUN_GATE_STATUS_APPROVED
-			f.Set(mixed, mixed, appliedRun(withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_COMPLETED)))
+			f.Set(mixed, appliedRun(withStage(preApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_COMPLETED)))
 			g := softFailedResults("c2", 1, 1).RunGate
 			g.Status = pb.RunGateStatus_RUN_GATE_STATUS_APPROVED
 			return g
 		}
+		// Stay blocked until the CLI is waiting, however many reads asking about the stage takes.
+		h.runs.HoldUntil = func() bool { return strings.Contains(h.ui.output(), "Waiting for the run to continue") }
 
 		outcome := h.follow(t, created, &FollowOptions{Input: true})
 

@@ -75,20 +75,28 @@ func followRunAndReport(followCtx, cleanupCtx context.Context, ui terminal.UI, r
 	return code
 }
 
-// addFollowFlags adds the flags that control how a run is followed: -input and -wait-timeout.
-func addFollowFlags(f *flag.Set, input **bool, waitTimeout **time.Duration) {
+// addFollowFlags adds the flags that control how a run is followed: -input, -wait and -wait-timeout.
+func addFollowFlags(f *flag.Set, input, wait **bool, waitTimeout **time.Duration) {
 	f.BoolVar(
 		input,
 		"input",
-		"Ask for plan approval and policy gate decisions. When false, wait for them to be made in the Tharsis UI.",
+		"Ask for plan approval and policy gate decisions. When false, they are left to be made in the Tharsis UI.",
 		flag.Default(true),
+	)
+	f.BoolVar(
+		wait,
+		"wait",
+		"When a plan approval or policy gate decision can't be asked for (-input=false or no terminal), "+
+			"keep following the run and wait for it to be made in the Tharsis UI, for up to -wait-timeout. "+
+			"Without it, the CLI leaves the run waiting and exits.",
+		flag.Default(false),
 	)
 	f.DurationVar(
 		waitTimeout,
 		"wait-timeout",
 		"How long to wait on plan approval or a policy gate decision, whether asked for at the terminal "+
-			"or being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting and exiting. "+
-			"Must be positive.",
+			"or (with -wait) being made in the Tharsis UI (e.g. 30m, 2h), before leaving the run waiting "+
+			"and exiting 1. Must be positive.",
 		flag.Default(runpkg.DefaultWaitTimeout),
 		flag.Validate(func(s string) error {
 			d, err := time.ParseDuration(s)
@@ -127,13 +135,33 @@ func followHelp(command string, hasApply bool) string {
    approval. Approve it (or override it, when it has no
    eligible approvers), discard the run, or press Enter to
    leave it waiting. Gates are only asked about at an
-   interactive terminal.
-
-   With -input=false, or when the CLI can't ask, it keeps
-   following the run and waits for the decision to be made
-   in the Tharsis UI. A decision is waited on for at most
-   -wait-timeout, after which the run is left waiting.
-
+   interactive terminal. When a stage is blocked on a check
+   this CLI can't show, there is nothing to ask; at an
+   interactive terminal the CLI waits for it to be decided
+   in the Tharsis UI, for up to -wait-timeout.
+`)
+	if hasApply {
+		b.WriteString(`
+   With -input=false, or when the CLI can't ask, it leaves
+   the run waiting for the decision to be made in the
+   Tharsis UI and exits: 0 at plan approval, 1 at a policy
+   gate. With -wait, it keeps following the run while the
+   decision is made in the Tharsis UI instead. A decision is
+   waited on for at most -wait-timeout, after which the run
+   is left waiting and the CLI exits 1.
+`)
+	} else {
+		b.WriteString(`
+   With -input=false, or when the CLI can't ask, it leaves
+   the run waiting at the policy gate for the decision to
+   be made in the Tharsis UI and exits 1. With -wait, it
+   keeps following the run while the decision is made in
+   the Tharsis UI instead. A decision is waited on for at
+   most -wait-timeout, after which the run is left waiting
+   and the CLI exits 1.
+`)
+	}
+	b.WriteString(`
    Ctrl-C at an interactive terminal asks whether to cancel
    the run if it is still running. Otherwise, including on
    SIGTERM, without a terminal and with -input=false, the
@@ -185,9 +213,24 @@ func reportOutcome(ui terminal.UI, outcome *runpkg.Outcome, opts *run.FollowOpti
 				timeout, runID, waitingOn)
 			return 1
 		}
-		// The user chose to leave the run waiting, so this isn't a failure.
+		if outcome.LeaveChosen {
+			// The user chose to leave the run waiting, so this isn't a failure.
+			ui.Warnf("\nRun %s is waiting for %s in the Tharsis UI.", runID, waitingOn)
+			return 0
+		}
+		// The CLI couldn't ask and -wait wasn't passed. Stopping at plan approval is the expected way
+		// to hand the run over to the Tharsis UI; stopping at a policy gate means the run didn't get
+		// as far as the command was asked to take it.
+		if outcome.LeaveReason != "" {
+			ui.Output("\nNot waiting for a decision since %s; pass -wait to wait for it.", outcome.LeaveReason)
+		} else {
+			ui.Output("\nNot waiting for a decision; pass -wait to wait for it.")
+		}
 		ui.Warnf("\nRun %s is waiting for %s in the Tharsis UI.", runID, waitingOn)
-		return 0
+		if outcome.Stage.Kind == runpkg.StagePlanApproval {
+			return 0
+		}
+		return 1
 	case runpkg.OutcomeDiscarded:
 		ui.Output("Run discarded.")
 		return 0
