@@ -1,3 +1,3 @@
 kind: Added
-body: New -wait-timeout flag on plan, apply and destroy (default 1h) limits how long the CLI waits on a plan approval or policy gate decision, whether asked for at the terminal or being made in the Tharsis UI, before leaving the run waiting and exiting 1; plan also gains the -input flag.
+body: New -wait and -wait-timeout flags on plan, apply and destroy. With -wait, when a plan approval or policy gate decision can't be asked for (-input=false or no interactive terminal), the CLI keeps following the run while the decision is made in the Tharsis UI. -wait-timeout (default 1h) limits how long a decision is waited on, at the terminal or with -wait in the Tharsis UI, before leaving the run waiting and exiting 1. plan also gains the -input flag.
 time: 2026-09-30T18:00:02.000000000-04:00

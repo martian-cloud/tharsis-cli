@@ -258,12 +258,26 @@ func TestFollow_PlanDecision(t *testing.T) {
 
 	t.Run("leave detaches at plan approval", func(t *testing.T) {
 		h := newHarness(planned())
-		d := &scriptedDecider{plans: []PlanDecision{{Action: PlanLeave}}}
+		d := &scriptedDecider{plans: []PlanDecision{{Action: PlanLeave, Chosen: true}}}
 
 		outcome := h.follow(t, h.options(d))
 
 		assert.Equal(t, OutcomeDetached, outcome.Kind)
 		assert.Equal(t, StagePlanApproval, outcome.Stage.Kind)
+		assert.True(t, outcome.LeaveChosen)
+		assert.Empty(t, outcome.LeaveReason)
+	})
+
+	t.Run("a leave's reason is passed on in the outcome", func(t *testing.T) {
+		h := newHarness(planned())
+		d := &scriptedDecider{plans: []PlanDecision{{Action: PlanLeave, Reason: "nobody is there"}}}
+
+		outcome := h.follow(t, h.options(d))
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.False(t, outcome.TimedOut)
+		assert.False(t, outcome.LeaveChosen, "a decision is the decider's own unless it says it was chosen")
+		assert.Equal(t, "nobody is there", outcome.LeaveReason)
 	})
 
 	t.Run("wait elsewhere passes on the reason and isn't asked again", func(t *testing.T) {
@@ -753,7 +767,7 @@ func TestRunStatusHelpers(t *testing.T) {
 	assert.True(t, IsRunFinal(pb.RunStatus_PLANNED_AND_FINISHED))
 	assert.True(t, IsRunFinal(pb.RunStatus_DISCARDED))
 	assert.False(t, IsRunFinal(pb.RunStatus_PLANNED))
-	assert.False(t, IsRunCancelable(pb.RunStatus_PLANNED), "a run waiting on a person is discarded instead")
+	assert.False(t, IsRunCancelable(pb.RunStatus_PLANNED), "a run waiting on a decision is discarded instead")
 	assert.True(t, IsRunCancelable(pb.RunStatus_APPLYING))
 	assert.False(t, IsRunCancelable(pb.RunStatus_APPLIED))
 }

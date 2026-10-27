@@ -323,6 +323,27 @@ func TestFollow_TaskStages(t *testing.T) {
 		assert.True(t, waited)
 	})
 
+	t.Run("a stage blocked on something that can't be shown asks the decider with no gates", func(t *testing.T) {
+		unsupported := runtest.NewCheck("c1", pb.PolicyCheckStatus_POLICY_CHECK_STATUS_SOFT_FAILED, "check-job")
+		unsupported.CheckType = pb.PolicyCheckType_POLICY_CHECK_TYPE_UNSPECIFIED
+		blocked := runtest.NewRun(pb.RunStatus_PRE_APPLY_AWAITING_DECISION,
+			runtest.WithPlan(pb.PlanStatus_FINISHED, "plan-job"),
+			runtest.WithStage(runtest.PreApply, pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_AWAITING_OVERRIDE, unsupported))
+		h := newHarness(blocked)
+		d := &scriptedDecider{gates: []GateDecision{{Action: GateLeave, Reason: "nobody is there"}}}
+
+		outcome := h.follow(t, h.options(d))
+
+		assert.Equal(t, OutcomeDetached, outcome.Kind)
+		assert.False(t, outcome.LeaveChosen)
+		assert.Equal(t, "nobody is there", outcome.LeaveReason)
+		require.Len(t, d.gateReqs, 1)
+		assert.Empty(t, d.gateReqs[0].Pending)
+		assert.False(t, d.gateReqs[0].CanApprove)
+		assert.False(t, d.gateReqs[0].CanOverride)
+		assert.Empty(t, find[GatesPending](h.rec), "there are no gates to show")
+	})
+
 	t.Run("a pending stage waits on the workspace", func(t *testing.T) {
 		h := newHarness(
 			applying(pb.RunTaskStageStatus_RUN_TASK_STAGE_STATUS_PENDING),

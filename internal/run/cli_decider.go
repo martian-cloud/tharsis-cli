@@ -12,10 +12,14 @@ import (
 )
 
 // cliDecider asks the user at the terminal for plan approval and gate decisions. When it can't ask
-// (-input=false, no terminal, or empty stdin), it leaves the decision to be made in the Tharsis UI.
+// (-input=false, no terminal, or empty stdin), it leaves the run waiting for the decision to be made
+// in the Tharsis UI, and stops following it unless wait is set.
 type cliDecider struct {
 	ui       outputUI
 	prompter *Prompter
+	// wait is true when -wait was passed: keep following the run while the decision is made
+	// elsewhere, rather than stopping.
+	wait bool
 }
 
 // outputUI is the part of the terminal UI the hooks write to.
@@ -29,7 +33,7 @@ var _ runpkg.Decider = (*cliDecider)(nil)
 // `yes | tharsis apply` still approves.
 func (d *cliDecider) DecidePlan(ctx context.Context, req *runpkg.PlanRequest) (runpkg.PlanDecision, error) {
 	if !d.prompter.AcceptsInput() {
-		return runpkg.PlanDecision{Action: runpkg.PlanWaitElsewhere, Reason: d.prompter.cannotAskReason()}, nil
+		return d.cannotAskPlan(d.prompter.cannotAskReason()), nil
 	}
 
 	question, verb := "Do you approve to apply the above plan?", "apply"
@@ -44,10 +48,10 @@ func (d *cliDecider) DecidePlan(ctx context.Context, req *runpkg.PlanRequest) (r
 		switch {
 		case errors.Is(err, io.EOF):
 			// Stdin is empty, as it often is in CI.
-			return runpkg.PlanDecision{Action: runpkg.PlanWaitElsewhere, Reason: "no answer could be read from stdin"}, nil
+			return d.cannotAskPlan("no answer could be read from stdin"), nil
 		case errors.Is(err, terminal.ErrNonInteractive):
 			// The UI can't read at all (stdout isn't a terminal).
-			return runpkg.PlanDecision{Action: runpkg.PlanWaitElsewhere, Reason: "the terminal is not interactive"}, nil
+			return d.cannotAskPlan("the terminal is not interactive"), nil
 		case err != nil:
 			return runpkg.PlanDecision{}, err
 		}
@@ -63,7 +67,7 @@ func (d *cliDecider) DecidePlan(ctx context.Context, req *runpkg.PlanRequest) (r
 			}
 			return runpkg.PlanDecision{Action: runpkg.PlanDiscard}, nil
 		case "":
-			return runpkg.PlanDecision{Action: runpkg.PlanLeave}, nil
+			return runpkg.PlanDecision{Action: runpkg.PlanLeave, Chosen: true}, nil
 		default:
 			d.ui.Output("  %q isn't one of the choices.", answer)
 		}
@@ -71,10 +75,17 @@ func (d *cliDecider) DecidePlan(ctx context.Context, req *runpkg.PlanRequest) (r
 }
 
 // DecideGates asks what to do at a blocked policy stage. Gates are only asked about at an
-// interactive terminal.
+// interactive terminal, and only when there are gates this CLI can show. A stage blocked only on
+// work this CLI can't show is waited on at an interactive terminal whatever -wait says, since -wait
+// only covers decisions that can't be asked for.
 func (d *cliDecider) DecideGates(ctx context.Context, req *runpkg.GateRequest) (runpkg.GateDecision, error) {
 	if !d.prompter.Interactive() {
-		return runpkg.GateDecision{Action: runpkg.GateWaitElsewhere, Reason: d.prompter.cannotAskReason()}, nil
+		return d.cannotAskGates(d.prompter.cannotAskReason()), nil
+	}
+	if len(req.Pending) == 0 {
+		// Blocked on work this CLI can't show, so there is nothing to ask about: keep waiting while
+		// it is decided in the Tharsis UI. The user is at the terminal and can stop with Ctrl-C.
+		return runpkg.GateDecision{Action: runpkg.GateWaitElsewhere}, nil
 	}
 
 	d.ui.Output("")
@@ -83,9 +94,9 @@ func (d *cliDecider) DecideGates(ctx context.Context, req *runpkg.GateRequest) (
 		answer, err := d.prompter.Ask(ctx, prompt)
 		switch {
 		case errors.Is(err, io.EOF):
-			return runpkg.GateDecision{Action: runpkg.GateWaitElsewhere, Reason: "no answer could be read from stdin"}, nil
+			return d.cannotAskGates("no answer could be read from stdin"), nil
 		case errors.Is(err, terminal.ErrNonInteractive):
-			return runpkg.GateDecision{Action: runpkg.GateWaitElsewhere, Reason: "the terminal is not interactive"}, nil
+			return d.cannotAskGates("the terminal is not interactive"), nil
 		case err != nil:
 			return runpkg.GateDecision{}, err
 		}
@@ -104,11 +115,29 @@ func (d *cliDecider) DecideGates(ctx context.Context, req *runpkg.GateRequest) (
 		case "discard":
 			return runpkg.GateDecision{Action: runpkg.GateDiscard}, nil
 		case "":
-			return runpkg.GateDecision{Action: runpkg.GateLeave}, nil
+			return runpkg.GateDecision{Action: runpkg.GateLeave, Chosen: true}, nil
 		default:
 			d.ui.Output("  %q isn't one of the choices.", answer)
 		}
 	}
+}
+
+// cannotAskPlan is the plan decision when the user can't be asked: wait for it to be made elsewhere
+// with -wait, or else leave the run waiting.
+func (d *cliDecider) cannotAskPlan(reason string) runpkg.PlanDecision {
+	if d.wait {
+		return runpkg.PlanDecision{Action: runpkg.PlanWaitElsewhere, Reason: reason}
+	}
+	return runpkg.PlanDecision{Action: runpkg.PlanLeave, Reason: reason}
+}
+
+// cannotAskGates is the gate decision when the user can't be asked: wait for it to be made
+// elsewhere with -wait, or else leave the run waiting.
+func (d *cliDecider) cannotAskGates(reason string) runpkg.GateDecision {
+	if d.wait {
+		return runpkg.GateDecision{Action: runpkg.GateWaitElsewhere, Reason: reason}
+	}
+	return runpkg.GateDecision{Action: runpkg.GateLeave, Reason: reason}
 }
 
 // gatePrompt lists the choices at a gate, offering approve and override only where they apply.
@@ -128,7 +157,7 @@ func gatePrompt(canApprove, canOverride bool) string {
 // cliInterrupter decides what happens to the run on Ctrl-C.
 //
 // At an interactive terminal the user is asked whether to cancel a run that is still doing work; a
-// run waiting on a person (plan approval or a policy gate) is left for them to decide on.
+// run waiting on a decision (plan approval or a policy gate) is left to be decided.
 //
 // Otherwise the run is always left going: the CLI never cancels or discards a run without being told
 // to. SIGTERM in particular is sent for many reasons that aren't a wish to stop the run (a CI job's

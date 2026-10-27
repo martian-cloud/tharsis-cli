@@ -1,3 +1,3 @@
 kind: Changed
-body: With -input=false (or without an interactive terminal), apply and destroy no longer exit after the plan; they keep following the run and wait, for up to -wait-timeout, for the plan to be approved or discarded in the Tharsis UI. Use -auto-approve to apply without waiting.
+body: With -input=false (or without an interactive terminal), apply and destroy still leave the run waiting for plan approval in the Tharsis UI and exit 0, but first follow any policy stages before it; if a policy gate needs a decision, the run is left waiting at the gate and the CLI exits 1. Pass -wait to wait for these decisions in the Tharsis UI instead.
 time: 2026-09-30T18:00:04.000000000-04:00

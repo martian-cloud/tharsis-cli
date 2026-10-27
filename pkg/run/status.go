@@ -27,13 +27,13 @@ func IsRunFinal(s pb.RunStatus) bool {
 }
 
 // IsRunCancelable reports whether the run is doing work that canceling would stop. A run waiting on
-// a person (plan approval or a policy gate) could be canceled too, but declining it is done by
+// a decision (plan approval or a policy gate) could be canceled too, but declining it is done by
 // discarding it, and a run that is over can't be canceled.
 func IsRunCancelable(s pb.RunStatus) bool {
 	return !IsRunAwaitingDecision(s) && !IsRunFinal(s)
 }
 
-// IsRunAwaitingDecision reports whether the run is waiting on a person: plan approval or a policy
+// IsRunAwaitingDecision reports whether the run is waiting on a decision: plan approval or a policy
 // gate. Such a run is applied or discarded rather than canceled.
 func IsRunAwaitingDecision(s pb.RunStatus) bool {
 	switch s {

@@ -24,6 +24,7 @@ type planCommand struct {
 	annotations              []string
 	destroy                  *bool
 	input                    *bool
+	wait                     *bool
 	waitTimeout              *time.Duration
 	refresh                  *bool
 	refreshOnly              *bool
@@ -109,6 +110,7 @@ func (c *planCommand) Run(args []string) int {
 
 	return followRunAndReport(ctx, cleanupCtx, c.UI, runMgr, createdRun, &run.FollowOptions{
 		Input:       *c.input,
+		Wait:        *c.wait,
 		WaitTimeout: *c.waitTimeout,
 	})
 }
@@ -172,7 +174,7 @@ func (c *planCommand) Flags() *flag.Set {
 		"terraform-version",
 		"The Terraform CLI version to use for the run.",
 	)
-	addFollowFlags(f, &c.input, &c.waitTimeout)
+	addFollowFlags(f, &c.input, &c.wait, &c.waitTimeout)
 	f.BoolVar(
 		&c.destroy,
 		"destroy",
