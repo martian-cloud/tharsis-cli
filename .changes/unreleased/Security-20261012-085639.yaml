@@ -1,3 +1,0 @@
-kind: Security
-body: Upgrade google.golang.org/grpc to v1.83.1 to address grpc-go vulnerabilities.
-time: 2026-10-12T08:56:39.000000000-04:00

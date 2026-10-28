@@ -1,3 +1,0 @@
-kind: Changed
-body: With -auto-approve, the server starts the apply as soon as the plan and any post-plan policy stage clear, instead of the CLI applying the run.
-time: 2026-09-30T18:00:05.000000000-04:00

@@ -1,3 +1,0 @@
-kind: Added
-body: When a policy soft-fails, plan, apply and destroy let you approve the gate (or override it when it has no eligible approvers), discard the run, or leave it waiting.
-time: 2026-09-30T18:00:01.000000000-04:00
