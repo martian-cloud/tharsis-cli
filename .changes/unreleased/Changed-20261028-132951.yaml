@@ -1,0 +1,3 @@
+kind: Changed
+body: Support workspace variables for tfexec commands.
+time: 2026-10-28T13:29:51.95530937Z
