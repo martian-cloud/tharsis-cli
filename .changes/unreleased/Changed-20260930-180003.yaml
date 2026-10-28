@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Plan approval in apply and destroy now takes ''yes'' to apply, ''no'' to discard the run, or Enter to leave it waiting; previously any answer other than ''yes'' left the run planned. Leaving a run waiting at a prompt exits 0; stopping because -wait-timeout passed exits 1.'
-time: 2026-09-30T18:00:03.000000000-04:00
