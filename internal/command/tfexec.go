@@ -20,7 +20,12 @@ import (
 	"github.com/hashicorp/hc-install/product"
 	"github.com/hashicorp/hc-install/releases"
 	"github.com/hashicorp/hc-install/src"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/posener/complete"
+	"github.com/zclconf/go-cty/cty"
 	client "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/client"
 	pb "gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/protos/gen"
 	"gitlab.com/infor-cloud/martian-cloud/tharsis/tharsis-api/pkg/trn"
@@ -105,11 +110,13 @@ func (c *tfExecCommand) Run(args []string) int {
 		return 1
 	}
 
-	env, err := c.buildTerraformEnv(workspace.FullPath, profile.Endpoint, tokenResolver)
+	vars, err := c.resolveNamespaceVariables(workspace.FullPath)
 	if err != nil {
-		c.UI.ErrorWithSummary(err, "failed to build environment")
+		c.UI.ErrorWithSummary(err, "failed to resolve workspace variables")
 		return 1
 	}
+
+	env := c.buildTerraformEnv(vars, profile.Endpoint, tokenResolver)
 
 	backendCfg, err := buildTerraformBackendConfig(profile.Endpoint, workspace.FullPath)
 	if err != nil {
@@ -164,6 +171,15 @@ func (c *tfExecCommand) Run(args []string) int {
 	}
 	if !persistentDir {
 		defer os.Remove(overridePath) //nolint:errcheck
+	}
+
+	wroteTfvars, err := c.writeTharsisAutoTfvars(workDir, vars)
+	if err != nil {
+		c.UI.ErrorWithSummary(err, "failed to write terraform variables file")
+		return 1
+	}
+	if wroteTfvars && !persistentDir {
+		defer os.Remove(filepath.Join(workDir, tharsisAutoTfvarsFile)) //nolint:errcheck
 	}
 
 	markerPath := filepath.Join(workDir, ".tharsis-cv-id")
@@ -310,7 +326,8 @@ func (*tfExecCommand) Description() string {
     When -tf-path is not provided, tharsis looks for a cached terraform binary
     matching the workspace's configured version in ~/.tharsis/tf-installs/<version>/.
     If not found, it downloads that exact version from releases.hashicorp.com and
-    caches it there for future use.
+    caches it there for future use. When the workspace has no applied run yet, the
+    version is unknown, so tharsis falls back to the terraform found on your PATH.
 
   Authentication:
 
@@ -326,6 +343,10 @@ func (*tfExecCommand) Description() string {
       - Environment variables (category: environment) -> <key>=<value>
 
     Sensitive variable values are automatically fetched and injected.
+
+    Terraform variables are also written to a tharsis.auto.tfvars file in the
+    working directory so commands such as 'import' that read variables from
+    .tfvars files (rather than TF_VAR_* env vars) work without extra setup.
 
   Exit Code:
 
@@ -415,6 +436,12 @@ func (c *tfExecCommand) resolveTerraformBinaryForHelp() (string, error) {
 		return p, nil
 	}
 
+	return lookupTerraformOnPath()
+}
+
+// lookupTerraformOnPath returns the absolute path to a terraform binary found on
+// the user's PATH, or an error if none is found.
+func lookupTerraformOnPath() (string, error) {
 	path, err := exec.LookPath("terraform")
 	if err != nil {
 		return "", fmt.Errorf("terraform not found on PATH and -tf-path not set")
@@ -437,7 +464,13 @@ func (c *tfExecCommand) resolveTerraformBinary(tfVersionStr string) (string, err
 	}
 
 	if tfVersionStr == "" {
-		return "", fmt.Errorf("no previous applied run found to determine Terraform version; use -tf-path to specify a binary")
+		path, err := lookupTerraformOnPath()
+		if err != nil {
+			return "", fmt.Errorf("no previous applied run found to determine Terraform version, and %w; use -tf-path to specify a binary", err)
+		}
+
+		c.Logger.Warn("no applied run found to determine Terraform version; falling back to terraform on PATH", "path", path)
+		return path, nil
 	}
 
 	tfVersion, err := goversion.NewVersion(tfVersionStr)
@@ -532,32 +565,26 @@ func (c *tfExecCommand) downloadLastRunConfig(restClient client.RESTClient, last
 	return nil
 }
 
-// buildTerraformEnv constructs the environment for the terraform subprocess,
-// injecting the Tharsis auth token and all workspace variables.
-func (c *tfExecCommand) buildTerraformEnv(namespacePath, tharsisURL string, tokenResolver client.TokenResolver) ([]string, error) {
-	env := os.Environ()
+// resolvedVar is a workspace variable with its value fully resolved (including
+// sensitive values fetched on demand).
+type resolvedVar struct {
+	Key       string
+	Value     string
+	Category  string
+	Sensitive bool
+}
 
-	if _, err := buildTFTokenEnvKey(tharsisURL); err != nil {
-		c.Logger.Debug("skipping TF_TOKEN injection: could not derive env key from URL", "url", tharsisURL, "error", err)
-	} else {
-		tokenStr, err := tokenResolver.Token(c.Context)
-		if err != nil {
-			c.Logger.Debug("skipping TF_TOKEN injection: could not get token", "error", err)
-		} else {
-			var tokenPtr *string
-			if tokenStr != "" {
-				tokenPtr = &tokenStr
-			}
-			env = appendAuthToken(env, tharsisURL, tokenPtr)
-		}
-	}
-
+// resolveNamespaceVariables fetches all variables for the namespace and resolves
+// their values, fetching sensitive values on demand. Variables with invalid keys
+// or no available value are skipped.
+func (c *tfExecCommand) resolveNamespaceVariables(namespacePath string) ([]resolvedVar, error) {
 	resp, err := c.grpcClient.NamespaceVariablesClient.GetNamespaceVariables(c.Context,
 		&pb.GetNamespaceVariablesRequest{NamespacePath: namespacePath})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workspace variables: %w", err)
 	}
 
+	var resolved []resolvedVar
 	for _, variable := range resp.Variables {
 		if strings.ContainsAny(variable.Key, "=\x00") {
 			c.Logger.Debug("skipping variable with invalid key", "key", variable.Key)
@@ -584,15 +611,161 @@ func (c *tfExecCommand) buildTerraformEnv(namespacePath, tharsisURL string, toke
 			continue
 		}
 
-		switch variable.Category {
-		case "terraform":
-			env = append(env, "TF_VAR_"+variable.Key+"="+*value)
-		case "environment":
-			env = append(env, variable.Key+"="+*value)
+		resolved = append(resolved, resolvedVar{
+			Key:       variable.Key,
+			Value:     *value,
+			Category:  variable.Category,
+			Sensitive: variable.Sensitive,
+		})
+	}
+
+	return resolved, nil
+}
+
+// buildTerraformEnv constructs the environment for the terraform subprocess,
+// injecting the Tharsis auth token and all workspace variables.
+func (c *tfExecCommand) buildTerraformEnv(vars []resolvedVar, tharsisURL string, tokenResolver client.TokenResolver) []string {
+	env := os.Environ()
+
+	if _, err := buildTFTokenEnvKey(tharsisURL); err != nil {
+		c.Logger.Debug("skipping TF_TOKEN injection: could not derive env key from URL", "url", tharsisURL, "error", err)
+	} else {
+		tokenStr, err := tokenResolver.Token(c.Context)
+		if err != nil {
+			c.Logger.Debug("skipping TF_TOKEN injection: could not get token", "error", err)
+		} else {
+			var tokenPtr *string
+			if tokenStr != "" {
+				tokenPtr = &tokenStr
+			}
+			env = appendAuthToken(env, tharsisURL, tokenPtr)
 		}
 	}
 
-	return env, nil
+	for _, variable := range vars {
+		switch variable.Category {
+		case "terraform":
+			env = append(env, "TF_VAR_"+variable.Key+"="+variable.Value)
+		case "environment":
+			env = append(env, variable.Key+"="+variable.Value)
+		}
+	}
+
+	return env
+}
+
+// tharsisAutoTfvarsFile is the tharsis-managed, terraform auto-loaded tfvars file
+// written into the working directory. The "tharsis." prefix avoids clobbering a
+// user-provided terraform.auto.tfvars in a -work-dir.
+const tharsisAutoTfvarsFile = "tharsis.auto.tfvars"
+
+// writeTharsisAutoTfvars renders the terraform-category workspace variables into
+// a tharsis.auto.tfvars file in workDir. If there are no terraform variables to
+// write, any stale file is removed and no file is written. Returns true if a file
+// was written.
+//
+// Classification of HCL (complex) vs string values mirrors the Tharsis job executor
+// (isHCLVariable): the variable's declared type in the module config is
+// authoritative, and only when the type is unknown is the value parsed — where only
+// non-primitive (collection/object) values are treated as raw HCL. String, number,
+// and bool values are written as quoted strings. This prevents a string variable
+// whose value happens to look like JSON (e.g. a secret) from being emitted as a raw
+// HCL object/number/bool.
+func (c *tfExecCommand) writeTharsisAutoTfvars(workDir string, vars []resolvedVar) (bool, error) {
+	filePath := filepath.Join(workDir, tharsisAutoTfvarsFile)
+
+	// Load declared variable types from the module config when available. The
+	// declared type is the authoritative signal for how to render a value.
+	var declared map[string]*tfconfig.Variable
+	if module, diags := tfconfig.LoadModule(workDir); module != nil && !diags.HasErrors() {
+		declared = module.Variables
+	} else {
+		c.Logger.Debug("could not load terraform module for variable typing; classifying by value", "workDir", workDir)
+	}
+
+	// Only honor declarations (and skip undeclared variables) when the module
+	// actually declares any. When there is no config present, fall back to
+	// value-based classification so the feature still works.
+	useDeclarations := len(declared) > 0
+
+	var hclVars, stringVars []resolvedVar
+	for _, v := range vars {
+		if v.Category != "terraform" {
+			continue
+		}
+
+		def := declared[v.Key]
+
+		// When the config declares variables but not this one, skip it: terraform
+		// only warns about undeclared variables, matching the job executor's behavior.
+		if useDeclarations && def == nil {
+			c.Logger.Debug("skipping variable not declared in terraform module", "key", v.Key)
+			continue
+		}
+
+		if isHCLVariableValue(v.Value, def) {
+			hclVars = append(hclVars, v)
+		} else {
+			stringVars = append(stringVars, v)
+		}
+	}
+
+	if len(hclVars) == 0 && len(stringVars) == 0 {
+		// Remove any stale file from a previous run.
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			return false, err
+		}
+		return false, nil
+	}
+
+	// HCL (complex) values are written as raw expressions; string values are written
+	// via hclwrite for correct quoting/escaping. This mirrors the job executor.
+	var buf strings.Builder
+	for _, v := range hclVars {
+		fmt.Fprintf(&buf, "%s = %s\n", v.Key, v.Value)
+	}
+
+	f, diags := hclwrite.ParseConfig([]byte(buf.String()), tharsisAutoTfvarsFile, hcl.InitialPos)
+	if diags.HasErrors() {
+		return false, fmt.Errorf("failed to render terraform variables: %s", diags.Error())
+	}
+
+	body := f.Body()
+	for _, v := range stringVars {
+		body.SetAttributeValue(v.Key, cty.StringVal(v.Value))
+	}
+
+	if err := os.WriteFile(filePath, f.Bytes(), 0o600); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// isHCLVariableValue reports whether a workspace variable value should be written
+// as a raw HCL expression (complex type) rather than a quoted string. It mirrors
+// isHCLVariable in the Tharsis job executor.
+func isHCLVariableValue(rawValue string, v *tfconfig.Variable) bool {
+	// Prefer the declared variable type when known: a "string" type is never HCL,
+	// any other declared type is.
+	if v != nil && v.Type != "" {
+		return v.Type != "string"
+	}
+
+	// Otherwise infer from the value. A value that does not parse as an expression
+	// (e.g. unquoted text) or evaluates to a primitive (string/number/bool) is a
+	// string; only collections/objects are treated as raw HCL.
+	expr, diags := hclsyntax.ParseExpression([]byte(rawValue), "<value>", hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() {
+		return false
+	}
+
+	val, diags := expr.Value(nil)
+	if diags.HasErrors() {
+		return false
+	}
+
+	return !val.Type().IsPrimitiveType()
 }
 
 // runExec runs the binary with args, env, and an optional working directory,

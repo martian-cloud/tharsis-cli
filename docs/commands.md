@@ -4110,7 +4110,8 @@ Terraform Binary Resolution:
 When -tf-path is not provided, tharsis looks for a cached terraform binary
 matching the workspace's configured version in ~/.tharsis/tf-installs/\<version\>/.
 If not found, it downloads that exact version from releases.hashicorp.com and
-caches it there for future use.
+caches it there for future use. When the workspace has no applied run yet, the
+version is unknown, so tharsis falls back to the terraform found on your PATH.
 
 Authentication:
 
@@ -4126,6 +4127,10 @@ All variables configured on the workspace and its parent groups are injected:
 - Environment variables (category: environment) -\> \<key\>=\<value\>
 
 Sensitive variable values are automatically fetched and injected.
+
+Terraform variables are also written to a tharsis.auto.tfvars file in the
+working directory so commands such as 'import' that read variables from
+.tfvars files (rather than TF_VAR_* env vars) work without extra setup.
 
 Exit Code:
 
